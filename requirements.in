@@ -8,3 +8,4 @@ isort
 pip-tools
 pre-commit
 tabulate==0.8.9
+git+https://github.com/vyperlang/titanoboa
