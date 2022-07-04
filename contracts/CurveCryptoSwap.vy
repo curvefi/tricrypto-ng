@@ -1,4 +1,4 @@
-# @version 0.2.12
+# @version 0.3.3
 # (c) Curve.Fi, 2021
 # Pool for USDT/BTC/ETH or similar
 
@@ -102,18 +102,18 @@ event ClaimAdminFee:
     tokens: uint256
 
 
-N_COINS: constant(int128) = 3  # <- change
+N_COINS: constant(uint256) = 3  # <- change
 PRECISION: constant(uint256) = 10 ** 18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
 
 # These addresses are replaced by the deployer
-math: constant(address) = 0x8F68f4810CcE3194B6cB6F3d50fa58c2c9bDD1d5
-token: constant(address) = 0xc4AD29ba4B3c580e6D59105FFf484999997675Ff
-views: constant(address) = 0x40745803C2faA8E8402E2Ae935933D07cA8f355c
+math: constant(address) = 0x0000000000000000000000000000000000000000
+token: constant(address) = 0x0000000000000000000000000000000000000001
+views: constant(address) = 0x0000000000000000000000000000000000000002
 coins: constant(address[N_COINS]) = [
-    0xdAC17F958D2ee523a2206206994597C13D831ec7,
-    0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599,
-    0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+    0x0000000000000000000000000000000000000010,
+    0x0000000000000000000000000000000000000011,
+    0x0000000000000000000000000000000000000012,
 ]
 
 price_scale_packed: uint256   # Internal price scale
@@ -171,10 +171,11 @@ MIN_RAMP_TIME: constant(uint256) = 86400
 MAX_ADMIN_FEE: constant(uint256) = 10 * 10 ** 9
 MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
-MAX_A: constant(uint256) = 10000 * A_MULTIPLIER * N_COINS**N_COINS
+MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
+MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
 MAX_A_CHANGE: constant(uint256) = 10
 MIN_GAMMA: constant(uint256) = 10**10
-MAX_GAMMA: constant(uint256) = 10**16
+MAX_GAMMA: constant(uint256) = 5 * 10**16
 NOISE_FEE: constant(uint256) = 10**5  # 0.1 bps
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS-1)
@@ -186,9 +187,9 @@ PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 # N_COINS = 4 -> 10**8  (10**18 -> 10**10)
 # PRICE_PRECISION_MUL: constant(uint256) = 1
 PRECISIONS: constant(uint256[N_COINS]) = [
-    1000000000000,
-    10000000000,
-    1,
+    1,#0
+    1,#1
+    1,#2
 ]
 
 INF_COINS: constant(uint256) = 15
@@ -410,11 +411,12 @@ def _claim_admin_fees():
         fees: uint256 = (xcp_profit - xcp_profit_a) * self.admin_fee / (2 * 10**10)
         if fees > 0:
             receiver: address = self.admin_fee_receiver
-            frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
-            claimed: uint256 = CurveToken(token).mint_relative(receiver, frac)
-            xcp_profit -= fees*2
-            self.xcp_profit = xcp_profit
-            log ClaimAdminFee(receiver, claimed)
+            if receiver != ZERO_ADDRESS:
+                frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
+                claimed: uint256 = CurveToken(token).mint_relative(receiver, frac)
+                xcp_profit -= fees*2
+                self.xcp_profit = xcp_profit
+                log ClaimAdminFee(receiver, claimed)
 
     total_supply: uint256 = CurveToken(token).totalSupply()
 
@@ -589,7 +591,7 @@ def tweak_price(A_gamma: uint256[2],
 @payable
 @external
 @nonreentrant('lock')
-def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool = False):
+def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool = False) -> uint256:
     assert not self.is_killed  # dev: the pool is killed
     assert i != j  # dev: coin index out of range
     assert i < N_COINS  # dev: coin index out of range
@@ -690,6 +692,8 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool
     self.tweak_price(A_gamma, xp, ix, p, 0)
 
     log TokenExchange(msg.sender, i, dx, j, dy)
+
+    return dy
 
 
 @external
@@ -946,11 +950,12 @@ def remove_liquidity_one_coin(token_amount: uint256, i: uint256, min_amount: uin
 
     self.balances[i] -= dy
     CurveToken(token).burnFrom(msg.sender, token_amount)
-    self.tweak_price(A_gamma, xp, i, p, D)
-
     _coins: address[N_COINS] = coins
     # assert might be needed for some tokens - removed one to save bytespace
     ERC20(_coins[i]).transfer(msg.sender, dy)
+
+    self.tweak_price(A_gamma, xp, i, p, D)
+
 
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy)
 
@@ -972,7 +977,7 @@ def ramp_A_gamma(future_A: uint256, future_gamma: uint256, future_time: uint256)
     initial_A_gamma: uint256 = shift(A_gamma[0], 128)
     initial_A_gamma = bitwise_or(initial_A_gamma, A_gamma[1])
 
-    assert future_A > 0
+    assert future_A > MIN_A-1
     assert future_A < MAX_A+1
     assert future_gamma > MIN_GAMMA-1
     assert future_gamma < MAX_GAMMA+1

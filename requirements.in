@@ -1,7 +1,4 @@
-eth-ape
-ape-alchemy
-ape-vyper
-ape-etherscan
+hypothesis
 black
 flake8==3.9.2
 isort

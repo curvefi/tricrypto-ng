@@ -1,4 +1,4 @@
-# @version 0.2.12
+# @version 0.3.3
 """
 @title Curve LP Token
 @author Curve.Fi
