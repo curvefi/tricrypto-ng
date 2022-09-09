@@ -1,8 +1,10 @@
-# @version 0.3.7
-# (c) Curve.Fi, 2021
+# @version 0.3.6
+# (c) Curve.Fi, 2022
 # Pool for USDT/BTC/ETH or similar
 
+
 # --- Interfaces ---
+
 
 interface ERC20:  # Custom ERC20 which works for USDT, WETH and WBTC
     def transfer(_to: address, _amount: uint256): nonpayable
@@ -18,16 +20,6 @@ interface CurveToken:
 interface WETH:
     def deposit(): payable
     def withdraw(_amount: uint256): nonpayable
-
-# TODO: remove dependency on the following and add them to the current contract:
-interface Views:
-    def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256: view
-
-interface Math:
-    def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
-    def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256: view
-    def halfpow(power: uint256, precision: uint256) -> uint256: view
-    def sqrt_int(x: uint256) -> uint256: view
 
 
 # --- Events ---
@@ -103,12 +95,15 @@ event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
 
+
 # --- Constants ---
+
+
 N_COINS: constant(int128) = 3  # <- change
 PRECISION: constant(uint256) = 10 ** 18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
 
-token: constant(address) = 0xc4AD29ba4B3c580e6D59105FFf484999997675Ff
+token: public(constant(address)) = 0xc4AD29ba4B3c580e6D59105FFf484999997675Ff
 coins: constant(address[N_COINS]) = [
     0xdAC17F958D2ee523a2206206994597C13D831ec7,
     0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599,
@@ -258,6 +253,129 @@ def __default__():
     pass
 
 
+# ---------- Math functions ----------
+
+
+@internal
+@pure
+def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool) -> uint256:
+    """
+    (x[0] * x[1] * ...) ** (1/N)
+    """
+    x: uint256[N_COINS] = unsorted_x
+    if sort and x[0] < x[1]:
+        x = [unsorted_x[1], unsorted_x[0]]
+    D: uint256 = x[0]
+    diff: uint256 = 0
+    for i in range(255):
+        D_prev: uint256 = D
+        # tmp: uint256 = 10**18
+        # for _x in x:
+        #     tmp = tmp * _x / D
+        # D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
+        # line below makes it for 2 coins
+        D = (D + x[0] * x[1] / D) / N_COINS
+        if D > D_prev:
+            diff = D - D_prev
+        else:
+            diff = D_prev - D
+        if diff <= 1 or diff * 10**18 < D:
+            return D
+    raise "Did not converge"
+
+
+@internal
+@view
+def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256:
+    """
+    Finding the invariant analytically.
+    ANN is higher by the factor A_MULTIPLIER
+    ANN is already A * N**N
+    """
+    # Safety checks
+    assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
+
+    # Initial value of invariant D is that for constant-product invariant
+    x: uint256[N_COINS] = x_unsorted
+    if x[0] < x[1]:
+        x = [x_unsorted[1], x_unsorted[0]]
+
+    assert x[0] > 10**9 - 1 and x[0] < 10**15 * 10**18 + 1  # dev: unsafe values x[0]
+    assert x[1] * 10**18 / x[0] > 10**14-1  # dev: unsafe values x[i] (input)
+
+    D: uint256 = N_COINS * self.geometric_mean(x, False)
+    S: uint256 = x[0] + x[1]
+
+    #TODO: add tricrypto math optimisations here
+
+
+@internal
+@pure
+def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256:
+    """
+    Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
+    ANN = A * N**N
+    """
+    # Safety checks
+    assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
+    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1 # dev: unsafe values D
+
+    x_j: uint256 = x[1 - i]
+    y: uint256 = D**2 / (x_j * N_COINS**2)
+    K0_i: uint256 = (10**18 * N_COINS) * x_j / D
+    # S_i = x_j
+
+    # frac = x_j * 1e18 / D => frac = K0_i / N_COINS
+    assert (K0_i > 10**16*N_COINS - 1) and (K0_i < 10**20*N_COINS + 1)  # dev: unsafe values x[i]
+
+    #TODO: add tricrypto math optimisations here
+
+
+@internal
+@pure
+def halfpow(power: uint256) -> uint256:
+    """
+    1e18 * 0.5 ** (power/1e18)
+
+    Inspired by: https://github.com/balancer-labs/balancer-core/blob/master/contracts/BNum.sol#L128
+    """
+    intpow: uint256 = power / 10**18
+    otherpow: uint256 = power - intpow * 10**18
+    if intpow > 59:
+        return 0
+    result: uint256 = 10**18 / (2**intpow)
+    if otherpow == 0:
+        return result
+
+    term: uint256 = 10**18
+    x: uint256 = 5 * 10**17
+    S: uint256 = 10**18
+    neg: bool = False
+
+    for i in range(1, 256):
+        K: uint256 = i * 10**18
+        c: uint256 = K - 10**18
+        if otherpow > c:
+            c = otherpow - c
+            neg = not neg
+        else:
+            c -= otherpow
+        term = term * (c * x / 10**18) / K
+        if neg:
+            S -= term
+        else:
+            S += term
+        if term < EXP_PRECISION:
+            return result * S / 10**18
+
+    raise "Did not converge"
+
+
+# ---------- AMM logic ----------
+
+
 @internal
 @view
 def _packed_view(k: uint256, p: uint256) -> uint256:
@@ -284,12 +402,6 @@ def price_scale(k: uint256) -> uint256:
 @view
 def last_prices(k: uint256) -> uint256:
     return self._packed_view(k, self.last_prices_packed)
-
-
-@external
-@view
-def token() -> address:
-    return token
 
 
 @external
@@ -361,8 +473,24 @@ def gamma() -> uint256:
 @internal
 @view
 def _fee(xp: uint256[N_COINS]) -> uint256:
-    f: uint256 = Math(math).reduction_coefficient(xp, self.fee_gamma)
-    return (self.mid_fee * f + self.out_fee * (10**18 - f)) / 10**18
+    """
+    fee_gamma / (fee_gamma + (1 - K))
+    where
+    K = prod(x) / (sum(x) / N)**N
+    (all normalized to 1e18)
+    """
+    fee_gamma: uint256 = self.fee_gamma
+    K: uint256 = 10**18
+    S: uint256 = xp[0] + xp[1] + xp[2]
+
+    K = K * N_COINS * xp[0] / S
+    K = K * N_COINS * xp[1] / S
+    K = K * N_COINS * xp[2] / S
+
+    if fee_gamma > 0:
+        K = fee_gamma * 10**18 / (fee_gamma + 10**18 - K)
+
+    return (self.mid_fee * K + self.out_fee * (10**18 - K)) / 10**18
 
 
 @external
@@ -389,19 +517,13 @@ def get_xcp(D: uint256) -> uint256:
         x[i] = D * 10**18 / (N_COINS * bitwise_and(packed_prices, PRICE_MASK))  # ... * PRICE_PRECISION_MUL)
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
-    return Math(math).geometric_mean(x)
+    return self.geometric_mean(x)
 
 
 @external
 @view
 def get_virtual_price() -> uint256:
     return 10**18 * self.get_xcp(self.D) / CurveToken(token).totalSupply()
-
-
-@internal
-@view
-def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256:
-    pass
 
 
 @internal
@@ -441,12 +563,6 @@ def _claim_admin_fees():
 
 
 @internal
-@view
-def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256:
-    pass
-
-
-@internal
 def tweak_price(A_gamma: uint256[2],
                 _xp: uint256[N_COINS], i: uint256, p_i: uint256,
                 new_D: uint256):
@@ -471,7 +587,7 @@ def tweak_price(A_gamma: uint256[2],
     if last_prices_timestamp < block.timestamp:
         # MA update required
         ma_half_time: uint256 = self.ma_half_time
-        alpha: uint256 = Math(math).halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time, 10**10)
+        alpha: uint256 = self.halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time, 10**10)
         packed_prices = 0
         for k in range(N_COINS-1):
             price_oracle[k] = (last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha) / 10**18
@@ -529,7 +645,7 @@ def tweak_price(A_gamma: uint256[2],
     virtual_price: uint256 = 10**18
 
     if old_virtual_price > 0:
-        xcp: uint256 = Math(math).geometric_mean(xp)
+        xcp: uint256 = self.geometric_mean(xp)
         virtual_price = 10**18 * xcp / total_supply
         xcp_profit = old_xcp_profit * virtual_price / old_virtual_price
 
@@ -561,7 +677,7 @@ def tweak_price(A_gamma: uint256[2],
             norm += ratio**2
 
         if norm > adjustment_step ** 2 and old_virtual_price > 0:
-            norm = Math(math).sqrt_int(norm / 10**18)  # Need to convert to 1e18 units!
+            norm = isqrt(norm / 10**18)  # Need to convert to 1e18 units!
 
             for k in range(N_COINS-1):
                 p_new[k] = (price_scale[k] * (norm - adjustment_step) + adjustment_step * price_oracle[k]) / norm
@@ -577,7 +693,7 @@ def tweak_price(A_gamma: uint256[2],
             for k in range(N_COINS-1):
                 xp[k+1] = D * 10**18 / (N_COINS * p_new[k])
             # We reuse old_virtual_price here but it's not old anymore
-            old_virtual_price = 10**18 * Math(math).geometric_mean(xp) / total_supply
+            old_virtual_price = 10**18 * self.geometric_mean(xp) / total_supply
 
             # Proceed if we've got enough profit
             # if (old_virtual_price > 10**18) and (2 * (old_virtual_price - 10**18) > xcp_profit - 10**18):
@@ -708,7 +824,6 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool
     self.tweak_price(A_gamma, xp, ix, p, 0)
 
     log TokenExchange(msg.sender, i, dx, j, dy)
-
 
 
 @external
@@ -956,17 +1071,18 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         xp[k] = self.balances(k)
     
     for k in range(N_COINS-1):
-        price_scale[k] = Curve(msg.sender).price_scale(k)
+        price_scale[k] = self.price_scale(k)
 
-    if Curve(msg.sender).future_A_gamma_time() > 0:
+    if self.future_A_gamma_time > 0:
         _xp: uint256[N_COINS] = xp
         _xp[0] *= precisions[0]
         for k in range(N_COINS-1):
             _xp[k+1] = _xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
-        D0 = Math(self.math).newton_D(A, gamma, _xp)
+        D0 = self.get_D(A, gamma, _xp)
 
     # ---------- Logic ----------
 
+    # TODO: check optimisation here:
     if deposit:
         for k in range(N_COINS):
             xp[k] += amounts[k]
@@ -974,15 +1090,15 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         for k in range(N_COINS):
             xp[k] -= amounts[k]
 
+    # multiply precisions
     xp[0] *= precisions[0]
     amountsp[0] *= precisions[0]
-
     for k in range(N_COINS-1):
         p: uint256 = price_scale[k] * precisions[k+1]
         xp[k+1] = xp[k+1] * p / PRECISION
         amountsp[k+1] = amountsp[k+1] * p / PRECISION
 
-    D: uint256 = Math(self.math).newton_D(A, gamma, xp)
+    D: uint256 = self.get_D(A, gamma, xp)
     d_token: uint256 = token_supply * D / D0
 
     if deposit:
@@ -991,15 +1107,20 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         d_token = token_supply - d_token
 
     # subtract fee:
-    d_token -= Curve(msg.sender).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
+    d_token -= self.calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
 
     return d_token
 
 
 @internal
 @view
-def _calc_withdraw_one_coin(A_gamma: uint256[2], token_amount: uint256, i: uint256, update_D: bool,
-                            calc_price: bool) -> (uint256, uint256, uint256, uint256[N_COINS]):
+def _calc_withdraw_one_coin(
+    A_gamma: uint256[2], 
+    token_amount: uint256, 
+    i: uint256, 
+    update_D: bool,
+    calc_price: bool
+) -> (uint256, uint256, uint256, uint256[N_COINS]):
     token_supply: uint256 = CurveToken(token).totalSupply()
     assert token_amount <= token_supply  # dev: token amount more than supply
     assert i < N_COINS  # dev: coin out of range
@@ -1208,10 +1329,16 @@ def commit_new_parameters(
     self.future_adjustment_step = new_adjustment_step
     self.future_ma_half_time = new_ma_half_time
 
-    log CommitNewParameters(_deadline, new_admin_fee, new_mid_fee, new_out_fee,
-                            new_fee_gamma,
-                            new_allowed_extra_profit, new_adjustment_step,
-                            new_ma_half_time)
+    log CommitNewParameters(
+        _deadline, 
+        new_admin_fee, 
+        new_mid_fee, 
+        new_out_fee,                    
+        new_fee_gamma,        
+        new_allowed_extra_profit, 
+        new_adjustment_step,      
+        new_ma_half_time    
+    )
 
 
 @external
@@ -1241,10 +1368,15 @@ def apply_new_parameters():
     ma_half_time: uint256 = self.future_ma_half_time
     self.ma_half_time = ma_half_time
 
-    log NewParameters(admin_fee, mid_fee, out_fee,
-                      fee_gamma,
-                      allowed_extra_profit, adjustment_step,
-                      ma_half_time)
+    log NewParameters(
+        admin_fee, 
+        mid_fee, 
+        out_fee,
+        fee_gamma,
+        allowed_extra_profit, 
+        adjustment_step,
+        ma_half_time
+    )
 
 
 @external
