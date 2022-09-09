@@ -1,8 +1,13 @@
 hypothesis
+pytest
 black
-flake8==3.9.2
+flake8
 isort
 pip-tools
 pre-commit
-tabulate==0.8.9
-git+https://github.com/vyperlang/titanoboa
+titanoboa
+git+https://github.com/vyperlang/vyper.git
+ipython
+jedi
+pytest-xdist
+pdbpp
