@@ -1,4 +1,4 @@
-# @version 0.3.6
+# @version 0.3.7
 # (c) Curve.Fi, 2022
 # Pool for USDT/BTC/ETH or similar
 
@@ -99,7 +99,7 @@ event ClaimAdminFee:
 # --- Constants ---
 
 
-N_COINS: constant(int128) = 3  # <- change
+N_COINS: constant(int128) = 3  
 PRECISION: constant(uint256) = 10 ** 18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
 
@@ -125,12 +125,6 @@ NOISE_FEE: constant(uint256) = 10**5  # 0.1 bps
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS-1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
-
-# This must be changed for different N_COINS
-# For example:
-# N_COINS = 3 -> 1  (10**18 -> 10**18)
-# N_COINS = 4 -> 10**8  (10**18 -> 10**10)
-# PRICE_PRECISION_MUL: constant(uint256) = 1
 PRECISIONS: constant(uint256[N_COINS]) = [
     1000000000000,
     10000000000,
@@ -256,15 +250,19 @@ def __default__():
 # ---------- Math functions ----------
 
 
+# TODO: check geometric mean for 3-coins:
 @internal
 @pure
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool) -> uint256:
+def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
     """
     (x[0] * x[1] * ...) ** (1/N)
     """
+    
     x: uint256[N_COINS] = unsorted_x
+    # TODO: sort 3 element array efficiently (no for loops)
     if sort and x[0] < x[1]:
         x = [unsorted_x[1], unsorted_x[0]]
+
     D: uint256 = x[0]
     diff: uint256 = 0
     for i in range(255):
@@ -849,18 +847,15 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     A_gamma: uint256[2] = self._A_gamma()
     D: uint256 = self.D
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
-
-    # TODO: check if the following can be optimised, since all its doing is
-    # filling in an empty array. For loops are unnecessarily expensive:
-    for k in range(N_COINS-1):
-        price_scale[k] = self.price_scale(k)
+    # TODO: check if the following is correct:
+    price_scale: uint256[N_COINS-1] = self._packed_view(k, self.price_scale_packed)
+    
     # xp is an array of coin balances:
     for k in range(N_COINS):
         xp[k] = self.balances(k)
 
     # Update D in case ramp is happening (why?):
-    if self.future_A_gamma_time() > 0:
+    if self.future_A_gamma_time > 0:
 
         _xp: uint256[N_COINS] = xp
         _xp[0] *= precisions[0]
@@ -870,7 +865,7 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
 
         D = self.get_D(A_gamma[0], A_gamma[1], _xp)
 
-    # ---------- Logic to find dy here ----------
+    # ---------- Find dy for given dx ----------
 
     xp[i] += dx
     xp[0] *= precisions[0]

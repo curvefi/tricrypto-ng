@@ -1,7 +1,8 @@
 import boa
 from math import log, ceil
 from hypothesis import strategies
-from tests.fixtures.tricrypto2 import INITIAL_PRICES
+from tests.fixtures.tricrypto import INITIAL_PRICES
+from tests.utils.tokens import mint_for_testing
 
 
 MAX_SAMPLES = 20
@@ -41,7 +42,7 @@ class StatefulBase:
 
         # mint tokens and approve swap
         for coin, q in zip(self.coins, self.initial_deposit):
-            coin._mint_for_testing(user, q)
+            mint_for_testing(coin, user, q)
             coin.approve(self.swap, 2**256 - 1, {"from": user})
 
         # Inf approve all, too. Not always that's the best way though
@@ -116,8 +117,7 @@ class StatefulBase:
                 raise
             return False
 
-        # TODO: mint for testing doesn't exist yet
-        self.coins[exchange_i]._mint_for_testing(user, exchange_amount_in)
+        mint_for_testing(self.coins[exchange_i], user, exchange_amount_in)
 
         d_balance_i = self.coins[exchange_i].balanceOf(user)
         d_balance_j = self.coins[exchange_j].balanceOf(user)
