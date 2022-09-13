@@ -1,4 +1,4 @@
-# @version 0.3.6
+# @version 0.3.7
 # (c) Curve.Fi, 2022
 # Pool for USDT/BTC/ETH or similar
 
@@ -99,7 +99,7 @@ event ClaimAdminFee:
 # --- Constants ---
 
 
-N_COINS: constant(int128) = 3  # <- change
+N_COINS: constant(uint256) = 3  
 PRECISION: constant(uint256) = 10 ** 18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
 
@@ -117,6 +117,7 @@ MIN_RAMP_TIME: constant(uint256) = 86400
 MAX_ADMIN_FEE: constant(uint256) = 10 * 10 ** 9
 MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
+MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = 10000 * A_MULTIPLIER * N_COINS**N_COINS
 MAX_A_CHANGE: constant(uint256) = 10
 MIN_GAMMA: constant(uint256) = 10**10
@@ -125,12 +126,6 @@ NOISE_FEE: constant(uint256) = 10**5  # 0.1 bps
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS-1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
-
-# This must be changed for different N_COINS
-# For example:
-# N_COINS = 3 -> 1  (10**18 -> 10**18)
-# N_COINS = 4 -> 10**8  (10**18 -> 10**10)
-# PRICE_PRECISION_MUL: constant(uint256) = 1
 PRECISIONS: constant(uint256[N_COINS]) = [
     1000000000000,
     10000000000,
@@ -256,25 +251,49 @@ def __default__():
 # ---------- Math functions ----------
 
 
+# TODO: check if this can be made more efficient since we're only
+# sorting three numbers here:
 @internal
 @pure
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool) -> uint256:
+def sort(A0: uint256[N_COINS]) -> uint256[N_COINS]:
+    """
+    Insertion sort from high to low
+    """
+    A: uint256[N_COINS] = A0
+    for i in range(1, N_COINS):
+        x: uint256 = A[i]
+        cur: uint256 = i
+        for j in range(N_COINS):
+            y: uint256 = A[cur-1]
+            if y > x:
+                break
+            A[cur] = y
+            cur -= 1
+            if cur == 0:
+                break
+        A[cur] = x
+    return A
+
+
+# check if this can be made more efficient since we're only dealing with 3
+# uint256 arrays here:
+@internal
+@view
+def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
     """
     (x[0] * x[1] * ...) ** (1/N)
     """
     x: uint256[N_COINS] = unsorted_x
-    if sort and x[0] < x[1]:
-        x = [unsorted_x[1], unsorted_x[0]]
+    if sort:
+        x = self.sort(x)
     D: uint256 = x[0]
     diff: uint256 = 0
     for i in range(255):
         D_prev: uint256 = D
-        # tmp: uint256 = 10**18
-        # for _x in x:
-        #     tmp = tmp * _x / D
-        # D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
-        # line below makes it for 2 coins
-        D = (D + x[0] * x[1] / D) / N_COINS
+        tmp: uint256 = 10**18
+        for _x in x:
+            tmp = tmp * _x / D
+        D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
         if D > D_prev:
             diff = D - D_prev
         else:
@@ -286,56 +305,7 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool) -> uint256:
 
 @internal
 @view
-def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256:
-    """
-    Finding the invariant analytically.
-    ANN is higher by the factor A_MULTIPLIER
-    ANN is already A * N**N
-    """
-    # Safety checks
-    assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
-    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
-
-    # Initial value of invariant D is that for constant-product invariant
-    x: uint256[N_COINS] = x_unsorted
-    if x[0] < x[1]:
-        x = [x_unsorted[1], x_unsorted[0]]
-
-    assert x[0] > 10**9 - 1 and x[0] < 10**15 * 10**18 + 1  # dev: unsafe values x[0]
-    assert x[1] * 10**18 / x[0] > 10**14-1  # dev: unsafe values x[i] (input)
-
-    D: uint256 = N_COINS * self.geometric_mean(x, False)
-    S: uint256 = x[0] + x[1]
-
-    #TODO: add tricrypto math optimisations here
-
-
-@internal
-@pure
-def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256:
-    """
-    Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
-    ANN = A * N**N
-    """
-    # Safety checks
-    assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
-    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
-    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1 # dev: unsafe values D
-
-    x_j: uint256 = x[1 - i]
-    y: uint256 = D**2 / (x_j * N_COINS**2)
-    K0_i: uint256 = (10**18 * N_COINS) * x_j / D
-    # S_i = x_j
-
-    # frac = x_j * 1e18 / D => frac = K0_i / N_COINS
-    assert (K0_i > 10**16*N_COINS - 1) and (K0_i < 10**20*N_COINS + 1)  # dev: unsafe values x[i]
-
-    #TODO: add tricrypto math optimisations here
-
-
-@internal
-@pure
-def halfpow(power: uint256) -> uint256:
+def halfpow(power: uint256, precision: uint256) -> uint256:
     """
     1e18 * 0.5 ** (power/1e18)
 
@@ -367,10 +337,33 @@ def halfpow(power: uint256) -> uint256:
             S -= term
         else:
             S += term
-        if term < EXP_PRECISION:
+        if term < precision:
             return result * S / 10**18
 
     raise "Did not converge"
+
+
+@internal
+@view
+def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256:
+    """
+    Finding the invariant analytically.
+    ANN is higher by the factor A_MULTIPLIER
+    ANN is already A * N**N
+    """
+    #TODO: add tricrypto math optimisations here
+    return ANN
+
+
+@internal
+@pure
+def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256:
+    """
+    Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
+    ANN = A * N**N
+    """
+    #TODO: add tricrypto math optimisations here
+    return ANN
 
 
 # ---------- AMM logic ----------
@@ -826,68 +819,47 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool
     log TokenExchange(msg.sender, i, dx, j, dy)
 
 
-@external
+@internal
 @view
-def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
-    """
-    @notice Get output amount `dy` of coin index `j` for input amount `dx` of coin index `i`
-    @param i Coin index of input coin
-    @param j Coin index of output coin
-    @param dx Input amount of input coin
-    @return `dy` or the output amount of coin at index `j`
-    """
-
-    # ---------- Checks ----------
-    # TODO: check if this is needed at all:
-    assert i != j  # dev: same input and output coin
-    assert i < N_COINS  # dev: coin index out of range
-    assert j < N_COINS  # dev: coin index out of range
-
-    # ---------- Setup ----------
+def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+    assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
+    assert dx > 0, "do not exchange 0 coins"
 
     precisions: uint256[N_COINS] = PRECISIONS
-    A_gamma: uint256[2] = self._A_gamma()
-    D: uint256 = self.D
-    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    packed_prices: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
 
-    # TODO: check if the following can be optimised, since all its doing is
-    # filling in an empty array. For loops are unnecessarily expensive:
+    # TODO: check the following:
     for k in range(N_COINS-1):
-        price_scale[k] = self.price_scale(k)
-    # xp is an array of coin balances:
+        price_scale[k] = bitwise_and(packed_prices, PRICE_MASK)
+        packed_prices = shift(packed_prices, -PRICE_SIZE)
+
+    xp: uint256[N_COINS] = empty(uint256[N_COINS])
     for k in range(N_COINS):
-        xp[k] = self.balances(k)
-
-    # Update D in case ramp is happening (why?):
-    if self.future_A_gamma_time() > 0:
-
-        _xp: uint256[N_COINS] = xp
-        _xp[0] *= precisions[0]
-
-        for k in range(N_COINS-1):
-            _xp[k+1] = _xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
-
-        D = self.get_D(A_gamma[0], A_gamma[1], _xp)
-
-    # ---------- Logic to find dy here ----------
-
+        xp[k] = self.balances[k]
     xp[i] += dx
     xp[0] *= precisions[0]
     for k in range(N_COINS-1):
         xp[k+1] = xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
 
-    y: uint256 = self.get_D(A_gamma[0], A_gamma[1], xp, D, j)
+    A_gamma: uint256[2] = self._A_gamma()
+
+    # get_y:
+    y: uint256 = self.get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
     dy: uint256 = xp[j] - y - 1
     xp[j] = y
     if j > 0:
         dy = dy * PRECISION / price_scale[j-1]
     dy /= precisions[j]
-
-    # subtract fee:
-    dy -= self.fee_calc(xp) * dy / 10**10
+    dy -= self._fee(xp) * dy / 10**10
 
     return dy
+
+
+@external
+@view
+def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+    return self._get_dy(i, j, dx)
 
 
 @view
@@ -1058,27 +1030,26 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     # ---------- Setup ----------
 
     precisions: uint256[N_COINS] = PRECISIONS
-    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    xp: uint256[N_COINS] = self.balances
+    packed_prices: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
 
-    token_supply: uint256 = ERC20(self.token()).totalSupply()
+    token_supply: uint256 = CurveToken(token).totalSupply()
     A_gamma: uint256[2] = self._A_gamma()
     D0: uint256 = self.D
     amountsp: uint256[N_COINS] = amounts
 
     # TODO: check if there's a more efficient way of doing the following:
-    for k in range(N_COINS):
-        xp[k] = self.balances(k)
-    
     for k in range(N_COINS-1):
-        price_scale[k] = self.price_scale(k)
+        price_scale[k] = bitwise_and(packed_prices, PRICE_MASK)  # * PRICE_PRECISION_MUL
+        packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if self.future_A_gamma_time > 0:
         _xp: uint256[N_COINS] = xp
         _xp[0] *= precisions[0]
         for k in range(N_COINS-1):
             _xp[k+1] = _xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
-        D0 = self.get_D(A, gamma, _xp)
+        D0 = self.get_D(A_gamma[0], A_gamma[1], _xp)
 
     # ---------- Logic ----------
 
@@ -1098,7 +1069,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         xp[k+1] = xp[k+1] * p / PRECISION
         amountsp[k+1] = amountsp[k+1] * p / PRECISION
 
-    D: uint256 = self.get_D(A, gamma, xp)
+    D: uint256 = self.get_D(A_gamma[0], A_gamma[1], xp)
     d_token: uint256 = token_supply * D / D0
 
     if deposit:
@@ -1107,7 +1078,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         d_token = token_supply - d_token
 
     # subtract fee:
-    d_token -= self.calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
+    d_token -= self._calc_token_fee(amounts, xp) * d_token / 10**10 + 1
 
     return d_token
 

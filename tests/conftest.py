@@ -1,5 +1,7 @@
+import pytest
+
 pytest_plugins = [
     "fixtures.accounts",
     "fixtures.tokens",
-    "fixtures.tricrypto2",
+    "fixtures.tricrypto",
 ]
