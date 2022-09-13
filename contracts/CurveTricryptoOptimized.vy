@@ -98,7 +98,7 @@ event ClaimAdminFee:
 
 # --- Constants ---
 
-
+LN_2: constant(int256) = 693147180559945344
 N_COINS: constant(uint256) = 3  
 PRECISION: constant(uint256) = 10 ** 18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
@@ -305,42 +305,48 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
 @internal
 @view
-def halfpow(power: uint256, precision: uint256) -> uint256:
+def halfpow(power: uint256) -> uint256:
     """
     1e18 * 0.5 ** (power/1e18)
 
-    Inspired by: https://github.com/balancer-labs/balancer-core/blob/master/contracts/BNum.sol#L128
+    Inspired by: https://github.com/transmissions11/solmate/blob/4933263adeb62ee8878028e542453c4d1a071be9/src/utils/FixedPointMathLib.sol#L34
+
+    This should cost about 900 gas
     """
-    intpow: uint256 = power / 10**18
-    otherpow: uint256 = power - intpow * 10**18
-    if intpow > 59:
+
+    _power: int256 = unsafe_div(unsafe_mul(unsafe_mul(-1, LN_2), convert(power, int256)), 10 ** 18)
+
+    if _power <= -42139678854452767551:
         return 0
-    result: uint256 = 10**18 / (2**intpow)
-    if otherpow == 0:
-        return result
 
-    term: uint256 = 10**18
-    x: uint256 = 5 * 10**17
-    S: uint256 = 10**18
-    neg: bool = False
+    if _power >= 135305999368893231589:
+        raise "exp overflow"
 
-    for i in range(1, 256):
-        K: uint256 = i * 10**18
-        c: uint256 = K - 10**18
-        if otherpow > c:
-            c = otherpow - c
-            neg = not neg
-        else:
-            c -= otherpow
-        term = term * (c * x / 10**18) / K
-        if neg:
-            S -= term
-        else:
-            S += term
-        if term < precision:
-            return result * S / 10**18
+    x: int256 = unsafe_div(unsafe_mul(_power, 2**96), 10**18)
 
-    raise "Did not converge"
+    k: int256 = unsafe_div(
+        unsafe_add(
+            unsafe_div(unsafe_mul(x, 2**96), 54916777467707473351141471128),
+            2**95),
+        2**96)
+    x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
+
+    y: int256 = unsafe_add(x, 1346386616545796478920950773328)
+    y = unsafe_add(unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442)
+    p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
+    p = unsafe_add(unsafe_div(unsafe_mul(p, y), 2**96), 28719021644029726153956944680412240)
+    p = unsafe_add(unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96))
+
+    q: int256 = x - 2855989394907223263936484059900
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 3604857256930695427073651918091429)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 14423608567350463180887372962807573)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 26449188498355588339934803723976023)
+
+    return shift(
+        unsafe_mul(convert(unsafe_div(p, q), uint256), 3822833074963236453042738258902158003155416615667),
+        unsafe_sub(k, 195))
 
 
 @internal
@@ -580,7 +586,7 @@ def tweak_price(A_gamma: uint256[2],
     if last_prices_timestamp < block.timestamp:
         # MA update required
         ma_half_time: uint256 = self.ma_half_time
-        alpha: uint256 = self.halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time, 10**10)
+        alpha: uint256 = self.halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time)
         packed_prices = 0
         for k in range(N_COINS-1):
             price_oracle[k] = (last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha) / 10**18
