@@ -386,8 +386,8 @@ def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint
     ANN = A * N**N
     """
 
-    j: uint8 = 0
-    k: uint8 = 0
+    j: uint256 = 0
+    k: uint256 = 0
     if i == 0:
         j = 1
         k = 2
