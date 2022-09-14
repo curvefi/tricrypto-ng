@@ -344,7 +344,7 @@ def halfpow(power: uint256, precision: uint256) -> uint256:
 
 
 @internal
-@view
+@pure
 def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
     # x is taken at base 1e18
     # result is at base 1e18
