@@ -310,28 +310,31 @@ def halfpow(power: uint256) -> uint256:
 
     Inspired by: https://github.com/transmissions11/solmate/blob/4933263adeb62ee8878028e542453c4d1a071be9/src/utils/FixedPointMathLib.sol#L34
 
-    This should cost about 900 gas
+    This should cost about 1k gas
     """
 
+    # TODO: borrowed from unoptimised halfpow, please check the following: 
     if unsafe_div(power, 10**18) > 59:
         return 0
 
     # exp(-log(2) * x) = 0.5 ** x. so, get -log(2) * x:
-    _power: int256 = -1 * 693147180559945344 * convert(power, int256) / 10 ** 18
+    _fn: int256 = -1 * 693147180559945344 * convert(power, int256) / 10 ** 18
 
-    if _power <= -42139678854452767551:
+    if _fn <= -42139678854452767551:
         return 0
 
-    if _power >= 135305999368893231589:
+    if _fn >= 135305999368893231589:
         raise "exp overflow"
 
-    x: int256 = unsafe_div(unsafe_mul(_power, 2**96), 10**18)
+    x: int256 = unsafe_div(unsafe_mul(_fn, 2**96), 10**18)
 
     k: int256 = unsafe_div(
         unsafe_add(
             unsafe_div(unsafe_mul(x, 2**96), 54916777467707473351141471128),
-            2**95),
-        2**96)
+            2**95
+        ),
+        2**96
+    )
     x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
 
     y: int256 = unsafe_add(x, 1346386616545796478920950773328)
