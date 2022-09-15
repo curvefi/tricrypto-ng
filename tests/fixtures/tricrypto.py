@@ -31,17 +31,49 @@ def tricrypto_pool_init_params():
     }
 
 
+@pytest.fixture(scope="module")
+def tricrypto_math(deployer):
+    with boa.env.prank(deployer):
+        return boa.load("contracts/CurveCryptoMathOptimized3.vy")
+
+
 @pytest.fixture(scope="module", autouse=True)
 def tricrypto_swap(
     owner,
     fee_receiver,
     tricrypto_pool_init_params,
+    tricrypto_lp_token,
+    tricrypto_math,
+    coins,
     deployer,
 ):
     path = "contracts/CurveTricryptoOptimized.vy"
+    with open(path, "r") as f:
+        source = f.read()
+        source = source.replace(
+            "0x0000000000000000000000000000000000000000", tricrypto_math.address
+        )
+        source = source.replace(
+            "0x0000000000000000000000000000000000000001", tricrypto_lp_token.address
+        )
+
+        source = source.replace(
+            "0x0000000000000000000000000000000000000010", coins[0].address
+        )
+        source = source.replace(
+            "0x0000000000000000000000000000000000000011", coins[1].address
+        )
+        source = source.replace(
+            "0x0000000000000000000000000000000000000012", coins[2].address
+        )
+
+        source = source.replace("1,#0", str(10 ** (18 - coins[0].decimals())) + ",")
+        source = source.replace("1,#1", str(10 ** (18 - coins[1].decimals())) + ",")
+        source = source.replace("1,#2", str(10 ** (18 - coins[2].decimals())) + ",")
+
     with boa.env.prank(deployer):
-        yield boa.load(
-            path,
+        yield boa.loads(
+            source,
             owner,
             fee_receiver,
             tricrypto_pool_init_params["A"],

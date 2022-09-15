@@ -17,6 +17,13 @@ interface CurveToken:
     def mint_relative(_to: address, frac: uint256) -> uint256: nonpayable
     def burnFrom(_to: address, _value: uint256) -> bool: nonpayable
 
+interface Math:
+    def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
+    def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256: view
+    def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256: view
+    def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256: view
+    def halfpow(power: uint256, precision: uint256) -> uint256: view
+
 interface WETH:
     def deposit(): payable
     def withdraw(_amount: uint256): nonpayable
@@ -103,11 +110,12 @@ N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10 ** 18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
 
-token: public(constant(address)) = 0xc4AD29ba4B3c580e6D59105FFf484999997675Ff
+math: constant(address) = 0x0000000000000000000000000000000000000000
+token: public(constant(address)) = 0x0000000000000000000000000000000000000001
 coins: constant(address[N_COINS]) = [
-    0xdAC17F958D2ee523a2206206994597C13D831ec7,
-    0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599,
-    0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+    0x0000000000000000000000000000000000000010,
+    0x0000000000000000000000000000000000000011,
+    0x0000000000000000000000000000000000000012,
 ]
 
 KILL_DEADLINE_DT: constant(uint256) = 2 * 30 * 86400
@@ -117,19 +125,24 @@ MIN_RAMP_TIME: constant(uint256) = 86400
 MAX_ADMIN_FEE: constant(uint256) = 10 * 10 ** 9
 MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
-MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
-MAX_A: constant(uint256) = 10000 * A_MULTIPLIER * N_COINS**N_COINS
 MAX_A_CHANGE: constant(uint256) = 10
+MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 MIN_GAMMA: constant(uint256) = 10**10
 MAX_GAMMA: constant(uint256) = 10**16
 NOISE_FEE: constant(uint256) = 10**5  # 0.1 bps
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS-1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
+
+# This must be changed for different N_COINS
+# For example:
+# N_COINS = 3 -> 1  (10**18 -> 10**18)
+# N_COINS = 4 -> 10**8  (10**18 -> 10**10)
+# PRICE_PRECISION_MUL: constant(uint256) = 1
 PRECISIONS: constant(uint256[N_COINS]) = [
-    1000000000000,
-    10000000000,
-    1,
+    1,#0
+    1,#1
+    1,#2
 ]
 
 INF_COINS: constant(uint256) = 15
@@ -248,173 +261,6 @@ def __default__():
     pass
 
 
-# ---------- Math functions ----------
-
-
-# TODO: check if this can be made more efficient since we're only
-# sorting three numbers here:
-@internal
-@pure
-def sort(A0: uint256[N_COINS]) -> uint256[N_COINS]:
-    """
-    Insertion sort from high to low
-    """
-    A: uint256[N_COINS] = A0
-    for i in range(1, N_COINS):
-        x: uint256 = A[i]
-        cur: uint256 = i
-        for j in range(N_COINS):
-            y: uint256 = A[cur-1]
-            if y > x:
-                break
-            A[cur] = y
-            cur -= 1
-            if cur == 0:
-                break
-        A[cur] = x
-    return A
-
-
-# check if this can be made more efficient since we're only dealing with 3
-# uint256 arrays here:
-@internal
-@view
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
-    """
-    (x[0] * x[1] * ...) ** (1/N)
-    """
-    x: uint256[N_COINS] = unsorted_x
-    if sort:
-        x = self.sort(x)
-    D: uint256 = x[0]
-    diff: uint256 = 0
-    for i in range(255):
-        D_prev: uint256 = D
-        tmp: uint256 = 10**18
-        for _x in x:
-            tmp = tmp * _x / D
-        D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
-        if D > D_prev:
-            diff = D - D_prev
-        else:
-            diff = D_prev - D
-        if diff <= 1 or diff * 10**18 < D:
-            return D
-    raise "Did not converge"
-
-
-@internal
-@view
-def halfpow(power: uint256, precision: uint256) -> uint256:
-    """
-    1e18 * 0.5 ** (power/1e18)
-
-    Inspired by: https://github.com/balancer-labs/balancer-core/blob/master/contracts/BNum.sol#L128
-    """
-    intpow: uint256 = power / 10**18
-    otherpow: uint256 = power - intpow * 10**18
-    if intpow > 59:
-        return 0
-    result: uint256 = 10**18 / (2**intpow)
-    if otherpow == 0:
-        return result
-
-    term: uint256 = 10**18
-    x: uint256 = 5 * 10**17
-    S: uint256 = 10**18
-    neg: bool = False
-
-    for i in range(1, 256):
-        K: uint256 = i * 10**18
-        c: uint256 = K - 10**18
-        if otherpow > c:
-            c = otherpow - c
-            neg = not neg
-        else:
-            c -= otherpow
-        term = term * (c * x / 10**18) / K
-        if neg:
-            S -= term
-        else:
-            S += term
-        if term < precision:
-            return result * S / 10**18
-
-    raise "Did not converge"
-
-
-@internal
-@pure
-def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
-    # x is taken at base 1e18
-    # result is at base 1e18
-    a: uint256 = _x
-    if x0 != 0:
-        a = x0
-    x: uint256 = unsafe_mul(_x, 10**18)
-    diff: uint256 = 0
-    for i in range(255):
-        a_prev: uint256 = a
-        tmp: uint256 = unsafe_div(unsafe_mul(unsafe_div(x, a), 10**18), a)
-        a = unsafe_div(unsafe_add(unsafe_mul(2, a), tmp), 3)
-        if a > a_prev:
-            diff = unsafe_sub(a, a_prev)
-        else:
-            diff = unsafe_sub(a_prev, a)
-        if diff <= 10:
-            return a
-    raise "Did not converge"
-
-
-@internal
-@view
-def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256:
-    """
-    Finding the invariant analytically.
-    ANN is higher by the factor A_MULTIPLIER
-    ANN is already A * N**N
-    """
-    #TODO: add tricrypto math optimisations here
-    return ANN
-
-
-@internal
-@pure
-def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256:
-    """
-    Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
-    ANN = A * N**N
-    """
-
-    j: uint256 = 0
-    k: uint256 = 0
-    if i == 0:
-        j = 1
-        k = 2
-    elif i == 1:
-        j = 0
-        k = 2
-    elif i == 2:
-        j = 0
-        k = 1
-
-    a: uint256 = 10**28/27
-    b: uint256 = 10**28/9 + 2*10**10*gamma/27 - D**2/x[j]*gamma**2/x[k]*ANN/27**2/10**8/A_MULTIPLIER
-    c: uint256 = 0
-    if D > x[j] + x[k]:
-        c = 10**28/9 + gamma*(gamma + 4*10**18)/27/10**8 - gamma**2*(D-x[j]-x[k])/D*ANN/10**8/27/A_MULTIPLIER
-    else:
-        c = 10**28/9 + gamma*(gamma + 4*10**18)/27/10**8 + gamma**2*(x[j]+x[k]-D)/D*ANN/10**8/27/A_MULTIPLIER
-    d: uint256 = (10**18 + gamma)**2/10**8/27
-
-    delta0: uint256 = 3*a*c/b - b
-    delta1: uint256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
-
-    C1: uint256 = self.cbrt(b*(delta1 + isqrt(delta1**2 + 4*delta0**3/b))/2/10**18*b/10**18, b*delta1/delta0)
-    root_K0: uint256 = (10**18*b - 10**18*C1 + 10**18*b*delta0/C1)/(3*a)
-
-    return root_K0*D/x[j]*D/x[k]*D/27/10**18
-
 
 # ---------- AMM logic ----------
 
@@ -522,18 +368,8 @@ def _fee(xp: uint256[N_COINS]) -> uint256:
     K = prod(x) / (sum(x) / N)**N
     (all normalized to 1e18)
     """
-    fee_gamma: uint256 = self.fee_gamma
-    K: uint256 = 10**18
-    S: uint256 = xp[0] + xp[1] + xp[2]
-
-    K = K * N_COINS * xp[0] / S
-    K = K * N_COINS * xp[1] / S
-    K = K * N_COINS * xp[2] / S
-
-    if fee_gamma > 0:
-        K = fee_gamma * 10**18 / (fee_gamma + 10**18 - K)
-
-    return (self.mid_fee * K + self.out_fee * (10**18 - K)) / 10**18
+    f: uint256 = Math(math).reduction_coefficient(xp, self.fee_gamma)
+    return (self.mid_fee * f + self.out_fee * (10**18 - f)) / 10**18
 
 
 @external
@@ -560,7 +396,7 @@ def get_xcp(D: uint256) -> uint256:
         x[i] = D * 10**18 / (N_COINS * bitwise_and(packed_prices, PRICE_MASK))  # ... * PRICE_PRECISION_MUL)
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
-    return self.geometric_mean(x)
+    return Math(math).geometric_mean(x)
 
 
 @external
@@ -596,7 +432,7 @@ def _claim_admin_fees():
     total_supply: uint256 = CurveToken(token).totalSupply()
 
     # Recalculate D b/c we gulped
-    D: uint256 = self.get_D(A_gamma[0], A_gamma[1], self.xp())
+    D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], self.xp())
     self.D = D
 
     self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
@@ -630,7 +466,7 @@ def tweak_price(A_gamma: uint256[2],
     if last_prices_timestamp < block.timestamp:
         # MA update required
         ma_half_time: uint256 = self.ma_half_time
-        alpha: uint256 = self.halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time, 10**10)
+        alpha: uint256 = Math(math).halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time, 10**10)
         packed_prices = 0
         for k in range(N_COINS-1):
             price_oracle[k] = (last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha) / 10**18
@@ -645,7 +481,7 @@ def tweak_price(A_gamma: uint256[2],
     D_unadjusted: uint256 = new_D  # Withdrawal methods know new D already
     if new_D == 0:
         # We will need this a few times (35k gas)
-        D_unadjusted = self.get_D(A_gamma[0], A_gamma[1], _xp)
+        D_unadjusted = Math(math).get_D(A_gamma[0], A_gamma[1], _xp)
     packed_prices = self.price_scale_packed
     for k in range(N_COINS-1):
         price_scale[k] = bitwise_and(packed_prices, PRICE_MASK)  # * PRICE_PRECISION_MUL
@@ -666,7 +502,7 @@ def tweak_price(A_gamma: uint256[2],
         dx_price: uint256 = __xp[0] / 10**6
         __xp[0] += dx_price
         for k in range(N_COINS-1):
-            last_prices[k] = price_scale[k] * dx_price / (_xp[k+1] - self.get_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k+1))
+            last_prices[k] = price_scale[k] * dx_price / (_xp[k+1] - Math(math).get_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k+1))
 
     packed_prices = 0
     for k in range(N_COINS-1):
@@ -688,7 +524,7 @@ def tweak_price(A_gamma: uint256[2],
     virtual_price: uint256 = 10**18
 
     if old_virtual_price > 0:
-        xcp: uint256 = self.geometric_mean(xp)
+        xcp: uint256 = Math(math).geometric_mean(xp)
         virtual_price = 10**18 * xcp / total_supply
         xcp_profit = old_xcp_profit * virtual_price / old_virtual_price
 
@@ -731,12 +567,12 @@ def tweak_price(A_gamma: uint256[2],
                 xp[k+1] = _xp[k+1] * p_new[k] / price_scale[k]
 
             # Calculate "extended constant product" invariant xCP and virtual price
-            D: uint256 = self.get_D(A_gamma[0], A_gamma[1], xp)
+            D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
             xp[0] = D / N_COINS
             for k in range(N_COINS-1):
                 xp[k+1] = D * 10**18 / (N_COINS * p_new[k])
             # We reuse old_virtual_price here but it's not old anymore
-            old_virtual_price = 10**18 * self.geometric_mean(xp) / total_supply
+            old_virtual_price = 10**18 * Math(math).geometric_mean(xp) / total_supply
 
             # Proceed if we've got enough profit
             # if (old_virtual_price > 10**18) and (2 * (old_virtual_price - 10**18) > xcp_profit - 10**18):
@@ -816,14 +652,14 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool
                     x0 = x0 * price_scale[i-1] / PRECISION
                 x1: uint256 = xp[i]  # Back up old value in xp
                 xp[i] = x0
-                self.D = self.get_D(A_gamma[0], A_gamma[1], xp)
+                self.D = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
                 xp[i] = x1  # And restore
                 if block.timestamp >= t:
                     self.future_A_gamma_time = 1
 
         prec_j: uint256 = precisions[j]
 
-        dy = xp[j] - self.get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
+        dy = xp[j] - Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
         # Not defining new "y" here to have less variables / make subsequent calls cheaper
         xp[j] -= dy
         dy -= 1
@@ -895,7 +731,7 @@ def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     A_gamma: uint256[2] = self._A_gamma()
 
     # get_y:
-    y: uint256 = self.get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
+    y: uint256 = Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
     dy: uint256 = xp[j] - y - 1
     xp[j] = y
     if j > 0:
@@ -985,13 +821,13 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
 
         t: uint256 = self.future_A_gamma_time
         if t > 0:
-            old_D = self.get_D(A_gamma[0], A_gamma[1], xp_old)
+            old_D = Math(math).get_D(A_gamma[0], A_gamma[1], xp_old)
             if block.timestamp >= t:
                 self.future_A_gamma_time = 1
         else:
             old_D = self.D
 
-    D: uint256 = self.get_D(A_gamma[0], A_gamma[1], xp)
+    D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
 
     token_supply: uint256 = CurveToken(token).totalSupply()
     if old_D > 0:
@@ -1099,7 +935,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         _xp[0] *= precisions[0]
         for k in range(N_COINS-1):
             _xp[k+1] = _xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
-        D0 = self.get_D(A_gamma[0], A_gamma[1], _xp)
+        D0 = Math(math).get_D(A_gamma[0], A_gamma[1], _xp)
 
     # ---------- Logic ----------
 
@@ -1119,7 +955,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         xp[k+1] = xp[k+1] * p / PRECISION
         amountsp[k+1] = amountsp[k+1] * p / PRECISION
 
-    D: uint256 = self.get_D(A_gamma[0], A_gamma[1], xp)
+    D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
     d_token: uint256 = token_supply * D / D0
 
     if deposit:
@@ -1162,7 +998,7 @@ def _calc_withdraw_one_coin(
             packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if update_D:
-        D0 = self.get_D(A_gamma[0], A_gamma[1], xp)
+        D0 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
     else:
         D0 = self.D
 
@@ -1172,7 +1008,7 @@ def _calc_withdraw_one_coin(
     fee: uint256 = self._fee(xp)
     dD: uint256 = token_amount * D / token_supply
     D -= (dD - (fee * dD / (2 * 10**10) + 1))
-    y: uint256 = self.get_y(A_gamma[0], A_gamma[1], xp, D, i)
+    y: uint256 = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
     dy: uint256 = (xp[i] - y) * PRECISION / price_scale_i
     xp[i] = y
 
