@@ -1,9 +1,10 @@
+from math import ceil, log
+
 import boa
-from math import log, ceil
 from hypothesis import strategies
+
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
-
 
 MAX_SAMPLES = 20
 MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
@@ -59,7 +60,8 @@ class StatefulBase:
     def convert_amounts(self, amounts):
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
         return [
-            p * a // 10 ** (36 - d) for p, a, d in zip(prices, amounts, self.decimals)
+            p * a // 10 ** (36 - d)
+            for p, a, d in zip(prices, amounts, self.decimals)
         ]
 
     def check_limits(self, amounts, D=True, y=True):
@@ -70,7 +72,9 @@ class StatefulBase:
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
         xp_0 = [self.swap.balances(i) for i in range(3)]
         xp = xp_0
-        xp_0 = [x * p // 10**d for x, p, d in zip(xp_0, prices, self.decimals)]
+        xp_0 = [
+            x * p // 10**d for x, p, d in zip(xp_0, prices, self.decimals)
+        ]
         xp = [
             (x + a) * p // 10**d
             for a, x, p, d in zip(amounts, xp, prices, self.decimals)
@@ -98,7 +102,12 @@ class StatefulBase:
         return True
 
     def _rule_exchange(
-        self, exchange_amount_in, exchange_i, exchange_j, user, check_out_amount=True
+        self,
+        exchange_amount_in,
+        exchange_i,
+        exchange_j,
+        user,
+        check_out_amount=True,
     ):
 
         if exchange_i == exchange_j:
@@ -107,7 +116,9 @@ class StatefulBase:
 
         try:
 
-            calc_amount = self.swap.get_dy(exchange_i, exchange_j, exchange_amount_in)
+            calc_amount = self.swap.get_dy(
+                exchange_i, exchange_j, exchange_amount_in
+            )
 
         except Exception:
 
@@ -155,7 +166,9 @@ class StatefulBase:
         assert d_balance_i == exchange_amount_in
         if check_out_amount:
             if check_out_amount is True:
-                assert -d_balance_j == calc_amount, f"{-d_balance_j} vs {calc_amount}"
+                assert (
+                    -d_balance_j == calc_amount
+                ), f"{-d_balance_j} vs {calc_amount}"
             else:
                 assert abs(d_balance_j + calc_amount) < max(
                     check_out_amount * calc_amount, 3
@@ -167,7 +180,9 @@ class StatefulBase:
         return True
 
     def rule_exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
-        return self._rule_exchange(exchange_amount_in, exchange_i, exchange_j, user)
+        return self._rule_exchange(
+            exchange_amount_in, exchange_i, exchange_j, user
+        )
 
     def rule_sleep(self, sleep_time):
 
@@ -195,7 +210,9 @@ class StatefulBase:
         assert virtual_price >= 10**18 - 10
         assert get_virtual_price >= 10**18 - 10
 
-        assert xcp_profit - self.xcp_profit > -3, f"{xcp_profit} vs {self.xcp_profit}"
+        assert (
+            xcp_profit - self.xcp_profit > -3
+        ), f"{xcp_profit} vs {self.xcp_profit}"
         assert (virtual_price - 10**18) * 2 - (
             xcp_profit - 10**18
         ) >= -5, f"vprice={virtual_price}, xcp_profit={xcp_profit}"
