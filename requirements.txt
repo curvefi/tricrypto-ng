@@ -14,5 +14,5 @@ jedi
 pdbpp
 
 # vyper and dev framework:
-git+https://github.com/vyperlang/titanoboa.git@400f0ab0b2b9c81c47b4e477ec8ebfd91a3d6123
-git+https://github.com/vyperlang/vyper.git@be2b7f427bf980a0baf52cdd010d83231824ad3a  # allows public constants and immutables
+git+https://github.com/vyperlang/titanoboa.git@ad59fd9a9dc72057dfffdbb6db455ae0ff0f96e8
+git+https://github.com/vyperlang/vyper.git@a0215992d28229cf79bd0c55a162a2b0f2af2a0a  # 0.3.7alpha
