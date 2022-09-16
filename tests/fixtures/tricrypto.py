@@ -3,7 +3,6 @@ import pytest
 
 from tests.utils.tokens import mint_for_testing
 
-
 INITIAL_PRICES = [21000, 1750]  # in usdt
 INITIAL_DEPOSITS = 3 * 10**6  # 3M usdt worth
 
@@ -61,7 +60,8 @@ def tricrypto_swap(
 def tricrypto2_swap_with_deposit(tricrypto_swap, coins, user):
     quantities = []
     for idx, coin in enumerate(coins):
-        quantity = INITIAL_DEPOSITS[idx] / INITIAL_PRICES[idx] * 10 ** coin.decimals()
+        quantity = INITIAL_DEPOSITS[idx] / INITIAL_PRICES[idx]
+        quantity *= 10 ** coin.decimals()
         quantities.append(quantity)
 
         # mint coins for user:

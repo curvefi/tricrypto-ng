@@ -1,8 +1,9 @@
+from datetime import timedelta
+
 import boa
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from datetime import timedelta
 
 SETTINGS = dict(max_examples=2000, deadline=timedelta(seconds=1000))
 LN_2 = 693147180559945344
