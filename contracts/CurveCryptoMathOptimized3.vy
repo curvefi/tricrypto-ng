@@ -64,46 +64,6 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
     raise "Did not converge"
 
 
-@external
-@view
-def halfpow(power: uint256, precision: uint256) -> uint256:
-    """
-    1e18 * 0.5 ** (power/1e18)
-
-    Inspired by: https://github.com/balancer-labs/balancer-core/blob/master/contracts/BNum.sol#L128
-    """
-    intpow: uint256 = power / 10**18
-    otherpow: uint256 = power - intpow * 10**18
-    if intpow > 59:
-        return 0
-    result: uint256 = 10**18 / (2**intpow)
-    if otherpow == 0:
-        return result
-
-    term: uint256 = 10**18
-    x: uint256 = 5 * 10**17
-    S: uint256 = 10**18
-    neg: bool = False
-
-    for i in range(1, 256):
-        K: uint256 = i * 10**18
-        c: uint256 = K - 10**18
-        if otherpow > c:
-            c = otherpow - c
-            neg = not neg
-        else:
-            c -= otherpow
-        term = term * (c * x / 10**18) / K
-        if neg:
-            S -= term
-        else:
-            S += term
-        if term < precision:
-            return result * S / 10**18
-
-    raise "Did not converge"
-
-
 @internal
 @pure
 def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
@@ -125,6 +85,64 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
         if diff <= 10:
             return a
     raise "Did not converge"
+
+
+@internal
+@pure
+def _exp(_power: int256) -> uint256:
+
+    if _power <= -42139678854452767551:
+        return 0
+
+    if _power >= 135305999368893231589:
+        raise "exp overflow"
+
+    x: int256 = unsafe_div(unsafe_mul(_power, 2**96), 10**18)
+
+    k: int256 = unsafe_div(
+        unsafe_add(
+            unsafe_div(unsafe_mul(x, 2**96), 54916777467707473351141471128),
+            2**95
+        ),
+        2**96
+    )
+    x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
+
+    y: int256 = unsafe_add(x, 1346386616545796478920950773328)
+    y = unsafe_add(unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442)
+    p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
+    p = unsafe_add(unsafe_div(unsafe_mul(p, y), 2**96), 28719021644029726153956944680412240)
+    p = unsafe_add(unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96))
+
+    q: int256 = x - 2855989394907223263936484059900
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 3604857256930695427073651918091429)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 14423608567350463180887372962807573)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 26449188498355588339934803723976023)
+
+    return shift(
+        unsafe_mul(convert(unsafe_div(p, q), uint256), 3822833074963236453042738258902158003155416615667),
+        unsafe_sub(k, 195))
+
+
+@external
+@view
+def halfpow(power: uint256) -> uint256:
+    """
+    1e18 * 0.5 ** (power/1e18)
+
+    Inspired by: https://github.com/transmissions11/solmate/blob/4933263adeb62ee8878028e542453c4d1a071be9/src/utils/FixedPointMathLib.sol#L34
+
+    This should cost about 1k gas
+    """
+
+    # TODO: borrowed from unoptimised halfpow, please check the following:
+    if unsafe_div(power, 10**18) > 59:
+        return 0
+
+    # exp(-ln(2) * x) = 0.5 ** x. so, get -ln(2) * x:
+    return self._exp(-1 * 693147180559945344 * convert(power, int256) / 10 ** 18)
 
 
 @external

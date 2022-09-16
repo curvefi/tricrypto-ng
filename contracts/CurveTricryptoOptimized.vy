@@ -106,7 +106,7 @@ event ClaimAdminFee:
 # --- Constants ---
 
 
-N_COINS: constant(uint256) = 3  
+N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10 ** 18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
 
@@ -972,9 +972,9 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
 @internal
 @view
 def _calc_withdraw_one_coin(
-    A_gamma: uint256[2], 
-    token_amount: uint256, 
-    i: uint256, 
+    A_gamma: uint256[2],
+    token_amount: uint256,
+    i: uint256,
     update_D: bool,
     calc_price: bool
 ) -> (uint256, uint256, uint256, uint256[N_COINS]):
@@ -1187,14 +1187,14 @@ def commit_new_parameters(
     self.future_ma_half_time = new_ma_half_time
 
     log CommitNewParameters(
-        _deadline, 
-        new_admin_fee, 
-        new_mid_fee, 
-        new_out_fee,                    
-        new_fee_gamma,        
-        new_allowed_extra_profit, 
-        new_adjustment_step,      
-        new_ma_half_time    
+        _deadline,
+        new_admin_fee,
+        new_mid_fee,
+        new_out_fee,
+        new_fee_gamma,
+        new_allowed_extra_profit,
+        new_adjustment_step,
+        new_ma_half_time
     )
 
 
@@ -1226,11 +1226,11 @@ def apply_new_parameters():
     self.ma_half_time = ma_half_time
 
     log NewParameters(
-        admin_fee, 
-        mid_fee, 
+        admin_fee,
+        mid_fee,
         out_fee,
         fee_gamma,
-        allowed_extra_profit, 
+        allowed_extra_profit,
         adjustment_step,
         ma_half_time
     )
