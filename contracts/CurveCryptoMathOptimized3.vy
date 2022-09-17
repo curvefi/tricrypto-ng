@@ -77,7 +77,6 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
     for i in range(255):
 
         a_prev: uint256 = a
-
         a = unsafe_div(
             unsafe_add(
                 unsafe_mul(2, a),

@@ -139,4 +139,4 @@ reports/
 .idea
 **/.idea
 .vscode
-*.txt
+*.csv
