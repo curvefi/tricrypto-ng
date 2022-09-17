@@ -73,17 +73,25 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
     if x0 != 0:
         a = x0
     x: uint256 = unsafe_mul(_x, 10**18)
-    diff: uint256 = 0
+
     for i in range(255):
+
         a_prev: uint256 = a
-        tmp: uint256 = unsafe_div(unsafe_mul(unsafe_div(x, a), 10**18), a)
-        a = unsafe_div(unsafe_add(unsafe_mul(2, a), tmp), 3)
+
+        a = unsafe_div(
+            unsafe_add(
+                unsafe_mul(2, a),
+                unsafe_div(unsafe_mul(unsafe_div(x, a), 10**18), a)
+            ), 3
+        )
+
         if a > a_prev:
-            diff = unsafe_sub(a, a_prev)
+            if unsafe_sub(a, a_prev) <= 10:
+                return a
         else:
-            diff = unsafe_sub(a_prev, a)
-        if diff <= 10:
-            return a
+            if unsafe_sub(a_prev, a) <= 10:
+                return a
+
     raise "Did not converge"
 
 

@@ -20,7 +20,7 @@ def test_halfpow(tricrypto_math, power):
     # there's a raise in the halfpow for very large input values,
     # so catch that first:
     if int(_exp_input(power)) >= 135305999368893231589:
-        with pytest.raises(boa.contract.BoaError):
+        with boa.reverts("exp overflow"):
             tricrypto_math.halfpow(power)
 
     # compare halfpow:
