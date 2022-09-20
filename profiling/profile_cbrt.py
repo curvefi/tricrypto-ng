@@ -7,20 +7,23 @@ from hypothesis import strategies as st
 from vyper.utils import SizeLimits
 
 PROFILING_SETTINGS = dict(
-    max_examples=1000000,
-    deadline=timedelta(seconds=1000),
+    max_examples=1000,
+    deadline=timedelta(seconds=1500),
 )
 PROFILING_OUTPUT = "./profiling/data/profile_cbrt.csv"
 
 
 @given(
     val=st.integers(min_value=0, max_value=SizeLimits.MAX_UINT256 / 10**18),
-    guess_range=st.floats(min_value=0.01, max_value=3),
+    guess_range=st.floats(min_value=0.01, max_value=10),
 )
 @settings(**PROFILING_SETTINGS)
 def profile_call(tricrypto_math, profiling_output, val, guess_range):
 
     cbrt_ideal = int((val / 10**18) ** (1 / 3) * 10**18)
+
+    # we guess an initial value that is within `guess_range` of ideal
+    # output. This range is set as very very wide (1% - 1000$ of output):
     initial_value = random.randint(
         int(guess_range * cbrt_ideal), int(guess_range * cbrt_ideal)
     )
@@ -37,10 +40,12 @@ def profile_call(tricrypto_math, profiling_output, val, guess_range):
             f"{val},{initial_value},{cbrt_ideal},{cbrt_noguess},"
             f"{cbrt_guess},{gasused_cbrt_noguess},{gasused_cbrt_guess}\n"
         )
-        if profiling_data not in profiling_output:
-            profiling_output.append(profiling_data)
-        else:
-            assume(False)  # if data already exists, assume False example
+
+        # if data already exists, assume False example
+        if profiling_data in profiling_output:
+            assume(False)
+
+        profiling_output.append(profiling_data)
 
     # we don't care about contract errors here, so in case of reversions just
     # assume that the example generated was bad
@@ -50,15 +55,21 @@ def profile_call(tricrypto_math, profiling_output, val, guess_range):
 
 if __name__ == "__main__":
 
+    # set up math contract, since we cannot import fixtures:
     deployer_addr = boa.env.generate_address()
     with boa.env.prank(deployer_addr):
         tricrypto_math = boa.load("contracts/CurveCryptoMathOptimized3.vy")
 
+    # profile:
+    runs = 10
     global profiling_output
     profiling_output = []
-    profile_call(tricrypto_math, profiling_output)
 
-    # TODO: output is none for some reason. make sure something is returned.
+    # run in steps to avoid Flaky Test errors (we're not running tests!):
+    for i in range(runs):
+        profile_call(tricrypto_math, profiling_output)
+
+    # write to output:
     with open(PROFILING_OUTPUT, "w") as f:
         f.write(
             "input,initial_value,cbrt_ideal,cbrt_implementation_noguess,"
