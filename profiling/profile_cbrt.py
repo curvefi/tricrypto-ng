@@ -42,7 +42,8 @@ def profile_call(tricrypto_math, profiling_output, val, guess_range):
             f"{cbrt_guess},{gasused_cbrt_noguess},{gasused_cbrt_guess}\n"
         )
 
-        # if data already exists, assume False example
+        # if data already exists, assume False example:
+        # warning: this will increase the time it takes to profile:
         if profiling_data in profiling_output:
             assume(False)
 
@@ -55,7 +56,7 @@ def profile_call(tricrypto_math, profiling_output, val, guess_range):
         profiling_output.append(profiling_data)
 
     # we don't care about contract errors here, so in case of reversions just
-    # assume that the example generated was bad
+    # assume that the example generated was bad:
     except boa.BoaError:
         assume(False)
 
@@ -63,16 +64,16 @@ def profile_call(tricrypto_math, profiling_output, val, guess_range):
 if __name__ == "__main__":
 
     # set up math contract, since we cannot import fixtures:
-    deployer_addr = boa.env.generate_address()
-    with boa.env.prank(deployer_addr):
+    with boa.env.prank(boa.env.generate_address()):
         tricrypto_math = boa.load("contracts/CurveCryptoMathOptimized3.vy")
 
-    # profile:
+    # initialise vars:
     runs = 10
     global profiling_output
     profiling_output = []
 
-    # run in steps to avoid Flaky Test errors (we're not running tests!):
+    # profile: run in steps to avoid Flaky Test errors:
+    # note: we avoid errors due to flaky tests since that's out of scope:
     for i in range(runs):
         profile_call(tricrypto_math, profiling_output)
 
