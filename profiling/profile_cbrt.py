@@ -2,6 +2,7 @@ import random
 from datetime import timedelta
 
 import boa
+import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from vyper.utils import SizeLimits
@@ -43,6 +44,12 @@ def profile_call(tricrypto_math, profiling_output, val, guess_range):
 
         # if data already exists, assume False example
         if profiling_data in profiling_output:
+            assume(False)
+
+        # we only want to profile convergences that match output:
+        if cbrt_noguess != pytest.approx(
+            cbrt_ideal
+        ) or cbrt_guess != pytest.approx(cbrt_ideal):
             assume(False)
 
         profiling_output.append(profiling_data)
