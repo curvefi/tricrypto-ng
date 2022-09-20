@@ -66,6 +66,36 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
 @internal
 @pure
+def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
+    # x is taken at base 1e18
+    # result is at base 1e18
+    a: uint256 = _x
+    if x0 != 0:
+        a = x0
+    x: uint256 = unsafe_mul(_x, 10**18)
+
+    for i in range(255):
+
+        a_prev: uint256 = a
+        a = unsafe_div(
+            unsafe_add(
+                unsafe_mul(2, a),
+                unsafe_div(unsafe_mul(x, 10**18), a**2)
+            ), 3
+        )
+
+        if a > a_prev:
+            if unsafe_sub(a, a_prev) <= 10:
+                return a
+        else:
+            if unsafe_sub(a_prev, a) <= 10:
+                return a
+
+    raise "Did not converge"
+
+
+@internal
+@pure
 def _exp(_power: int256) -> uint256:
 
     if _power <= -42139678854452767551:
@@ -141,5 +171,32 @@ def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint
     Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
     ANN = A * N**N
     """
-    #TODO: add tricrypto math optimisations here
-    return ANN
+
+    j: uint256 = 0
+    k: uint256 = 0
+    if i == 0:
+        j = 1
+        k = 2
+    elif i == 1:
+        j = 0
+        k = 2
+    elif i == 2:
+        j = 0
+        k = 1
+
+    a: uint256 = 10**28/27
+    b: uint256 = 10**28/9 + 2*10**10*gamma/27 - D**2/x[j]*gamma**2/x[k]*ANN/27**2/10**8/A_MULTIPLIER
+    c: uint256 = 0
+    if D > x[j] + x[k]:
+        c = 10**28/9 + gamma*(gamma + 4*10**18)/27/10**8 - gamma**2*(D-x[j]-x[k])/D*ANN/10**8/27/A_MULTIPLIER
+    else:
+        c = 10**28/9 + gamma*(gamma + 4*10**18)/27/10**8 + gamma**2*(x[j]+x[k]-D)/D*ANN/10**8/27/A_MULTIPLIER
+    d: uint256 = (10**18 + gamma)**2/10**8/27
+
+    delta0: uint256 = 3*a*c/b - b
+    delta1: uint256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
+
+    C1: uint256 = self.cbrt(b*(delta1 + isqrt(delta1**2 + 4*delta0**3/b))/2/10**18*b/10**18, b*delta1/delta0)
+    root_K0: uint256 = (10**18*b - 10**18*C1 + 10**18*b*delta0/C1)/(3*a)
+
+    return root_K0*D/x[j]*D/x[k]*D/27/10**18
