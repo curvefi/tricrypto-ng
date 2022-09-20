@@ -10,7 +10,7 @@ SETTINGS = dict(
     max_examples=1000,
     deadline=timedelta(seconds=1500),
 )
-OUTPUT = "./analysis/cbrt/data/cbrt_range.csv"
+OUTPUT = "./analysis/cbrt/data.csv"
 
 
 @given(
@@ -38,8 +38,14 @@ def analyse_call(
                 for i in cube_root_analysis_contract.cbrt(val, initial_value)
             ]
         )
+        cbrt_safe_implementation = cube_root_analysis_contract.safe_cbrt(
+            val, initial_value
+        )
 
-        data = f"{val},{initial_value},{cbrt_ideal},{cbrt_iter}\n"
+        data = (
+            f"{val},{initial_value},{cbrt_ideal},{cbrt_safe_implementation},"
+            f"{cbrt_iter}\n"
+        )
 
         # if data already exists, assume False example since we only care about
         # unique samples, and hypothesis generates lots of redundant samples
@@ -51,8 +57,20 @@ def analyse_call(
     # TODO: we need way more detailed internal variable surveying
     # for analysing over/under-flowing
     except boa.BoaError:
+
         revert_data = ",".join(["-1"] * max_iter)
-        data = f"{val},{initial_value},{cbrt_ideal},{revert_data}\n"
+
+        try:
+            cbrt_safe_implementation = cube_root_analysis_contract.safe_cbrt(
+                val, initial_value
+            )
+        except boa.BoaError:
+            cbrt_safe_implementation = -1
+
+        data = (
+            f"{val},{initial_value},{cbrt_ideal},{cbrt_safe_implementation},"
+            f"{revert_data}\n"
+        )
 
     # finally: append profiling data:
     analysis_output.append(data)
@@ -83,6 +101,9 @@ if __name__ == "__main__":
         cbrt_iter_headers = ",".join(
             [f"cbrt_iter_{i}" for i in range(max_iter)]
         )
-        f.write(f"input,initial_value,cbrt_ideal,{cbrt_iter_headers}\n")
+        f.write(
+            f"input,initial_value,cbrt_ideal,cbrt_safe_implementation,"
+            f"{cbrt_iter_headers}\n"
+        )
         for data in analysis_output:
             f.write(data)

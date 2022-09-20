@@ -44,3 +44,35 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256[MAX_ITER]:
 
     # if we are here, we did not converge and we need to know why:
     return a_iter
+
+
+@external
+@view
+def safe_cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
+
+    a: uint256 = _x
+    diff: uint256 = 0
+
+    if x0 != 0:
+        a = x0
+
+    x: uint256 = _x * 10**18
+
+    for i in range(MAX_ITER):
+
+        # estimate cube root:
+        a_prev: uint256 = a
+        a = ((2* a) + (x * 10**18) / a**2) / 3
+
+        # check for convergence:
+        if a > a_prev:
+            diff = a - a_prev
+        else:
+            diff = a_prev - a
+
+        # return if converted:
+        if diff <= CONVERGENCE_THRESHOLD:
+            return a
+
+    # if we are here, we did not converge and we need to know why:
+    return a
