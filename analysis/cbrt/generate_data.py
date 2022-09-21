@@ -25,7 +25,7 @@ def analyse_call(
     cbrt_ideal = int((val / 10**18) ** (1 / 3) * 10**18)
 
     # we guess an initial value that is within `guess_range` of ideal
-    # output. This range is set as very very wide (1% - 1000$ of output):
+    # output. This range is set as very very wide (1% - 1000% of output):
     initial_value = random.randint(
         int(guess_range * cbrt_ideal), int(guess_range * cbrt_ideal)
     )
