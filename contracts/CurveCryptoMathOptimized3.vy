@@ -97,6 +97,14 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
 
 @internal
 @pure
+def log2(x: uint256) -> uint256:
+
+
+    pass
+
+
+@internal
+@pure
 def _exp(_power: int256) -> uint256:
 
     if _power <= -42139678854452767551:
