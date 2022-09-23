@@ -60,7 +60,7 @@ if __name__ == "__main__":
         )
 
     # initialise vars:
-    runs = 100
+    runs = 2000
     global analysis_output
     analysis_output = []
 
