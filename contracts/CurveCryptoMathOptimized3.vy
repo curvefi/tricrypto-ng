@@ -69,6 +69,7 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
     # x is taken at base 1e18
     # result is at base 1e18
+
     a: uint256 = _x
     if x0 != 0:
         a = x0
@@ -80,7 +81,7 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
         a = unsafe_div(
             unsafe_add(
                 unsafe_mul(2, a),
-                unsafe_div(unsafe_mul(x, 10**18), a**2)
+                unsafe_div(x*10**18, a**2)
             ), 3
         )
 
