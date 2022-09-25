@@ -66,6 +66,42 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
 @internal
 @pure
+def ilog2(x: uint256) -> uint256:
+
+    # from: https://github.com/transmissions11/solmate/blob/b9d69da49bbbfd090f1a73a4dba28aa2d5ee199f/src/utils/FixedPointMathLib.sol#L352
+
+    assert x > 0, "undefined"
+    r: uint256 = 0
+
+    if x > 340282366920938463463374607431768211455:
+        r = 128
+
+    if unsafe_div(x, 2 ** r) > 18446744073709551615:
+        r = r | 64
+
+    if unsafe_div(x, 2 ** r) > 4294967295:
+        r = r | 32
+
+    if unsafe_div(x, 2 ** r) > 65535:
+        r = r | 16
+
+    if unsafe_div(x, 2 ** r) > 255:
+        r = r | 8
+
+    if unsafe_div(x, 2 ** r) > 15:
+        r = r | 4
+
+    if unsafe_div(x, 2 ** r) > 3:
+        r = r | 2
+
+    if unsafe_div(x, 2 ** r) > 1:
+        r = r | 1
+
+    return r
+
+
+@internal
+@pure
 def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
     # x is taken at base 1e18
     # result is at base 1e18
@@ -95,33 +131,21 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
     raise "Did not converge"
 
 
+
 @internal
 @pure
-def log2(x: uint256) -> uint256:
+def cbrt_optimized(x: uint256) -> uint256:
 
-    if x == 0:
-        raise "log2(0) is undefined"
+    a: uint256 = self.ilog2(x)
+    a = 2 ** (a / 3) * 1260 ** (a % 3) / 1000 ** (a % 3)
 
-    # r := shl(7, lt(0xffffffffffffffffffffffffffffffff, x))
-    r: uint256 = 128
-    if x > 340282366920938463463374607431768211455:
-        r = 1
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
 
-    # r := or(r, shl(6, lt(0xffffffffffffffff, shr(r, x))))
+    return a
 
-    # r := or(r, shl(5, lt(0xffffffff, shr(r, x))))
-
-    # r := or(r, shl(4, lt(0xffff, shr(r, x))))
-
-    # r := or(r, shl(3, lt(0xff, shr(r, x))))
-
-    # r := or(r, shl(2, lt(0xf, shr(r, x))))
-
-    # r := or(r, shl(1, lt(0x3, shr(r, x))))
-
-    # r := or(r, lt(0x1, shr(r, x)))
-
-    return r
 
 
 @internal
