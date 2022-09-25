@@ -121,7 +121,7 @@ def log2(x: uint256) -> uint256:
 
     # r := or(r, lt(0x1, shr(r, x)))
 
-    pass
+    return r
 
 
 @internal

@@ -1,8 +1,8 @@
+import math
 import random
 from datetime import timedelta
 
 import boa
-import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from vyper.utils import SizeLimits
@@ -12,14 +12,26 @@ PROFILING_SETTINGS = dict(
     deadline=timedelta(seconds=1500),
 )
 PROFILING_OUTPUT = "./profiling/data/profile_cbrt.csv"
+MAX_VAL = SizeLimits.MAX_UINT256
+
+
+def log2_guess(n):
+    return 2 ** (n / 3) * 1260 ** (n % 3) / 1000 ** (n % 3)
 
 
 @given(
-    val=st.integers(min_value=0, max_value=SizeLimits.MAX_UINT256 / 10**18),
+    val=st.integers(min_value=0, max_value=MAX_VAL),
     guess_range=st.floats(min_value=0.01, max_value=10),
 )
 @settings(**PROFILING_SETTINGS)
 def profile_call(tricrypto_math, profiling_output, val, guess_range):
+
+    if val == 0:
+        assume(False)
+
+    # ignore edge cases:
+    elif val * 10**36 > MAX_VAL:
+        assume(False)
 
     cbrt_ideal = int((val / 10**18) ** (1 / 3) * 10**18)
 
@@ -29,36 +41,45 @@ def profile_call(tricrypto_math, profiling_output, val, guess_range):
         int(guess_range * cbrt_ideal), int(guess_range * cbrt_ideal)
     )
 
-    try:
+    # educated guess (given n > 0). based on the following logic:
+    # qbrt(a) = qbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
+    # since we're in 1E18 base, and log2(1E18) = 60 ... :
+    educated_guess = int(log2_guess(math.log2(val / 10**18)) * 10**18)
 
+    # initial value's square cannot be larger than MAX_UINT256:
+    if initial_value**2 > MAX_VAL or educated_guess**2 > MAX_VAL:
+        assume(False)
+
+    else:
+
+        # ---- GENERATE DATA ----
+
+        # no initial guesses:
         cbrt_noguess = tricrypto_math.eval(f"self.cbrt({val})")
         gasused_cbrt_noguess = tricrypto_math._computation.get_gas_used()
 
+        # randomised initial guess:
         cbrt_guess = tricrypto_math.eval(f"self.cbrt({val}, {initial_value})")
         gasused_cbrt_guess = tricrypto_math._computation.get_gas_used()
 
-        profiling_data = (
-            f"{val},{initial_value},{cbrt_ideal},{cbrt_noguess},"
-            f"{cbrt_guess},{gasused_cbrt_noguess},{gasused_cbrt_guess}\n"
+        # educated guess:
+        cbrt_educated_guess = tricrypto_math.eval(
+            f"self.cbrt({val}, {educated_guess})"
+        )
+        gasused_cbrt_educated_guess = (
+            tricrypto_math._computation.get_gas_used()
         )
 
-        # if data already exists, assume False example:
-        # warning: this will increase the time it takes to profile:
-        if profiling_data in profiling_output:
-            assume(False)
+        profiling_data = (
+            f"{val},{initial_value},{educated_guess},{cbrt_ideal},"
+            f"{cbrt_noguess},{cbrt_guess},{cbrt_educated_guess},"
+            f"{gasused_cbrt_noguess},{gasused_cbrt_guess},"
+            f"{gasused_cbrt_educated_guess}\n"
+        )
 
-        # we only want to profile convergences that match output:
-        if cbrt_noguess != pytest.approx(
-            cbrt_ideal
-        ) or cbrt_guess != pytest.approx(cbrt_ideal):
-            assume(False)
-
-        profiling_output.append(profiling_data)
-
-    # we don't care about contract errors here, so in case of reversions just
-    # assume that the example generated was bad:
-    except boa.BoaError:
-        assume(False)
+        # only save data that isn't already stored:
+        if profiling_data not in profiling_output:
+            profiling_output.append(profiling_data)
 
 
 if __name__ == "__main__":
@@ -80,9 +101,10 @@ if __name__ == "__main__":
     # write to output:
     with open(PROFILING_OUTPUT, "w") as f:
         f.write(
-            "input,initial_value,cbrt_ideal,cbrt_implementation_noguess,"
-            "cbrt_implementation_guess,gas_used_noguess,"
-            "gas_used_initial_value\n"
+            "input,initial_value,educated_guess,cbrt_ideal,"
+            "cbrt_implementation_noguess,cbrt_implementation_guess,"
+            "cbrt_implementation_educated_guess,gas_used_noguess,"
+            "gas_used_initial_value,gas_used_educated_guess\n"
         )
         for profile in profiling_output:
             f.write(profile)

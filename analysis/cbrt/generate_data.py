@@ -18,7 +18,7 @@ OUTPUT = "./analysis/cbrt/data.csv"
     guess_range=st.floats(min_value=0.01, max_value=10),
 )
 @settings(**SETTINGS)
-def analyse_call(
+def generate_cbrt_data(
     cube_root_analysis_contract, analysis_output, val, guess_range, max_iter
 ):
 
@@ -94,7 +94,9 @@ if __name__ == "__main__":
 
     # run in steps to avoid Flaky Test errors (we're not running tests!):
     for i in range(runs):
-        analyse_call(cube_root_analysis_contract, analysis_output, max_iter)
+        generate_cbrt_data(
+            cube_root_analysis_contract, analysis_output, max_iter
+        )
 
     # write to output:
     with open(OUTPUT, "w") as f:
