@@ -99,6 +99,27 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
 @pure
 def log2(x: uint256) -> uint256:
 
+    if x == 0:
+        raise "log2(0) is undefined"
+
+    # r := shl(7, lt(0xffffffffffffffffffffffffffffffff, x))
+    r: uint256 = 128
+    if x > 340282366920938463463374607431768211455:
+        r = 1
+
+    # r := or(r, shl(6, lt(0xffffffffffffffff, shr(r, x))))
+
+    # r := or(r, shl(5, lt(0xffffffff, shr(r, x))))
+
+    # r := or(r, shl(4, lt(0xffff, shr(r, x))))
+
+    # r := or(r, shl(3, lt(0xff, shr(r, x))))
+
+    # r := or(r, shl(2, lt(0xf, shr(r, x))))
+
+    # r := or(r, shl(1, lt(0x3, shr(r, x))))
+
+    # r := or(r, lt(0x1, shr(r, x)))
 
     pass
 
