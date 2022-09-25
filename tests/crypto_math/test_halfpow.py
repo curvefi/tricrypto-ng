@@ -5,7 +5,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-SETTINGS = dict(max_examples=2000, deadline=timedelta(seconds=1000))
+SETTINGS = dict(max_examples=10000, deadline=timedelta(seconds=1000))
 LN_2 = 693147180559945344
 
 
