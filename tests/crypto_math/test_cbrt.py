@@ -29,11 +29,11 @@ def _fails_overflow_tests(val, initial_val, tricrypto_math) -> bool:
     # input val, and this is squared. This would then go over
     # MAX_UINT256 for very large numbers, so check that it reverts
     # for those cases:
-    elif initial_val**2 > MAX_VAL:
-        with boa.reverts():
-            tricrypto_math.eval(f"self.cbrt({val})")
+    # elif initial_val**2 > MAX_VAL:
+    #     with boa.reverts():
+    #         tricrypto_math.eval(f"self.cbrt({val})")
 
-        return True
+    #     return True
 
     else:
 
@@ -42,7 +42,7 @@ def _fails_overflow_tests(val, initial_val, tricrypto_math) -> bool:
 
 @given(st.integers(min_value=0, max_value=MAX_VAL))
 @settings(**CBRT_SETTINGS)
-def test_cbrt_without_initial_values(tricrypto_math, val):
+def test_cbrt(tricrypto_math, val):
 
     if not _fails_overflow_tests(val, val, tricrypto_math):
 
@@ -53,27 +53,18 @@ def test_cbrt_without_initial_values(tricrypto_math, val):
 
 @given(
     val=st.integers(min_value=0, max_value=MAX_VAL),
-    initial_val_frac=st.floats(min_value=0.01, max_value=10),
+    # maximally 30% error in initial guess:
+    initial_val_frac=st.floats(min_value=0.01, max_value=1.3),
 )
 @settings(**CBRT_SETTINGS)
-def test_cbrt_with_initial_values(tricrypto_math, val, initial_val_frac):
+def test_cbrt_initial_guess(tricrypto_math, val, initial_val_frac):
 
     cbrt_ideal = _cbrt_wad_ideal(val)
     initial_value = int(initial_val_frac * cbrt_ideal)
 
     if not _fails_overflow_tests(val, initial_value, tricrypto_math):
 
-        cbrt_int = tricrypto_math.eval(f"self.cbrt({val}, {initial_value})")
+        cbrt_int = tricrypto_math.eval(
+            f"self.cbrt_initial_guess({val}, {initial_value})"
+        )
         assert cbrt_int == pytest.approx(cbrt_ideal)
-
-
-@given(st.integers(min_value=0, max_value=MAX_VAL))
-@settings(**CBRT_SETTINGS)
-def test_cbrt_optimized(tricrypto_math, val):
-
-    cbrt_ideal = _cbrt_wad_ideal(val)
-    cbrt_optimized = tricrypto_math.eval(f"self.cbrt_optimized({val})")
-    cbrt_int = tricrypto_math.eval(f"self.cbrt({val})")
-
-    assert cbrt_int == cbrt_optimized
-    assert cbrt_int == pytest.approx(cbrt_ideal)

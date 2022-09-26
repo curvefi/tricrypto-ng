@@ -66,100 +66,48 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
 @internal
 @pure
-def ilog2(x: uint256) -> uint256:
+def cbrt(x: uint256) -> uint256:
 
-    # from: https://github.com/transmissions11/solmate/blob/b9d69da49bbbfd090f1a73a4dba28aa2d5ee199f/src/utils/FixedPointMathLib.sol#L352
-
-    assert x > 0, "undefined"
-    r: uint256 = 0
-
-    if x > 340282366920938463463374607431768211455:
-        r = 128
-
-    if unsafe_div(x, 2 ** r) > 18446744073709551615:
-        r = r | 64
-
-    if unsafe_div(x, 2 ** r) > 4294967295:
-        r = r | 32
-
-    if unsafe_div(x, 2 ** r) > 65535:
-        r = r | 16
-
-    if unsafe_div(x, 2 ** r) > 255:
-        r = r | 8
-
-    if unsafe_div(x, 2 ** r) > 15:
-        r = r | 4
-
-    if unsafe_div(x, 2 ** r) > 3:
-        r = r | 2
-
-    if unsafe_div(x, 2 ** r) > 1:
-        r = r | 1
-
-    return r
-
-
-@internal
-@pure
-def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
-    # x is taken at base 1e18
-    # result is at base 1e18
-
-    a: uint256 = _x
-    if x0 != 0:
-        a = x0
-    x: uint256 = unsafe_mul(_x, 10**18)
-
-    for i in range(255):
-
-        a_prev: uint256 = a
-        a = unsafe_div(
-            unsafe_add(
-                unsafe_mul(2, a),
-                unsafe_div(x*10**18, a**2)
-            ), 3
-        )
-
-        if a > a_prev:
-            if unsafe_sub(a, a_prev) <= 10:
-                return a
-        else:
-            if unsafe_sub(a_prev, a) <= 10:
-                return a
-
-    raise "Did not converge"
-
-
-
-@internal
-@pure
-def cbrt_optimized(x: uint256) -> uint256:
-
-    # we need to do this since ilog2(0) is undefined:
     if x == 0:
         return 0
 
-    # initial guess:
-    # cbrt(a) = cbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
-    a: uint256 = self.ilog2(unsafe_mul(x, 10**18))
-    a = unsafe_div(
-        unsafe_mul(
-            pow_mod256(2, unsafe_div(a, 3)),
-            pow_mod256(1260, (a % 3))
-        ),
-        pow_mod256(1000, (a % 3))
-    )
+    # multiply with 10 ** 36 for increasing cbrt precision
+    _x: uint256 = unsafe_mul(x, 10**36)
 
-    # newton raphson method, but we do it 5 times max
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
+    # get log2(x) for approximating initial value
+    # logic is: cbrt(a) = cbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
+    # from: https://github.com/transmissions11/solmate/blob/b9d69da49bbbfd090f1a73a4dba28aa2d5ee199f/src/utils/FixedPointMathLib.sol#L352
+
+    a: uint256 = 0
+    if _x > 340282366920938463463374607431768211455:
+        a = 128
+    if unsafe_div(_x, 2 ** a) > 18446744073709551615:
+        a = a | 64
+    if unsafe_div(_x, 2 ** a) > 4294967295:
+        a = a | 32
+    if unsafe_div(_x, 2 ** a) > 65535:
+        a = a | 16
+    if unsafe_div(_x, 2 ** a) > 255:
+        a = a | 8
+    if unsafe_div(_x, 2 ** a) > 15:
+        a = a | 4
+    if unsafe_div(_x, 2 ** a) > 3:
+        a = a | 2
+    if unsafe_div(_x, 2 ** a) > 1:
+        a = a | 1
+
+    # initial value:
+    a = unsafe_div(unsafe_mul(pow_mod256(2, unsafe_div(a, 3)), 1260), 1000)
+
+    # 6 newton-raphson iterations:
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
 
     return a
-
 
 
 @internal
@@ -264,7 +212,7 @@ def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint
     delta0: uint256 = 3*a*c/b - b
     delta1: uint256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
 
-    C1: uint256 = self.cbrt(b*(delta1 + isqrt(delta1**2 + 4*delta0**3/b))/2/10**18*b/10**18, b*delta1/delta0)
+    C1: uint256 = self.cbrt(b*(delta1 + isqrt(delta1**2 + 4*delta0**3/b))/2/10**18*b/10**18)
     root_K0: uint256 = (10**18*b - 10**18*C1 + 10**18*b*delta0/C1)/(3*a)
 
     return root_K0*D/x[j]*D/x[k]*D/27/10**18
