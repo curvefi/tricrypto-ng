@@ -141,10 +141,18 @@ def cbrt_optimized(x: uint256) -> uint256:
         return 0
 
     # initial guess:
+    # cbrt(a) = cbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
     a: uint256 = self.ilog2(unsafe_mul(x, 10**18))
-    a = unsafe_div(unsafe_mul(2 ** (a / 3), 1260 ** (a % 3)), 1000 ** (a % 3))
+    a = unsafe_div(
+        unsafe_mul(
+            pow_mod256(2, unsafe_div(a, 3)),
+            pow_mod256(1260, (a % 3))
+        ),
+        pow_mod256(1000, (a % 3))
+    )
 
-    # newton raphson method, but we do it 4 times max
+    # newton raphson method, but we do it 5 times max
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
