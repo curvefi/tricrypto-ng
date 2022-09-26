@@ -22,8 +22,7 @@ def test_ilog2(tricrypto_math, val):
         ilog2_ideal = int(math.log(val, 2))
         ilog2_int = tricrypto_math.eval(f"self.ilog2({val})")
 
-        # TODO: why is this not exact?
-        assert ilog2_int - ilog2_ideal <= 1
+        assert ilog2_int == int(math.floor(ilog2_ideal))
 
     else:
 

@@ -65,3 +65,15 @@ def test_cbrt_with_initial_values(tricrypto_math, val, initial_val_frac):
 
         cbrt_int = tricrypto_math.eval(f"self.cbrt({val}, {initial_value})")
         assert cbrt_int == pytest.approx(cbrt_ideal)
+
+
+@given(st.integers(min_value=0, max_value=MAX_VAL))
+@settings(**CBRT_SETTINGS)
+def test_cbrt_optimized(tricrypto_math, val):
+
+    cbrt_ideal = _cbrt_wad_ideal(val)
+    cbrt_optimized = tricrypto_math.eval(f"self.cbrt_optimized({val})")
+    cbrt_int = tricrypto_math.eval(f"self.cbrt({val})")
+
+    assert cbrt_int == cbrt_optimized
+    assert cbrt_int == pytest.approx(cbrt_ideal)

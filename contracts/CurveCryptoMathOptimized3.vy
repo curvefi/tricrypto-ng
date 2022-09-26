@@ -136,9 +136,15 @@ def cbrt(_x: uint256, x0: uint256 = 0) -> uint256:
 @pure
 def cbrt_optimized(x: uint256) -> uint256:
 
-    a: uint256 = self.ilog2(x)
-    a = 2 ** (a / 3) * 1260 ** (a % 3) / 1000 ** (a % 3)
+    # we need to do this since ilog2(0) is undefined:
+    if x == 0:
+        return 0
 
+    # initial guess:
+    a: uint256 = self.ilog2(unsafe_mul(x, 10**18))
+    a = unsafe_div(unsafe_mul(2 ** (a / 3), 1260 ** (a % 3)), 1000 ** (a % 3))
+
+    # newton raphson method, but we do it 4 times max
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(x*10**18, a**2)), 3)
