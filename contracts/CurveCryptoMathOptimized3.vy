@@ -78,26 +78,26 @@ def cbrt(x: uint256) -> uint256:
     # logic is: cbrt(a) = cbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
     # from: https://github.com/transmissions11/solmate/blob/b9d69da49bbbfd090f1a73a4dba28aa2d5ee199f/src/utils/FixedPointMathLib.sol#L352
 
-    a: uint256 = 0
+    a_pow: int256 = 0
     if _x > 340282366920938463463374607431768211455:
-        a = 128
-    if unsafe_div(_x, 2 ** a) > 18446744073709551615:
-        a = a | 64
-    if unsafe_div(_x, 2 ** a) > 4294967295:
-        a = a | 32
-    if unsafe_div(_x, 2 ** a) > 65535:
-        a = a | 16
-    if unsafe_div(_x, 2 ** a) > 255:
-        a = a | 8
-    if unsafe_div(_x, 2 ** a) > 15:
-        a = a | 4
-    if unsafe_div(_x, 2 ** a) > 3:
-        a = a | 2
-    if unsafe_div(_x, 2 ** a) > 1:
-        a = a | 1
+        a_pow = 128
+    if unsafe_div(_x, shift(2, a_pow)) > 18446744073709551615:
+        a_pow = a_pow | 64
+    if unsafe_div(_x, shift(2, a_pow)) > 4294967295:
+        a_pow = a_pow | 32
+    if unsafe_div(_x, shift(2, a_pow)) > 65535:
+        a_pow = a_pow | 16
+    if unsafe_div(_x, shift(2, a_pow)) > 255:
+        a_pow = a_pow | 8
+    if unsafe_div(_x, shift(2, a_pow)) > 15:
+        a_pow = a_pow | 4
+    if unsafe_div(_x, shift(2, a_pow)) > 3:
+        a_pow = a_pow | 2
+    if unsafe_div(_x, shift(2, a_pow)) > 1:
+        a_pow = a_pow | 1
 
     # initial value:
-    a = unsafe_div(unsafe_mul(pow_mod256(2, unsafe_div(a, 3)), 1260), 1000)
+    a: uint256 = unsafe_div(unsafe_mul(pow_mod256(2, unsafe_div(convert(a_pow, uint256), 3)), 1260), 1000)
 
     # 6 newton-raphson iterations:
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
