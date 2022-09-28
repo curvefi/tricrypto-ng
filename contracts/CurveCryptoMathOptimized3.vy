@@ -71,8 +71,8 @@ def cbrt(x: uint256) -> uint256:
     if x == 0:
         return 0
 
-    # multiply with 10 ** 36 for increasing cbrt precision
-    _x: uint256 = unsafe_mul(x, 10**36)
+    # multiply with 10 ** 18 for increasing cbrt precision
+    _x: uint256 = unsafe_mul(x, 10**18)
 
     # get log2(x) for approximating initial value
     # logic is: cbrt(a) = cbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
