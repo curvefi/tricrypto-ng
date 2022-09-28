@@ -2,31 +2,37 @@ import boa
 from gmpy2 import iroot, mpz
 from utils import CBRT_PRECISION, random_sample
 
-PROFILING_OUTPUT = "../data/profile_cbrt.csv"
 
+def generate_cbrt_data(math_contract, num_samples=10000):
 
-def profile_call(math_contract, num_samples: int = 1000):
-
-    profile_data = []
+    analysis_output = []
     sampled = []
-    while len(profile_data) < num_samples:
+    inputs_with_non_exact_solutions = []
+    while len(analysis_output) < num_samples:
 
-        val = random_sample()
+        val = random_sample(inputs_with_non_exact_solutions)
         if val in sampled:
             continue
 
         cbrt_ideal = int(iroot(mpz(val) * CBRT_PRECISION, 3)[0])
         try:
+
             cbrt_implementation = math_contract.eval(f"self.cbrt({val})")
             gasused = math_contract._computation.get_gas_used()
             data = f"{val},{cbrt_ideal},{cbrt_implementation},{gasused}\n"
+
+            # we want to get more samples when solution is not exact:
+            if cbrt_ideal != cbrt_implementation:
+                inputs_with_non_exact_solutions.append(val)
+
         except boa.BoaError:
+
             data = f"{val},{cbrt_ideal},-1,-1\n"
 
-        profile_data.append(data)
+        analysis_output.append(data)
         sampled.append(val)
 
-    return profile_data
+    return analysis_output
 
 
 if __name__ == "__main__":
@@ -34,19 +40,17 @@ if __name__ == "__main__":
     import os
 
     with boa.env.prank(boa.env.generate_address()):
-        tricrypto_math = boa.load("contracts/CurveCryptoMathOptimized3.vy")
+        math_contract = boa.load("contracts/CurveCryptoMathOptimized3.vy")
 
-    # profile: run in steps to avoid Flaky Test errors:
-    generated_data = profile_call(tricrypto_math, 10000)
+    generated_data = generate_cbrt_data(math_contract, 10000)
 
     if not os.path.exists("data"):
         os.mkdir("data")
-
-    if not os.path.exists("data/cbrt_profile"):
-        with open("data/cbrt_profile.csv", "w") as f:
+    if not os.path.exists("data/cbrt_analysis.csv"):
+        with open("data/cbrt_analysis.csv", "w") as f:
             f.write("input,cbrt_ideal,cbrt_implementation,gasused\n")
 
-    with open("data/cbrt_profile.csv", "a") as f:
+    with open("data/cbrt_analysis.csv", "a") as f:
 
         for data in generated_data:
             f.write(data)
