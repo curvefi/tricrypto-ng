@@ -106,6 +106,7 @@ def cbrt(x: uint256) -> uint256:
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
 
     return a
 

@@ -42,7 +42,7 @@ if __name__ == "__main__":
     with boa.env.prank(boa.env.generate_address()):
         math_contract = boa.load("contracts/CurveCryptoMathOptimized3.vy")
 
-    generated_data = generate_cbrt_data(math_contract, 10000)
+    generated_data = generate_cbrt_data(math_contract, 100000)
 
     if not os.path.exists("data"):
         os.mkdir("data")
