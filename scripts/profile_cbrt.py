@@ -21,22 +21,22 @@ def random_sampler():
         "large_numbers",
     ]
 
-    sampling_strat = random.choice(strats)
+    match random.choice(strats):
 
-    if sampling_strat == "full_range":
-        return random.randint(0, MAX_VAL)
+        case "full_range":
+            return random.randint(0, MAX_VAL)
 
-    if sampling_strat == "binary_exponent":
-        return 2 ** random.randint(0, 255)
+        case "binary_exponent":
+            return 2 ** random.randint(0, 255)
 
-    if sampling_strat == "small_numbers":
-        return random.randint(0, 10**10)
+        case "small_numbers":
+            return random.randint(0, 10**10)
 
-    if sampling_strat == "medium_numbers":
-        return random.randint(10**10, 10**30)
+        case "medium_numbers":
+            return random.randint(10**10, 10**30)
 
-    if sampling_strat == "large_numbers":
-        return random.randint(10**30, 10**59)
+        case "large_numbers":
+            return random.randint(10**30, 10**59)
 
 
 def generate_cbrt_data(
