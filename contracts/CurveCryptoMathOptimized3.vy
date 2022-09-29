@@ -13,6 +13,8 @@ MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 
 
+# --- Internal maff ---
+
 # TODO: check if this can be made more efficient since we're only
 # sorting three numbers here:
 @internal
@@ -37,39 +39,15 @@ def sort(A0: uint256[N_COINS]) -> uint256[N_COINS]:
     return A
 
 
-# TODO: the following method should use cbrt:
-@external
-@view
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
-    """
-    (x[0] * x[1] * ...) ** (1/N)
-    """
-    x: uint256[N_COINS] = unsorted_x
-    if sort:
-        x = self.sort(x)
-    D: uint256 = x[0]
-    diff: uint256 = 0
-    for i in range(255):
-        D_prev: uint256 = D
-        tmp: uint256 = 10**18
-        for _x in x:
-            tmp = tmp * _x / D
-        D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
-        if D > D_prev:
-            diff = D - D_prev
-        else:
-            diff = D_prev - D
-        if diff <= 1 or diff * 10**18 < D:
-            return D
-    raise "Did not converge"
-
-
 @internal
 @pure
 def cbrt(x: uint256) -> uint256:
 
-    if x == 0:
-        return 0
+    # we artificially set a cap to the values for which we can compute the
+    # cube roots safely. This is not to say that there are no values above
+    # 10**59 for which we cannot get good cube root estimates. However,
+    # beyond this point, accuracy is not guaranteed.
+    assert x < 10**59, "inaccurate cbrt"
 
     # multiply with 10 ** 18 for increasing cbrt precision
     _x: uint256 = unsafe_mul(x, 10**18)
@@ -96,10 +74,23 @@ def cbrt(x: uint256) -> uint256:
     if unsafe_div(_x, shift(2, a_pow)) > 1:
         a_pow = a_pow | 1
 
-    # initial value:
-    a: uint256 = unsafe_div(unsafe_mul(pow_mod256(2, unsafe_div(convert(a_pow, uint256), 3)), 1260), 1000)
+    # initial value. we multiply by 1260 / 1000 to get a better guess
+    a: uint256 = unsafe_div(
+        unsafe_mul(
+            pow_mod256(
+                2,
+                unsafe_div(
+                    convert(a_pow, uint256), 3
+                )
+            ),
+            1260
+        ),
+        1000
+    )
 
-    # 6 newton-raphson iterations:
+    # 7 newton-raphson iterations, because 6 iterations will result in non-exact cube roots
+    # for values in 10E20 range, and 8 iterations is not that much better than 7.
+    # In 7 iterations, we already get good solutions up until ~MAX_UINT256 // 10**18.
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
@@ -148,6 +139,36 @@ def _exp(_power: int256) -> uint256:
     return shift(
         unsafe_mul(convert(unsafe_div(p, q), uint256), 3822833074963236453042738258902158003155416615667),
         unsafe_sub(k, 195))
+
+
+# --- External maff functions ---
+
+
+# TODO: the following method should use cbrt:
+@external
+@view
+def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
+    """
+    (x[0] * x[1] * ...) ** (1/N)
+    """
+    x: uint256[N_COINS] = unsorted_x
+    if sort:
+        x = self.sort(x)
+    D: uint256 = x[0]
+    diff: uint256 = 0
+    for i in range(255):
+        D_prev: uint256 = D
+        tmp: uint256 = 10**18
+        for _x in x:
+            tmp = tmp * _x / D
+        D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
+        if D > D_prev:
+            diff = D - D_prev
+        else:
+            diff = D_prev - D
+        if diff <= 1 or diff * 10**18 < D:
+            return D
+    raise "Did not converge"
 
 
 @external
