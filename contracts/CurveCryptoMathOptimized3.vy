@@ -104,7 +104,7 @@ def cbrt(x: uint256) -> uint256:
 
 @internal
 @pure
-def _exp(_power: int256) -> uint256:
+def exp(_power: int256) -> uint256:
 
     if _power <= -42139678854452767551:
         return 0
@@ -187,7 +187,7 @@ def halfpow(power: uint256) -> uint256:
         return 0
 
     # exp(-ln(2) * x) = 0.5 ** x. so, get -ln(2) * x:
-    return self._exp(-1 * 693147180559945344 * convert(power, int256) / 10 ** 18)
+    return self.exp(-1 * 693147180559945344 * convert(power, int256) / 10 ** 18)
 
 
 @external
