@@ -74,7 +74,9 @@ def cbrt(x: uint256) -> uint256:
     if unsafe_div(_x, shift(2, a_pow)) > 1:
         a_pow = a_pow | 1
 
-    # initial value. we multiply by 1260 / 1000 to get a better guess
+    # initial value: 2**|log2(a)/3|
+    # which is: 2 ** (n / 3) * 1260 ** (n % 3) / 1000 ** (n % 3)
+    a_pow_mod: uint256 = convert(a_pow, uint256) % 3
     a: uint256 = unsafe_div(
         unsafe_mul(
             pow_mod256(
@@ -83,9 +85,9 @@ def cbrt(x: uint256) -> uint256:
                     convert(a_pow, uint256), 3
                 )
             ),
-            1260
+            pow_mod256(1260, a_pow_mod)
         ),
-        1000
+        pow_mod256(1000, a_pow_mod)
     )
 
     # 7 newton-raphson iterations, because 6 iterations will result in non-exact cube roots

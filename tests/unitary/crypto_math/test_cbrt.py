@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 import boa
-import pytest
 from gmpy2 import iroot, mpz
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
@@ -27,4 +26,4 @@ def test_cbrt(tricrypto_math, val):
             tricrypto_math.eval(f"self.cbrt({val})")
     else:
         cbrt_vyper = tricrypto_math.eval(f"self.cbrt({val})")
-        assert cbrt_gmpy2 == pytest.approx(cbrt_vyper)
+        assert cbrt_gmpy2 == cbrt_vyper
