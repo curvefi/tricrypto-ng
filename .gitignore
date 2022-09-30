@@ -140,3 +140,6 @@ reports/
 **/.idea
 .vscode
 *.csv
+
+# data
+/data

@@ -1,5 +1,3 @@
-# analysis:
 seaborn
 pandas
-gmpy2
 dask[complete]

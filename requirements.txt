@@ -12,7 +12,8 @@ pytest-xdist
 ipython
 jedi
 pdbpp
+gmpy2
 
 # vyper and dev framework:
 git+https://github.com/vyperlang/titanoboa.git@ad59fd9a9dc72057dfffdbb6db455ae0ff0f96e8
-git+https://github.com/vyperlang/vyper.git@a0215992d28229cf79bd0c55a162a2b0f2af2a0a  # 0.3.7alpha
+vyper==0.3.7
