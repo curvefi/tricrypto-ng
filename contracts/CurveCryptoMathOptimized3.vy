@@ -127,7 +127,12 @@ def exp(_power: int256) -> uint256:
 @view
 def geometric_mean(unsorted_x: uint256[3], sort: bool = True) -> uint256:
     """
-    (x[0] * x[1] * ...) ** (1/N)
+    @notice calculates geometric of 3 element arrays: cbrt(x[0] * x[1] * x[2])
+    @dev This approach is specifically optimised for 3 element arrays. To
+         use it for 2 element arrays, consider using the vyper builtin: isqrt.
+    @param unsorted_x: array of 3 uint256 values
+    @param sort: if True, the array will be sorted before calculating the mean
+    @return the geometric mean of the array
     """
     x: uint256[3] = unsorted_x
 
