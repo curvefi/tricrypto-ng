@@ -15,30 +15,6 @@ MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 
 # --- Internal maff ---
 
-# TODO: check if this can be made more efficient since we're only
-# sorting three numbers here:
-@internal
-@pure
-def sort(A0: uint256[N_COINS]) -> uint256[N_COINS]:
-    """
-    Insertion sort from high to low
-    """
-    A: uint256[N_COINS] = A0
-    for i in range(1, N_COINS):
-        x: uint256 = A[i]
-        cur: uint256 = i
-        for j in range(N_COINS):
-            y: uint256 = A[cur-1]
-            if y > x:
-                break
-            A[cur] = y
-            cur -= 1
-            if cur == 0:
-                break
-        A[cur] = x
-    return A
-
-
 @internal
 @pure
 def cbrt(x: uint256) -> uint256:
@@ -149,13 +125,33 @@ def exp(_power: int256) -> uint256:
 # TODO: the following method should use cbrt:
 @external
 @view
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
+def geometric_mean(unsorted_x: uint256[3], sort: bool = True) -> uint256:
     """
-    (x[0] * x[1] * ...) ** (1/N)
+    @notice calculates geometric of 3 element arrays: cbrt(x[0] * x[1] * x[2])
+    @dev This approach is specifically optimised for 3 element arrays. To
+         use it for 2 element arrays, consider using the vyper builtin: isqrt.
+    @param unsorted_x: array of 3 uint256 values
+    @param sort: if True, the array will be sorted before calculating the mean
+    @return the geometric mean of the array
     """
-    x: uint256[N_COINS] = unsorted_x
+    x: uint256[3] = unsorted_x
+
+    # cheap sort using temp var: only works if N_COINS == 3
     if sort:
-        x = self.sort(x)
+        temp_var: uint256 = x[0]
+        if x[0] < x[1]:
+            x[0] = x[1]
+            x[1] = temp_var
+        if x[0] < x[2]:
+            temp_var = x[0]
+            x[0] = x[2]
+            x[2] = temp_var
+        if x[1] < x[2]:
+            temp_var = x[1]
+            x[1] = x[2]
+            x[2] = temp_var
+
+    # geometric mean calculation:
     D: uint256 = x[0]
     diff: uint256 = 0
     for i in range(255):
