@@ -11,48 +11,12 @@ MAX_VAL = SizeLimits.MAX_UINT256
 MAX_CBRT_VAL = MAX_VAL // 10**36
 
 
-@pytest.fixture(scope="module")
-def cbrt_1e18_base():
-    def _impl(x: int) -> int:
-        # x is taken at base 1e36
-        # result is at base 1e18
-
-        # avoid division by error problem:
-        if x == 0:
-            return 0
-
-        # xx = x * 10**18
-        xx = x * 10**36
-
-        D = x
-        diff = 0
-        for i in range(1000):
-            D_prev = D
-
-            # The following implementation has precision errors:
-            # D = (2 * D + xx // D * 10**18 // D) // 3
-            # this implementation is more precise:
-            D = (2 * D + xx // D**2) // 3
-
-            if D > D_prev:
-                diff = D - D_prev
-            else:
-                diff = D_prev - D
-            if diff <= 1 or diff * 10**18 < D:
-                return D
-        raise ValueError("Did not converge")
-
-    return _impl
-
-
-def test_cbrt_python_1e18_input(cbrt_1e18_base):
-    val = 9000000000000000000
-    assert cbrt_1e18_base(val) == 3000000000000000000
-
-
-def test_cbrt_1e18_input(tricrypto_math):
-    val = 10**18
-    assert tricrypto_math.eval(f"self.cbrt({val})") == val
+def test_cbrt_expected_output(cbrt_1e18_base, tricrypto_math):
+    vals = [9 * 10**18, 8 * 10**18, 10**18, 1]
+    correct_cbrts = [2080083823051904114, 2 * 10**18, 10**18, 10**12]
+    for ix, val in enumerate(vals):
+        assert tricrypto_math.eval(f"self.cbrt({val})") == correct_cbrts[ix]
+        assert cbrt_1e18_base(val) == correct_cbrts[ix]
 
 
 @given(val=st.integers(min_value=0, max_value=MAX_CBRT_VAL - 1))
