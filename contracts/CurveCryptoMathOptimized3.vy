@@ -21,33 +21,35 @@ def cbrt(x: uint256) -> uint256:
 
     # we artificially set a cap to the values for which we can compute the
     # cube roots safely. This is not to say that there are no values above
-    # 10**59 for which we cannot get good cube root estimates. However,
-    # beyond this point, accuracy is not guaranteed.
-    assert x < 10**59, "inaccurate cbrt"
+    # max(uint256) // 10**36 for which we cannot get good cube root estimates.
+    # However, beyond this point, accuracy is not guaranteed since overflows
+    # start to occur.
+    assert x < 115792089237316195423570985008687907853269, "inaccurate cbrt"  # TODO: check limits again
 
-    # multiply with 10 ** 18 for increasing cbrt precision
-    _x: uint256 = unsafe_mul(x, 10**18)
+    # we increase precision of input `x` by multiplying 10 ** 36.
+    # in such cases: cbrt(10**18) = 10**18, cbrt(1) = 10**12
+    xx: uint256 = unsafe_mul(x, 10**36)
 
     # get log2(x) for approximating initial value
     # logic is: cbrt(a) = cbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
     # from: https://github.com/transmissions11/solmate/blob/b9d69da49bbbfd090f1a73a4dba28aa2d5ee199f/src/utils/FixedPointMathLib.sol#L352
 
     a_pow: int256 = 0
-    if _x > 340282366920938463463374607431768211455:
+    if xx > 340282366920938463463374607431768211455:
         a_pow = 128
-    if unsafe_div(_x, shift(2, a_pow)) > 18446744073709551615:
+    if unsafe_div(xx, shift(2, a_pow)) > 18446744073709551615:
         a_pow = a_pow | 64
-    if unsafe_div(_x, shift(2, a_pow)) > 4294967295:
+    if unsafe_div(xx, shift(2, a_pow)) > 4294967295:
         a_pow = a_pow | 32
-    if unsafe_div(_x, shift(2, a_pow)) > 65535:
+    if unsafe_div(xx, shift(2, a_pow)) > 65535:
         a_pow = a_pow | 16
-    if unsafe_div(_x, shift(2, a_pow)) > 255:
+    if unsafe_div(xx, shift(2, a_pow)) > 255:
         a_pow = a_pow | 8
-    if unsafe_div(_x, shift(2, a_pow)) > 15:
+    if unsafe_div(xx, shift(2, a_pow)) > 15:
         a_pow = a_pow | 4
-    if unsafe_div(_x, shift(2, a_pow)) > 3:
+    if unsafe_div(xx, shift(2, a_pow)) > 3:
         a_pow = a_pow | 2
-    if unsafe_div(_x, shift(2, a_pow)) > 1:
+    if unsafe_div(xx, shift(2, a_pow)) > 1:
         a_pow = a_pow | 1
 
     # initial value: 2**|log2(a)/3|
@@ -66,16 +68,14 @@ def cbrt(x: uint256) -> uint256:
         pow_mod256(1000, a_pow_mod)
     )
 
-    # 7 newton-raphson iterations, because 6 iterations will result in non-exact cube roots
-    # for values in 10E20 range, and 8 iterations is not that much better than 7.
-    # In 7 iterations, we already get good solutions up until ~MAX_UINT256 // 10**18.
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a),unsafe_div(_x, a**2)), 3)
+    # 7 newton raphson iterations:
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
 
     return a
 

@@ -2,19 +2,18 @@ from datetime import timedelta
 
 import boa
 import pytest
-from hypothesis import HealthCheck, example, given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from vyper.utils import SizeLimits
 
 SETTINGS = dict(
     max_examples=20000,
     deadline=timedelta(seconds=1000),
-    suppress_health_check=[HealthCheck.function_scoped_fixture],
 )
 MAX_VAL = SizeLimits.MAX_UINT256
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def vyper_sort3():
 
     sort_implementation = """

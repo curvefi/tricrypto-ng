@@ -3,19 +3,51 @@ import random
 
 import boa
 import click
-from gmpy2 import iroot, mpz
 from vyper.utils import SizeLimits
 
 MAX_VAL = SizeLimits.MAX_UINT256
-NON_EXACT_SOLN_EDGE = MAX_VAL // 10**18
-CBRT_PRECISION = 10**18
 
 
-def random_sampler():
+def cbrt_1e18_base(x: int) -> int:
+    # x is taken at base 1e36
+    # result is at base 1e18
+
+    # avoid division by error problem:
+    if x == 0:
+        return 0
+
+    # xx = x * 10**18
+    xx = x * 10**36
+
+    D = x
+    diff = 0
+    for i in range(1000):
+        D_prev = D
+
+        # The following implementation has precision errors:
+        # D = (2 * D + xx // D * 10**18 // D) // 3
+        # this implementation is more precise:
+        D = (2 * D + xx // D**2) // 3
+
+        if D > D_prev:
+            diff = D - D_prev
+        else:
+            diff = D_prev - D
+        if diff <= 1 or diff * 10**18 < D:
+            return D
+    raise ValueError("Did not converge")
+
+
+MAX_CBRT = cbrt_1e18_base(MAX_VAL // 10**36)
+
+
+def opinionated_data_sampler():
 
     strats = [
         "full_range",
         "binary_exponent",
+        "perfect_cubes",
+        "overflow_start",
         "small_numbers",
         "medium_numbers",
         "large_numbers",
@@ -28,6 +60,12 @@ def random_sampler():
 
         case "binary_exponent":
             return 2 ** random.randint(0, 255)
+
+        case "perfect_cubes":
+            return random.randint(0, MAX_CBRT) ** 3
+
+        case "overflow_start":
+            return random.randint(10**35, 10**40)
 
         case "small_numbers":
             return random.randint(0, 10**10)
@@ -48,12 +86,12 @@ def generate_cbrt_data(
     sampled = []
     while len(analysis_output) < num_samples:
 
-        val = random_sampler()
+        val = opinionated_data_sampler()
 
         if val in sampled:
             continue
 
-        cbrt_ideal = int(iroot(mpz(val) * CBRT_PRECISION, 3)[0])
+        cbrt_ideal = cbrt_1e18_base(val)
 
         try:
 

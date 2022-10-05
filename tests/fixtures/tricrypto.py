@@ -1,8 +1,6 @@
 import boa
 import pytest
 
-from tests.utils.tokens import mint_for_testing
-
 INITIAL_PRICES = [21000, 1750]  # in usdt
 INITIAL_DEPOSITS = 3 * 10**6  # 3M usdt worth
 
@@ -97,7 +95,7 @@ def tricrypto_swap(
 
 
 @pytest.fixture(scope="module")
-def tricrypto2_swap_with_deposit(tricrypto_swap, coins, user):
+def tricrypto2_swap_with_deposit(tricrypto_swap, token_minter, coins, user):
     quantities = []
     for idx, coin in enumerate(coins):
         quantity = (
@@ -106,7 +104,7 @@ def tricrypto2_swap_with_deposit(tricrypto_swap, coins, user):
         quantities.append(quantity)
 
         # mint coins for user:
-        mint_for_testing(coin, user, quantity)
+        token_minter(coin, user, quantity)
         assert coin.balanceOf(user) == quantity
 
         # approve crypto_swap to trade coin for user:
