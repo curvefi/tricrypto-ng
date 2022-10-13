@@ -1,9 +1,9 @@
 # @version 0.3.7
 # (c) Curve.Fi, 2022
-# Math for USDT/BTC/ETH pool
+# Math for 3-coin Curve cryptoswap pools
 
 
-N_COINS: constant(uint256) = 3  # <- change
+N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 MIN_GAMMA: constant(uint256) = 10**10
@@ -181,21 +181,7 @@ def geometric_mean(unsorted_x: uint256[3], sort: bool = True) -> uint256:
             x[2] = temp_var
 
     # geometric mean calculation:
-    D: uint256 = x[0]
-    diff: uint256 = 0
-    for i in range(255):
-        D_prev: uint256 = D
-        tmp: uint256 = 10**18
-        for _x in x:
-            tmp = tmp * _x / D
-        D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
-        if D > D_prev:
-            diff = D - D_prev
-        else:
-            diff = D_prev - D
-        if diff <= 1 or diff * 10**18 < D:
-            return D
-    raise "Did not converge"
+    return self.cbrt(x[0] * x[1] * x[2])
 
 
 @external
