@@ -18,66 +18,95 @@ MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 @internal
 @pure
 def cbrt(x: uint256) -> uint256:
+    """
+    @notice Calculate the cubic root of a number in 1e18 precision
+    @param x The number to calculate the cubic root of
+    @return The cubic root of the number
+    """
 
-    # we artificially set a cap to the values for which we can compute the
+    # We artificially set a cap to the values for which we can compute the
     # cube roots safely. This is not to say that there are no values above
     # max(uint256) // 10**36 for which we cannot get good cube root estimates.
-    # However, beyond this point, accuracy is not guaranteed since overflows
-    # start to occur.
-    assert x < 115792089237316195423570985008687907853269, "inaccurate cbrt"  # TODO: check limits again
+    # Beyond this point, accuracy is not guaranteed as overflows start to occur:
+    assert x < 115792089237316195423570985008687907853269, "inaccurate cbrt"
 
-    # we increase precision of input `x` by multiplying 10 ** 36.
-    # in such cases: cbrt(10**18) = 10**18, cbrt(1) = 10**12
-    xx: uint256 = unsafe_mul(x, 10**36)
+    # We multiply the input `x` by 10 ** 36 to increase the precision of the
+    # calculated cube root, such that: cbrt(10**18) = 10**18, cbrt(1) = 10**12
+    x_squared: uint256 = unsafe_mul(x, 10**36)
 
-    # get log2(x) for approximating initial value
-    # logic is: cbrt(a) = cbrt(2**(log2(a))) = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
-    # from: https://github.com/transmissions11/solmate/blob/b9d69da49bbbfd090f1a73a4dba28aa2d5ee199f/src/utils/FixedPointMathLib.sol#L352
+    # ---- CALCULATE INITIAL GUESS FOR CUBE ROOT ---- #
+    # We can guess the cube root of `x` using cheap integer operations. The guess
+    # is calculated as follows:
+    #    y = cbrt(a)
+    # => y = cbrt(2**log2(a)) # <-- substituting `a = 2 ** log2(a)`
+    # => y = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
 
-    a_pow: int256 = 0
-    if xx > 340282366920938463463374607431768211455:
-        a_pow = 128
-    if unsafe_div(xx, shift(2, a_pow)) > 18446744073709551615:
-        a_pow = a_pow | 64
-    if unsafe_div(xx, shift(2, a_pow)) > 4294967295:
-        a_pow = a_pow | 32
-    if unsafe_div(xx, shift(2, a_pow)) > 65535:
-        a_pow = a_pow | 16
-    if unsafe_div(xx, shift(2, a_pow)) > 255:
-        a_pow = a_pow | 8
-    if unsafe_div(xx, shift(2, a_pow)) > 15:
-        a_pow = a_pow | 4
-    if unsafe_div(xx, shift(2, a_pow)) > 3:
-        a_pow = a_pow | 2
-    if unsafe_div(xx, shift(2, a_pow)) > 1:
-        a_pow = a_pow | 1
+    # Calculate log2(x). The following is inspire from:
+    #
+    # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
+    # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
+    #
+    # More inspiration was derived from:
+    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
 
-    # initial value: 2**|log2(a)/3|
-    # which is: 2 ** (n / 3) * 1260 ** (n % 3) / 1000 ** (n % 3)
-    a_pow_mod: uint256 = convert(a_pow, uint256) % 3
-    a: uint256 = unsafe_div(
+    log2x: int256 = 0
+    if x_squared > 340282366920938463463374607431768211455:
+        log2x = 128
+    if unsafe_div(x_squared, shift(2, log2x)) > 18446744073709551615:
+        log2x = log2x | 64
+    if unsafe_div(x_squared, shift(2, log2x)) > 4294967295:
+        log2x = log2x | 32
+    if unsafe_div(x_squared, shift(2, log2x)) > 65535:
+        log2x = log2x | 16
+    if unsafe_div(x_squared, shift(2, log2x)) > 255:
+        log2x = log2x | 8
+    if unsafe_div(x_squared, shift(2, log2x)) > 15:
+        log2x = log2x | 4
+    if unsafe_div(x_squared, shift(2, log2x)) > 3:
+        log2x = log2x | 2
+    if unsafe_div(x_squared, shift(2, log2x)) > 1:
+        log2x = log2x | 1
+
+    # When we divide log2x by 3, the remainder is (log2x % 3).
+    # So if we just multiply 2**(log2x/3) and discard the remainder to calculate our
+    # guess, the newton method will need more iterations to converge to a solution,
+    # since it is missing that precision. It's a few more calculations now to do less
+    # calculations later:
+    # pow = log2(x) // 3
+    # remainder = log2(x) % 3
+    # initial_guess = 2 ** pow * cbrt(2) ** remainder
+    # substituting -> 2 = 1.26 ≈ 1260 / 1000, we get:
+    #
+    # initial_guess = 2 ** pow * 1260 ** remainder // 1000 ** remainder
+
+    remainder: uint256 = convert(log2x, uint256) % 3
+    cbrt_x: uint256 = unsafe_div(
         unsafe_mul(
             pow_mod256(
                 2,
                 unsafe_div(
-                    convert(a_pow, uint256), 3
+                    convert(log2x, uint256), 3  # <- pow
                 )
             ),
-            pow_mod256(1260, a_pow_mod)
+            pow_mod256(1260, remainder)
         ),
-        pow_mod256(1000, a_pow_mod)
+        pow_mod256(1000, remainder)
     )
 
-    # 7 newton raphson iterations:
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
-    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    # Because we chose good initial values for cube roots, 7 newton raphson iterations
+    # are just about sufficient. 6 iterations would result in non-convergences, and 8
+    # would be one too many iterations. Without initial values, the iteration count
+    # can go up to 20 or greater. The iterations are unrolled. This reduces gas costs
+    # but takes up more bytecode:
+    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
+    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
+    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
+    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
+    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
+    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
+    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
 
-    return a
+    return cbrt_x
 
 
 @internal
