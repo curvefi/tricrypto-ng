@@ -34,8 +34,6 @@ Please refrain from reporting any smart contract vulnerabilities publicly. The b
 - [ ] Deployment scripts
 - [ ] Deploy
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 # Deployments
 
 To be deployed (TBD) ...
