@@ -277,6 +277,7 @@ def _packed_view(k: uint256, p: uint256) -> uint256:
 
 @external
 @view
+@nonreentrant("lock")
 def price_oracle(k: uint256) -> uint256:
     return self._packed_view(k, self.price_oracle_packed)
 
@@ -401,6 +402,7 @@ def get_xcp(D: uint256) -> uint256:
 
 @external
 @view
+@nonreentrant("lock")
 def get_virtual_price() -> uint256:
     return 10**18 * self.get_xcp(self.D) / CurveToken(token).totalSupply()
 
