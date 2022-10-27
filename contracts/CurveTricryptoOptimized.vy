@@ -284,7 +284,6 @@ def price_oracle(k: uint256) -> uint256:
 
 @external
 @view
-@nonreentrant("lock")
 def price_scale(k: uint256) -> uint256:
     return self._packed_view(k, self.price_scale_packed)
 
@@ -908,7 +907,6 @@ def remove_liquidity(_amount: uint256, min_amounts: uint256[N_COINS]):
 
 @view
 @external
-@nonreentrant("lock")
 def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     """
     @notice # TODO: add sufficient description here
@@ -1041,7 +1039,6 @@ def _calc_withdraw_one_coin(
 
 @view
 @external
-@nonreentrant("lock")
 def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
     return self._calc_withdraw_one_coin(self._A_gamma(), token_amount, i, True, False)[0]
 
