@@ -182,10 +182,73 @@ def exp(_power: int256) -> uint256:
         unsafe_sub(k, 195))
 
 
+@internal
+@pure
+def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
+    """
+    @notice Sorts the array of 3 numbers in descending order
+    @param unsorted_x The array to sort
+    @return The sorted array
+    """
+    x: uint256[N_COINS] = unsorted_x
+    temp_var: uint256 = x[0]
+    if x[0] < x[1]:
+        x[0] = x[1]
+        x[1] = temp_var
+    if x[0] < x[2]:
+        temp_var = x[0]
+        x[0] = x[2]
+        x[2] = temp_var
+    if x[1] < x[2]:
+        temp_var = x[1]
+        x[1] = x[2]
+        x[2] = temp_var
+    return x
+
+
+@internal
+@view
+def _geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
+
+    x: uint256[N_COINS] = unsorted_x
+    if sort:
+        x = self._sort(x)
+
+    D: uint256 = x[0]
+    diff: uint256 = 0
+    D_prev: uint256 = 0
+    tmp: uint256 = 0
+
+    for i in range(255):
+
+        D_prev = D
+
+        tmp = unsafe_div(unsafe_mul(10**18, x[0]), D)
+        tmp = unsafe_div(unsafe_mul(tmp, x[1]), D)
+        tmp = unsafe_div(unsafe_mul(tmp, x[2]), D)
+
+        D = unsafe_div(
+            unsafe_mul(
+                D,
+                unsafe_add(unsafe_mul(unsafe_sub(N_COINS, 1), 10**18), tmp)
+            ),
+            unsafe_mul(N_COINS, 10**18)
+        )
+
+        if D > D_prev:
+            diff = unsafe_sub(D, D_prev)
+        else:
+            diff = unsafe_sub(D_prev, D)
+
+        if diff <= 1 or unsafe_mul(diff, 10**18) < D:
+            return D
+
+    raise "Did not converge"
+
+
 # --- External maff functions ---
 
 
-# TODO: the following method should use cbrt:
 @external
 @view
 def geometric_mean(unsorted_x: uint256[3], sort: bool = True) -> uint256:
@@ -197,25 +260,7 @@ def geometric_mean(unsorted_x: uint256[3], sort: bool = True) -> uint256:
     @param sort: if True, the array will be sorted before calculating the mean
     @return the geometric mean of the array
     """
-    x: uint256[3] = unsorted_x
-
-    # cheap sort using temp var: only works if N_COINS == 3
-    if sort:
-        temp_var: uint256 = x[0]
-        if x[0] < x[1]:
-            x[0] = x[1]
-            x[1] = temp_var
-        if x[0] < x[2]:
-            temp_var = x[0]
-            x[0] = x[2]
-            x[2] = temp_var
-        if x[1] < x[2]:
-            temp_var = x[1]
-            x[1] = x[2]
-            x[2] = temp_var
-
-    # geometric mean calculation: only works if N_COINS == 3
-    return self.cbrt(x[0] * x[1] * x[2])
+    return self._geometric_mean(unsorted_x, sort)
 
 
 @external

@@ -4,7 +4,7 @@ import typing
 
 import boa
 import click
-from gmpy2 import root
+from gmpy2 import mpz, root
 from vyper.utils import SizeLimits
 
 MAX_VAL = SizeLimits.MAX_UINT256
@@ -12,6 +12,8 @@ MAX_VAL = SizeLimits.MAX_UINT256
 
 def geometric_mean_int(x: typing.List[int]) -> int:
     """for 3 element arrays only"""
+
+    x = [mpz(i) for i in x]
     return int(root(x[0] * x[1] * x[2], 3))
 
 
