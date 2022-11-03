@@ -63,10 +63,8 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
             return D
     raise "Did not converge"
 """
-    with boa.env.prank(boa.env.generate_address()):
-        contract = boa.loads(source_code)
 
-    return contract
+    return boa.loads(source_code)
 
 
 def geometric_mean_cryptomath3optimized_impl():
@@ -75,7 +73,7 @@ def geometric_mean_cryptomath3optimized_impl():
 N_COINS: constant(uint256) = 3
 
 @internal
-@view
+@pure
 def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
     x: uint256[N_COINS] = unsorted_x
     temp_var: uint256 = x[0]
@@ -95,11 +93,11 @@ def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
 
 @external
 @view
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
+def geometric_mean(_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
-    x: uint256[N_COINS] = unsorted_x
+    x: uint256[N_COINS] = _x
     if sort:
-        x = self._sort(x)
+        x = self._sort(_x)
 
     D: uint256 = x[0]
     diff: uint256 = 0
@@ -132,18 +130,21 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
     raise "Did not converge"
 """
-    with boa.env.prank(boa.env.generate_address()):
-        contract = boa.loads(source_code)
 
-    return contract
+    return boa.loads(source_code)
 
 
 def data_sampler():
 
+    med_range = random.randint(10**16, 10**25)
+    spread_range = random.randint(0, 10**4)
+
+    min_range = max(0, med_range - spread_range)
+
     return [
-        random.randint(10**18, 10**26),
-        random.randint(10**18, 10**26),
-        random.randint(10**18, 10**26),
+        random.randint(min_range, med_range + spread_range),
+        random.randint(min_range, med_range + spread_range),
+        random.randint(min_range, med_range + spread_range),
     ]
 
 

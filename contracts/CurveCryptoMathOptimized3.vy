@@ -15,6 +15,42 @@ MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 
 # --- Internal maff ---
 
+
+@internal
+@pure
+def log2(x: uint256) -> int256:
+    """
+    @notice Compute the binary logarithm of `x`
+    @param x The number to compute the logarithm of
+    @return The binary logarithm of `x`
+    """
+    # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
+    # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
+    #
+    # More inspiration was derived from:
+    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
+
+    log2x: int256 = 0
+    if x > 340282366920938463463374607431768211455:
+        log2x = 128
+    if unsafe_div(x, shift(2, log2x)) > 18446744073709551615:
+        log2x = log2x | 64
+    if unsafe_div(x, shift(2, log2x)) > 4294967295:
+        log2x = log2x | 32
+    if unsafe_div(x, shift(2, log2x)) > 65535:
+        log2x = log2x | 16
+    if unsafe_div(x, shift(2, log2x)) > 255:
+        log2x = log2x | 8
+    if unsafe_div(x, shift(2, log2x)) > 15:
+        log2x = log2x | 4
+    if unsafe_div(x, shift(2, log2x)) > 3:
+        log2x = log2x | 2
+    if unsafe_div(x, shift(2, log2x)) > 1:
+        log2x = log2x | 1
+
+    return log2x
+
+
 @internal
 @pure
 def cbrt(x: uint256) -> uint256:
@@ -42,31 +78,7 @@ def cbrt(x: uint256) -> uint256:
     # => y = cbrt(2**log2(a)) # <-- substituting `a = 2 ** log2(a)`
     # => y = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
 
-    # Calculate log2(x). The following is inspire from:
-    #
-    # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
-    # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
-    #
-    # More inspiration was derived from:
-    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
-
-    log2x: int256 = 0
-    if x_squared > 340282366920938463463374607431768211455:
-        log2x = 128
-    if unsafe_div(x_squared, shift(2, log2x)) > 18446744073709551615:
-        log2x = log2x | 64
-    if unsafe_div(x_squared, shift(2, log2x)) > 4294967295:
-        log2x = log2x | 32
-    if unsafe_div(x_squared, shift(2, log2x)) > 65535:
-        log2x = log2x | 16
-    if unsafe_div(x_squared, shift(2, log2x)) > 255:
-        log2x = log2x | 8
-    if unsafe_div(x_squared, shift(2, log2x)) > 15:
-        log2x = log2x | 4
-    if unsafe_div(x_squared, shift(2, log2x)) > 3:
-        log2x = log2x | 2
-    if unsafe_div(x_squared, shift(2, log2x)) > 1:
-        log2x = log2x | 1
+    log2x: int256 = self.log2(x_squared)
 
     # When we divide log2x by 3, the remainder is (log2x % 3).
     # So if we just multiply 2**(log2x/3) and discard the remainder to calculate our
@@ -208,11 +220,11 @@ def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
 
 @internal
 @view
-def _geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
+def _geometric_mean(_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
-    x: uint256[N_COINS] = unsorted_x
+    x: uint256[N_COINS] = _x
     if sort:
-        x = self._sort(x)
+        x = self._sort(_x)
 
     D: uint256 = x[0]
     diff: uint256 = 0

@@ -137,10 +137,7 @@ def cbrt(x: uint256) -> uint256:
     return cbrt_x
 """
 
-    with boa.env.prank(boa.env.generate_address()):
-        contract = boa.loads(source_code)
-
-    return contract
+    return boa.loads(source_code)
 
 
 def opinionated_data_sampler():
