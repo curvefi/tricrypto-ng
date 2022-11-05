@@ -239,7 +239,6 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
     return self._geometric_mean(unsorted_x, sort)
 
 
-# TODO: add tests:
 @external
 @view
 def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
@@ -249,18 +248,17 @@ def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
     K = prod(x) / (sum(x) / N)**N
     (all normalized to 1e18)
     """
+    # TODO: optimise add tests
     K: uint256 = 10**18
-    S: uint256 = x[0]
-    S = unsafe_add(S, x[1])
-    S = unsafe_add(S, x[2])
-
+    S: uint256 = 0
+    for x_i in x:
+        S += x_i
     # Could be good to pre-sort x, but it is used only for dynamic fee,
     # so that is not so important
-    K = unsafe_mul(unsafe_mul(K, N_COINS), unsafe_div(x[0], S))
-
+    for x_i in x:
+        K = K * N_COINS * x_i / S
     if fee_gamma > 0:
-        K = unsafe_mul(fee_gamma, unsafe_div(10**18, unsafe_sub(unsafe_add(fee_gamma, 10**18), K)))
-
+        K = fee_gamma * 10**18 / (fee_gamma + 10**18 - K)
     return K
 
 
@@ -283,7 +281,7 @@ def halfpow(power: uint256) -> uint256:
 
 @external
 @view
-def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256:
+def newton_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256:
     """
     @notice Finding the invariant via newtons method using good initial guesses.
     @dev ANN is higher by the factor A_MULTIPLIER

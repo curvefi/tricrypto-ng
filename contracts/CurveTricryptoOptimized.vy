@@ -20,7 +20,7 @@ interface CurveToken:
 interface Math:
     def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
     def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256: view
-    def get_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256: view
+    def newton_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256: view
     def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256: view
     def halfpow(power: uint256, precision: uint256) -> uint256: view
 
@@ -434,7 +434,7 @@ def _claim_admin_fees():
     total_supply: uint256 = CurveToken(token).totalSupply()
 
     # Recalculate D b/c we gulped
-    D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], self.xp())
+    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], self.xp())
     self.D = D
 
     self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
@@ -483,7 +483,7 @@ def tweak_price(A_gamma: uint256[2],
     D_unadjusted: uint256 = new_D  # Withdrawal methods know new D already
     if new_D == 0:
         # We will need this a few times (35k gas)
-        D_unadjusted = Math(math).get_D(A_gamma[0], A_gamma[1], _xp)
+        D_unadjusted = Math(math).newton_D(A_gamma[0], A_gamma[1], _xp)
     packed_prices = self.price_scale_packed
     for k in range(N_COINS-1):
         price_scale[k] = bitwise_and(packed_prices, PRICE_MASK)  # * PRICE_PRECISION_MUL
@@ -569,7 +569,7 @@ def tweak_price(A_gamma: uint256[2],
                 xp[k+1] = _xp[k+1] * p_new[k] / price_scale[k]
 
             # Calculate "extended constant product" invariant xCP and virtual price
-            D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
+            D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
             xp[0] = D / N_COINS
             for k in range(N_COINS-1):
                 xp[k+1] = D * 10**18 / (N_COINS * p_new[k])
@@ -654,7 +654,7 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool
                     x0 = x0 * price_scale[i-1] / PRECISION
                 x1: uint256 = xp[i]  # Back up old value in xp
                 xp[i] = x0
-                self.D = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
+                self.D = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
                 xp[i] = x1  # And restore
                 if block.timestamp >= t:
                     self.future_A_gamma_time = 1
@@ -823,13 +823,13 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
 
         t: uint256 = self.future_A_gamma_time
         if t > 0:
-            old_D = Math(math).get_D(A_gamma[0], A_gamma[1], xp_old)
+            old_D = Math(math).newton_D(A_gamma[0], A_gamma[1], xp_old)
             if block.timestamp >= t:
                 self.future_A_gamma_time = 1
         else:
             old_D = self.D
 
-    D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
+    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
 
     token_supply: uint256 = CurveToken(token).totalSupply()
     if old_D > 0:
@@ -914,60 +914,47 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     @param deposit True if calculating a deposit, False if calculating a withdrawal
     @return Expected output token amounts
     """
-
-    # ---------- Setup ----------
-
     precisions: uint256[N_COINS] = PRECISIONS
-    xp: uint256[N_COINS] = self.balances
-    packed_prices: uint256 = self.price_scale_packed
-    price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
-
     token_supply: uint256 = CurveToken(token).totalSupply()
+    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    for k in range(N_COINS):
+        xp[k] = self.balances[k]
+
+    price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
+    for k in range(N_COINS-1):
+        price_scale[k] = self._packed_view(k, self.price_scale_packed)
+
     A_gamma: uint256[2] = self._A_gamma()
     D0: uint256 = self.D
-    amountsp: uint256[N_COINS] = amounts
-
-    # TODO: check if there's a more efficient way of doing the following:
-    for k in range(N_COINS-1):
-        price_scale[k] = bitwise_and(packed_prices, PRICE_MASK)  # * PRICE_PRECISION_MUL
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if self.future_A_gamma_time > 0:
         _xp: uint256[N_COINS] = xp
         _xp[0] *= precisions[0]
         for k in range(N_COINS-1):
             _xp[k+1] = _xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
-        D0 = Math(math).get_D(A_gamma[0], A_gamma[1], _xp)
+        D0 = Math(math).newton_D(A_gamma[0], A_gamma[1], _xp)
 
-    # ---------- Logic ----------
-
-    # TODO: check optimisation here:
+    amountsp: uint256[N_COINS] = amounts
     if deposit:
         for k in range(N_COINS):
             xp[k] += amounts[k]
     else:
         for k in range(N_COINS):
             xp[k] -= amounts[k]
-
-    # multiply precisions
     xp[0] *= precisions[0]
     amountsp[0] *= precisions[0]
+
     for k in range(N_COINS-1):
         p: uint256 = price_scale[k] * precisions[k+1]
         xp[k+1] = xp[k+1] * p / PRECISION
         amountsp[k+1] = amountsp[k+1] * p / PRECISION
-
-    D: uint256 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
+    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
     d_token: uint256 = token_supply * D / D0
-
     if deposit:
         d_token -= token_supply
     else:
         d_token = token_supply - d_token
-
-    # subtract fee:
-    d_token -= self._calc_token_fee(amounts, xp) * d_token / 10**10 + 1
-
+    d_token -= self._calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
     return d_token
 
 
@@ -1000,7 +987,7 @@ def _calc_withdraw_one_coin(
             packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if update_D:
-        D0 = Math(math).get_D(A_gamma[0], A_gamma[1], xp)
+        D0 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
     else:
         D0 = self.D
 
