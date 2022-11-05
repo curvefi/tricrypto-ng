@@ -1,7 +1,10 @@
-def mint_for_testing(token_contract, address_to_mint_for, amount):
+from eth_utils import to_checksum_address
 
-    token_contract.eval(f"self.totalSupply += {amount}")
-    token_contract.eval(f"self.balanceOf[{address_to_mint_for}] += {amount}")
-    token_contract.eval(
-        f"log Transfer(empty(address), {address_to_mint_for}, {amount})"
-    )
+
+def mint_for_testing(token_contract, addr, amount):
+
+    addr = to_checksum_address(addr)
+
+    token_contract.eval(f"self.total_supply += {amount}")
+    token_contract.eval(f"self.balanceOf[{addr}] += {amount}")
+    token_contract.eval(f"log Transfer(empty(address), {addr}, {amount})")

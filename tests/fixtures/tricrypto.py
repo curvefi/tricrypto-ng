@@ -1,8 +1,14 @@
 import boa
 import pytest
 
-INITIAL_PRICES = [21000, 1750]  # in usdt
-INITIAL_DEPOSITS = 3 * 10**6  # 3M usdt worth
+from tests.utils.tokens import mint_for_testing
+
+INITIAL_PRICES = [20000, 1500]  # BTC, ETH
+
+
+@pytest.fixture(scope="module")
+def initial_prices(coins):
+    return [1] + INITIAL_PRICES
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -77,7 +83,7 @@ def tricrypto_swap(
         )
 
     with boa.env.prank(deployer):
-        yield boa.loads(
+        swap = boa.loads(
             source,
             owner,
             fee_receiver,
@@ -90,21 +96,25 @@ def tricrypto_swap(
             tricrypto_pool_init_params["adjustment_step"],
             tricrypto_pool_init_params["admin_fee"],
             tricrypto_pool_init_params["ma_half_time"],
-            INITIAL_PRICES,
+            [i * 10**18 for i in INITIAL_PRICES],
         )
+
+        tricrypto_lp_token.set_minter(swap.address)
+
+    return swap
 
 
 @pytest.fixture(scope="module")
-def tricrypto2_swap_with_deposit(tricrypto_swap, token_minter, coins, user):
+def tricrypto_swap_with_deposit(tricrypto_swap, coins, user, initial_prices):
+    # add 1M of each token to the pool
     quantities = []
-    for idx, coin in enumerate(coins):
-        quantity = (
-            INITIAL_DEPOSITS[idx] / INITIAL_PRICES[idx] * 10 ** coin.decimals()
-        )
-        quantities.append(quantity)
+    for ix, c in enumerate(coins):
+        quantities.append(10**6 // initial_prices[ix] * 10 ** c.decimals())
+
+    for coin, quantity in zip(coins, quantities):
 
         # mint coins for user:
-        token_minter(coin, user, quantity)
+        mint_for_testing(coin, user, quantity)
         assert coin.balanceOf(user) == quantity
 
         # approve crypto_swap to trade coin for user:
