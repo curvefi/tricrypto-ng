@@ -47,7 +47,7 @@ def test_1st_deposit_and_last_withdraw(
         st.floats(min_value=0.01, max_value=10**9), min_size=3, max_size=3
     )
 )
-@settings(max_examples=MAX_SAMPLES)
+@settings(max_examples=MAX_SAMPLES, deadline=None)
 @boa.env.anchor()
 def test_second_deposit(
     tricrypto_swap_with_deposit,

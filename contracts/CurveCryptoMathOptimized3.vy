@@ -47,15 +47,13 @@ def cbrt(x: uint256) -> uint256:
     @return The cubic root of the number
     """
 
-    # We artificially set a cap to the values for which we can compute the
-    # cube roots safely. This is not to say that there are no values above
-    # max(uint256) // 10**36 for which we cannot get good cube root estimates.
-    # Beyond this point, accuracy is not guaranteed as overflows start to occur:
-    assert x < 115792089237316195423570985008687907853269, "inaccurate cbrt"
-
-    # We multiply the input `x` by 10 ** 36 to increase the precision of the
-    # calculated cube root, such that: cbrt(10**18) = 10**18, cbrt(1) = 10**12
-    x_squared: uint256 = unsafe_mul(x, 10**36)
+    xx: uint256 = 0
+    if x >= 115792089237316195423570985008687907853269 * 10**18:
+        xx = x
+    elif x >= 115792089237316195423570985008687907853269:
+        xx = unsafe_mul(x, 10**18)
+    else:
+        xx = unsafe_mul(x, 10**36)
 
     # ---- CALCULATE INITIAL GUESS FOR CUBE ROOT ---- #
     # We can guess the cube root of `x` using cheap integer operations. The guess
@@ -73,21 +71,21 @@ def cbrt(x: uint256) -> uint256:
     # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
 
     log2x: int256 = 0
-    if x_squared > 340282366920938463463374607431768211455:
+    if xx > 340282366920938463463374607431768211455:
         log2x = 128
-    if unsafe_div(x_squared, shift(2, log2x)) > 18446744073709551615:
+    if unsafe_div(xx, shift(2, log2x)) > 18446744073709551615:
         log2x = log2x | 64
-    if unsafe_div(x_squared, shift(2, log2x)) > 4294967295:
+    if unsafe_div(xx, shift(2, log2x)) > 4294967295:
         log2x = log2x | 32
-    if unsafe_div(x_squared, shift(2, log2x)) > 65535:
+    if unsafe_div(xx, shift(2, log2x)) > 65535:
         log2x = log2x | 16
-    if unsafe_div(x_squared, shift(2, log2x)) > 255:
+    if unsafe_div(xx, shift(2, log2x)) > 255:
         log2x = log2x | 8
-    if unsafe_div(x_squared, shift(2, log2x)) > 15:
+    if unsafe_div(xx, shift(2, log2x)) > 15:
         log2x = log2x | 4
-    if unsafe_div(x_squared, shift(2, log2x)) > 3:
+    if unsafe_div(xx, shift(2, log2x)) > 3:
         log2x = log2x | 2
-    if unsafe_div(x_squared, shift(2, log2x)) > 1:
+    if unsafe_div(xx, shift(2, log2x)) > 1:
         log2x = log2x | 1
 
     # When we divide log2x by 3, the remainder is (log2x % 3).
@@ -103,7 +101,7 @@ def cbrt(x: uint256) -> uint256:
     # initial_guess = 2 ** pow * 1260 ** remainder // 1000 ** remainder
 
     remainder: uint256 = convert(log2x, uint256) % 3
-    cbrt_x: uint256 = unsafe_div(
+    a: uint256 = unsafe_div(
         unsafe_mul(
             pow_mod256(
                 2,
@@ -121,15 +119,20 @@ def cbrt(x: uint256) -> uint256:
     # would be one too many iterations. Without initial values, the iteration count
     # can go up to 20 or greater. The iterations are unrolled. This reduces gas costs
     # but takes up more bytecode:
-    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
-    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
-    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
-    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
-    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
-    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
-    cbrt_x = unsafe_div(unsafe_add(unsafe_mul(2, cbrt_x), unsafe_div(x_squared, unsafe_mul(cbrt_x, cbrt_x))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
 
-    return cbrt_x
+    if x >= 115792089237316195423570985008687907853269 * 10**18:
+        return a*10**12
+    elif x >= 115792089237316195423570985008687907853269:
+        return a*10**6
+
+    return a
 
 
 @internal
