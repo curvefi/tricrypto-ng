@@ -210,6 +210,7 @@ def test_immediate_withdraw(
     i=st.integers(min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
+@boa.env.anchor()
 def test_immediate_withdraw_one(
     tricrypto_swap_with_deposit,
     tricrypto_lp_token,
