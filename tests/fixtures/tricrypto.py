@@ -3,12 +3,7 @@ import pytest
 
 from tests.utils.tokens import mint_for_testing
 
-INITIAL_PRICES = [20000, 1500]  # BTC, ETH
-
-
-@pytest.fixture(scope="module")
-def initial_prices(coins):
-    return [1] + INITIAL_PRICES
+INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -96,7 +91,7 @@ def tricrypto_swap(
             tricrypto_pool_init_params["adjustment_step"],
             tricrypto_pool_init_params["admin_fee"],
             tricrypto_pool_init_params["ma_half_time"],
-            [i * 10**18 for i in INITIAL_PRICES],
+            INITIAL_PRICES,
         )
 
         tricrypto_lp_token.set_minter(swap.address)
@@ -105,11 +100,12 @@ def tricrypto_swap(
 
 
 @pytest.fixture(scope="module")
-def tricrypto_swap_with_deposit(tricrypto_swap, coins, user, initial_prices):
+def tricrypto_swap_with_deposit(tricrypto_swap, coins, user):
     # add 1M of each token to the pool
     quantities = []
-    for ix, c in enumerate(coins):
-        quantities.append(10**6 // initial_prices[ix] * 10 ** c.decimals())
+    quantities = [
+        10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES
+    ]  # $3M worth
 
     for coin, quantity in zip(coins, quantities):
 

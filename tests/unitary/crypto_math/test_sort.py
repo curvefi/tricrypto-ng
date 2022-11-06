@@ -1,15 +1,10 @@
-from datetime import timedelta
-
 import boa
 import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from vyper.utils import SizeLimits
 
-SETTINGS = dict(
-    max_examples=20000,
-    deadline=timedelta(seconds=1000),
-)
+SETTINGS = dict(max_examples=20000, deadline=None)
 MAX_VAL = SizeLimits.MAX_UINT256
 
 

@@ -1,5 +1,4 @@
 import math
-from datetime import timedelta
 
 import boa
 import pytest
@@ -13,7 +12,7 @@ from vyper.utils import SizeLimits
         min_value=SizeLimits.MIN_INT256, max_value=SizeLimits.MAX_INT256
     )
 )
-@settings(max_examples=10000, deadline=timedelta(seconds=1000))
+@settings(max_examples=10000, deadline=None)
 def test_exp(tricrypto_math, x):
 
     if x >= 135305999368893231589:

@@ -909,11 +909,12 @@ def remove_liquidity(_amount: uint256, min_amounts: uint256[N_COINS]):
 @external
 def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     """
-    @notice # TODO: add sufficient description here
+    @notice Calculated amounts of LP tokens minted/burnt at deposit/withdraw
     @param amounts Amount of each coin being deposited
     @param deposit True if calculating a deposit, False if calculating a withdrawal
     @return Expected output token amounts
     """
+
     precisions: uint256[N_COINS] = PRECISIONS
     token_supply: uint256 = CurveToken(token).totalSupply()
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -948,12 +949,15 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         p: uint256 = price_scale[k] * precisions[k+1]
         xp[k+1] = xp[k+1] * p / PRECISION
         amountsp[k+1] = amountsp[k+1] * p / PRECISION
+
     D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
     d_token: uint256 = token_supply * D / D0
+
     if deposit:
         d_token -= token_supply
     else:
         d_token = token_supply - d_token
+
     d_token -= self._calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
     return d_token
 

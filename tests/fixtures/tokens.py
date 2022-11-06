@@ -11,13 +11,13 @@ def weth(deployer):
 @pytest.fixture(scope="module")
 def usdt(deployer):
     with boa.env.prank(deployer):
-        yield boa.load("contracts/mocks/ERC20Mock.vy", "USDT", "USDT", 6)
+        yield boa.load("contracts/mocks/ERC20Mock.vy", "USD", "USD", 18)
 
 
 @pytest.fixture(scope="module")
 def wbtc(deployer):
     with boa.env.prank(deployer):
-        yield boa.load("contracts/mocks/ERC20Mock.vy", "WBTC", "WBTC", 8)
+        yield boa.load("contracts/mocks/ERC20Mock.vy", "BTC", "BTC", 18)
 
 
 @pytest.fixture(scope="module")

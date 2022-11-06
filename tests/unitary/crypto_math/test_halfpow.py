@@ -1,20 +1,15 @@
-from datetime import timedelta
-
 import boa
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-SETTINGS = dict(max_examples=10000, deadline=timedelta(seconds=1000))
-LN_2 = 693147180559945344
-
 
 def _exp_input(power):
-    return -1 * LN_2 * power / 10**18
+    return -1 * 693147180559945344 * power / 10**18
 
 
 @given(st.integers(min_value=0, max_value=2**256 - 1))
-@settings(**SETTINGS)
+@settings(max_examples=10000, deadline=None)
 def test_halfpow(tricrypto_math, power):
 
     # there's a raise in the halfpow for very large input values,
