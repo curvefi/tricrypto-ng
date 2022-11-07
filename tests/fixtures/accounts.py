@@ -19,4 +19,6 @@ def fee_receiver():
 
 @pytest.fixture(scope="module")
 def user():
-    return boa.env.generate_address()
+    acc = boa.env.generate_address()
+    boa.env.set_balance(acc, 10**25)
+    return acc

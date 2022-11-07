@@ -196,11 +196,8 @@ def test_immediate_withdraw(
         assert tuple(d_balances) == tuple(measured)
 
     else:
-        with boa.reverts():
-            with boa.env.prank(user):
-                tricrypto_swap_with_deposit.remove_liquidity(
-                    token_amount, [0] * 3
-                )
+        with boa.reverts(), boa.env.prank(user):
+            tricrypto_swap_with_deposit.remove_liquidity(token_amount, [0] * 3)
 
 
 @given(
