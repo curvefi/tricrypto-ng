@@ -93,7 +93,7 @@ def test_exchange_from_eth(
 @settings(**SETTINGS)
 @boa.env.anchor()
 def test_exchange_into_eth(
-    tricrypto_swap_with_deposit, coins, user, amount, i
+    tricrypto_swap_with_deposit, coins, user, amount, i, weth
 ):
 
     prices = [10**18] + INITIAL_PRICES

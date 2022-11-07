@@ -100,9 +100,8 @@ def tricrypto_swap(
 
 
 @pytest.fixture(scope="module")
-def tricrypto_swap_with_deposit(tricrypto_swap, coins, user):
+def tricrypto_swap_with_deposit(tricrypto_swap, coins, user, weth):
     # add 1M of each token to the pool
-    quantities = []
     quantities = [
         10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES
     ]  # $3M worth
@@ -110,7 +109,14 @@ def tricrypto_swap_with_deposit(tricrypto_swap, coins, user):
     for coin, quantity in zip(coins, quantities):
 
         # mint coins for user:
-        mint_for_testing(coin, user, quantity)
+        if coin == weth:
+            user_eth_balance = boa.env.get_balance(user)
+            with boa.env.prank(user):
+                weth.deposit(value=quantity)
+            assert boa.env.get_balance(weth.address) == quantity
+            assert boa.env.get_balance(user) == user_eth_balance - quantity
+        else:
+            mint_for_testing(coin, user, quantity)
         assert coin.balanceOf(user) == quantity
 
         # approve crypto_swap to trade coin for user:

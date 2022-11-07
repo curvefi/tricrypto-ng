@@ -64,15 +64,6 @@ def approve(_spender : address, _value : uint256) -> bool:
     return True
 
 
-@external
-def _mint_for_testing(_target: address, _value: uint256) -> bool:
-    self.total_supply += _value
-    self.balanceOf[_target] += _value
-    log Transfer(empty(address), _target, _value)
-
-    return True
-
-
 @payable
 @external
 def deposit():

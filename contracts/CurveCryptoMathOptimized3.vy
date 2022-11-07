@@ -373,32 +373,76 @@ def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint
     @param i: index
     @return y
     """
+    assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
+    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1 # dev: unsafe values D
+    for k in range(3):
+        if k != i:
+            frac: uint256 = x[k] * 10**18 / D
+            assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
 
-    j: uint256 = 0
-    k: uint256 = 0
-    if i == 0:
-        j = 1
-        k = 2
-    elif i == 1:
-        j = 0
-        k = 2
-    elif i == 2:
-        j = 0
-        k = 1
+    y: uint256 = D / N_COINS
+    K0_i: uint256 = 10**18
+    S_i: uint256 = 0
 
-    a: uint256 = 10**28/27
-    b: uint256 = 10**28/9 + 2*10**10*gamma/27 - D**2/x[j]*gamma**2/x[k]*ANN/27**2/10**8/A_MULTIPLIER
-    c: uint256 = 0
-    if D > x[j] + x[k]:
-        c = 10**28/9 + gamma*(gamma + 4*10**18)/27/10**8 - gamma**2*(D-x[j]-x[k])/D*ANN/10**8/27/A_MULTIPLIER
-    else:
-        c = 10**28/9 + gamma*(gamma + 4*10**18)/27/10**8 + gamma**2*(x[j]+x[k]-D)/D*ANN/10**8/27/A_MULTIPLIER
-    d: uint256 = (10**18 + gamma)**2/10**8/27
+    x_sorted: uint256[N_COINS] = x
+    x_sorted[i] = 0
+    x_sorted = self.sort(x_sorted)  # From high to low
 
-    delta0: uint256 = 3*a*c/b - b
-    delta1: uint256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
+    convergence_limit: uint256 = max(max(x_sorted[0] / 10**14, D / 10**14), 100)
+    for j in range(2, N_COINS+1):
+        _x: uint256 = x_sorted[N_COINS-j]
+        y = y * D / (_x * N_COINS)  # Small _x first
+        S_i += _x
+    for j in range(N_COINS-1):
+        K0_i = K0_i * x_sorted[j] * N_COINS / D  # Large _x first
 
-    C1: uint256 = self.cbrt(b*(delta1 + isqrt(delta1**2 + 4*delta0**3/b))/2/10**18*b/10**18)
-    root_K0: uint256 = (10**18*b - 10**18*C1 + 10**18*b*delta0/C1)/(3*a)
+    for j in range(255):
+        y_prev: uint256 = y
 
-    return root_K0*D/x[j]*D/x[k]*D/27/10**18
+        K0: uint256 = K0_i * y * N_COINS / D
+        S: uint256 = S_i + y
+
+        _g1k0: uint256 = gamma + 10**18
+        if _g1k0 > K0:
+            _g1k0 = _g1k0 - K0 + 1
+        else:
+            _g1k0 = K0 - _g1k0 + 1
+
+        # D / (A * N**N) * _g1k0**2 / gamma**2
+        mul1: uint256 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
+
+        # 2*K0 / _g1k0
+        mul2: uint256 = 10**18 + (2 * 10**18) * K0 / _g1k0
+
+        yfprime: uint256 = 10**18 * y + S * mul2 + mul1
+        _dyfprime: uint256 = D * mul2
+        if yfprime < _dyfprime:
+            y = y_prev / 2
+            continue
+        else:
+            yfprime -= _dyfprime
+        fprime: uint256 = yfprime / y
+
+        # y -= f / f_prime;  y = (y * fprime - f) / fprime
+        # y = (yfprime + 10**18 * D - 10**18 * S) // fprime + mul1 // fprime * (10**18 - K0) // K0
+        y_minus: uint256 = mul1 / fprime
+        y_plus: uint256 = (yfprime + 10**18 * D) / fprime + y_minus * 10**18 / K0
+        y_minus += 10**18 * S / fprime
+
+        if y_plus < y_minus:
+            y = y_prev / 2
+        else:
+            y = y_plus - y_minus
+
+        diff: uint256 = 0
+        if y > y_prev:
+            diff = y - y_prev
+        else:
+            diff = y_prev - y
+        if diff < max(convergence_limit, y / 10**14):
+            frac: uint256 = y * 10**18 / D
+            assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe value for y
+            return y
+
+    raise "Did not converge"
