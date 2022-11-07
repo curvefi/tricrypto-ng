@@ -11,11 +11,9 @@ def cbrt_1e18_base():
         if x == 0:
             return 0
 
-        # xx = x * 10**18
         xx = x * 10**36
 
         D = x
-        diff = 0
         for i in range(1000):
             D_prev = D
 
