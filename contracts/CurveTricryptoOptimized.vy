@@ -532,7 +532,7 @@ def tweak_price(A_gamma: uint256[2],
 
         t: uint256 = self.future_A_gamma_time
         if virtual_price < old_virtual_price and t == 0:
-            raise "Loss"
+            assert old_virtual_price - virtual_price == 1, "Loss"  # can be off by maximally 1 wei
         if t == 1:
             self.future_A_gamma_time = 0
 

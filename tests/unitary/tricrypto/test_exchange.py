@@ -6,7 +6,7 @@ from hypothesis import strategies as st
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
-SETTINGS = {"max_examples": 50, "deadline": None}
+SETTINGS = {"max_examples": 1000, "deadline": None}
 
 
 @given(
@@ -18,7 +18,7 @@ SETTINGS = {"max_examples": 50, "deadline": None}
 )
 @settings(**SETTINGS)
 @boa.env.anchor()
-def test_exchange(tricrypto_swap_with_deposit, coins, user, amount, i, j):
+def test_exchange_all(tricrypto_swap_with_deposit, coins, user, amount, i, j):
 
     if i == j or i > 2 or j > 2:
         with boa.reverts():
