@@ -1,21 +1,21 @@
-from math import ceil, log
+from math import log
 
 import boa
-from hypothesis import strategies
+from boa.test import strategy
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 20
 MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
-BLOCK_TIME = 11  # seconds: this is a constant in eth2
 
 
 class StatefulBase:
-    exchange_amount_in = strategies.integers(max_value=10**9 * 10**18)
-    exchange_i = strategies.integers(max_value=2)
-    exchange_j = strategies.integers(max_value=2)
-    sleep_time = strategies.integers(max_value=86400 * 7)
+    exchange_amount_in = strategy("uint256", max_value=10**9 * 10**18)
+    exchange_i = strategy("uint8", max_value=2)
+    exchange_j = strategy("uint8", max_value=2)
+    sleep_time = strategy("uint256", max_value=86400 * 7)
+    user = strategy("address")
 
     def __init__(self, chain, accounts, coins, crypto_swap, token):
         self.accounts = accounts
@@ -24,36 +24,33 @@ class StatefulBase:
         self.chain = chain
         self.token = token
 
+    def setup(self, user_id=0):
         self.decimals = [int(c.decimals()) for c in self.coins]
         self.user_balances = {u: [0] * 3 for u in self.accounts}
-        self.initial_prices = [10**18] + INITIAL_PRICES
-
         self.initial_deposit = [
             10**4 * 10 ** (18 + d) // p
             for p, d in zip([10**18] + INITIAL_PRICES, self.decimals)
         ]  # $10k * 3
-
-        self.balances = self.initial_deposit[:]
-        self.total_supply = 0
-        self.xcp_profit = 0
-
-    def setup(self, user_id=0):
-
+        self.initial_prices = [10**18] + INITIAL_PRICES
         user = self.accounts[user_id]
 
-        # mint tokens and approve swap
         for coin, q in zip(self.coins, self.initial_deposit):
             mint_for_testing(coin, user, q)
-            coin.approve(self.swap, 2**256 - 1, {"from": user})
+            with boa.env.prank(user):
+                coin.approve(self.swap, 2**256 - 1)
 
         # Inf approve all, too. Not always that's the best way though
         for u in self.accounts:
             if u != user:
                 for coin in self.coins:
-                    coin.approve(self.swap, 2**256 - 1, {"from": u})
+                    with boa.env.prank(user):
+                        coin.approve(self.swap, 2**256 - 1)
 
         # Very first deposit
-        self.swap.add_liquidity(self.initial_deposit, 0, {"from": user})
+        with boa.env.prank(user):
+            self.swap.add_liquidity(self.initial_deposit, 0)
+
+        self.balances = self.initial_deposit[:]
         self.total_supply = self.token.balanceOf(user)
         self.xcp_profit = 10**18
 
@@ -101,6 +98,11 @@ class StatefulBase:
 
         return True
 
+    def rule_exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
+        return self._rule_exchange(
+            exchange_amount_in, exchange_i, exchange_j, user
+        )
+
     def _rule_exchange(
         self,
         exchange_amount_in,
@@ -109,37 +111,28 @@ class StatefulBase:
         user,
         check_out_amount=True,
     ):
-
         if exchange_i == exchange_j:
-
             return False
-
         try:
-
             calc_amount = self.swap.get_dy(
                 exchange_i, exchange_j, exchange_amount_in
             )
-
         except Exception:
-
             _amounts = [0] * 3
             _amounts[exchange_i] = exchange_amount_in
             if self.check_limits(_amounts):
                 raise
             return False
-
         mint_for_testing(self.coins[exchange_i], user, exchange_amount_in)
 
         d_balance_i = self.coins[exchange_i].balanceOf(user)
         d_balance_j = self.coins[exchange_j].balanceOf(user)
-
         try:
-            self.swap.exchange(
-                exchange_i, exchange_j, exchange_amount_in, 0, {"from": user}
-            )
-
+            with boa.env.prank(user):
+                self.swap.exchange(
+                    exchange_i, exchange_j, exchange_amount_in, 0
+                )
         except Exception:
-
             # Small amounts may fail with rounding errors
             if (
                 calc_amount > 100
@@ -179,17 +172,8 @@ class StatefulBase:
 
         return True
 
-    def rule_exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
-        return self._rule_exchange(
-            exchange_amount_in, exchange_i, exchange_j, user
-        )
-
     def rule_sleep(self, sleep_time):
-
-        boa.env.vm.patch.timestamp += sleep_time
-        boa.env.vm.patch.block_number += int(
-            ceil(sleep_time / BLOCK_TIME)
-        )  # TODO: check
+        self.chain.sleep(sleep_time)
 
     def invariant_balances(self):
         balances = [self.swap.balances(i) for i in range(3)]

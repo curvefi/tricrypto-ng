@@ -1,7 +1,7 @@
 import boa
 import pytest
-from hypothesis import example, given, settings
-from hypothesis import strategies as st
+from boa.test import given, strategy
+from hypothesis import example, settings
 from vyper.utils import SizeLimits
 
 SETTINGS = dict(max_examples=20000, deadline=None)
@@ -35,11 +35,7 @@ def sort_descending(unsorted: uint256[3]) -> uint256[3]:
     return boa.loads(sort_implementation)
 
 
-@given(
-    val=st.lists(
-        st.integers(min_value=0, max_value=MAX_VAL), min_size=3, max_size=3
-    )
-)
+@given(val=strategy("uint256[3]", min_value=0, max_value=MAX_VAL))
 @settings(**SETTINGS)
 @example([1, 1, 1])
 def test_sort3_descending(vyper_sort3, val):

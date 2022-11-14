@@ -109,14 +109,7 @@ def tricrypto_swap_with_deposit(tricrypto_swap, coins, user, weth):
     for coin, quantity in zip(coins, quantities):
 
         # mint coins for user:
-        if coin == weth:
-            user_eth_balance = boa.env.get_balance(user)
-            with boa.env.prank(user):
-                weth.deposit(value=quantity)
-            assert boa.env.get_balance(weth.address) == quantity
-            assert boa.env.get_balance(user) == user_eth_balance - quantity
-        else:
-            mint_for_testing(coin, user, quantity)
+        mint_for_testing(coin, user, quantity)
         assert coin.balanceOf(user) == quantity
 
         # approve crypto_swap to trade coin for user:

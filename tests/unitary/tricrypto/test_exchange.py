@@ -1,7 +1,7 @@
 import boa
 import pytest
-from hypothesis import given, settings  # noqa
-from hypothesis import strategies as st
+from boa.test import given, strategy
+from hypothesis import settings  # noqa
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
@@ -10,14 +10,13 @@ SETTINGS = {"max_examples": 1000, "deadline": None}
 
 
 @given(
-    amount=st.integers(
-        min_value=10**6, max_value=2 * 10**6 * 10**18
+    amount=strategy(
+        "uint256", min_value=10**6, max_value=2 * 10**6 * 10**18
     ),  # Can be more than we have
-    i=st.integers(min_value=0, max_value=3),
-    j=st.integers(min_value=0, max_value=3),
+    i=strategy("uint", min_value=0, max_value=3),
+    j=strategy("uint", min_value=0, max_value=3),
 )
 @settings(**SETTINGS)
-@boa.env.anchor()
 def test_exchange_all(tricrypto_swap_with_deposit, coins, user, amount, i, j):
 
     if i == j or i > 2 or j > 2:
@@ -55,9 +54,12 @@ def test_exchange_all(tricrypto_swap_with_deposit, coins, user, amount, i, j):
 
 
 @pytest.mark.parametrize("j", [0, 1])
-@given(amount=st.integers(min_value=10**6, max_value=2 * 10**6 * 10**18))
+@given(
+    amount=strategy(
+        "uint256", min_value=10**6, max_value=2 * 10**6 * 10**18
+    )
+)
 @settings(**SETTINGS)
-@boa.env.anchor()
 def test_exchange_from_eth(
     tricrypto_swap_with_deposit, coins, user, amount, j
 ):
@@ -89,11 +91,14 @@ def test_exchange_from_eth(
 
 
 @pytest.mark.parametrize("i", [0, 1])
-@given(amount=st.integers(min_value=10**6, max_value=2 * 10**6 * 10**18))
+@given(
+    amount=strategy(
+        "uint256", min_value=10**6, max_value=2 * 10**6 * 10**18
+    )
+)
 @settings(**SETTINGS)
-@boa.env.anchor()
 def test_exchange_into_eth(
-    tricrypto_swap_with_deposit, coins, user, amount, i, weth
+    tricrypto_swap_with_deposit, coins, user, amount, i
 ):
 
     prices = [10**18] + INITIAL_PRICES
@@ -125,7 +130,6 @@ def test_exchange_into_eth(
 
 @pytest.mark.parametrize("j", [0, 1])
 @pytest.mark.parametrize("modifier", [0, 1.01, 2])
-@boa.env.anchor()
 def test_incorrect_eth_amount(tricrypto_swap_with_deposit, user, j, modifier):
     amount = 10**18
     with boa.reverts(dev="incorrect eth amount"), boa.env.prank(user):
@@ -135,7 +139,6 @@ def test_incorrect_eth_amount(tricrypto_swap_with_deposit, user, j, modifier):
 
 
 @pytest.mark.parametrize("j", [0, 1])
-@boa.env.anchor()
 def test_send_eth_without_use_eth(tricrypto_swap_with_deposit, user, j):
     amount = 10**18
     with boa.reverts(dev="nonzero eth amount"), boa.env.prank(user):
@@ -145,7 +148,6 @@ def test_send_eth_without_use_eth(tricrypto_swap_with_deposit, user, j):
 
 
 @pytest.mark.parametrize("i", [0, 1])
-@boa.env.anchor()
 def test_send_eth_with_incorrect_i(tricrypto_swap_with_deposit, user, i):
     amount = 10**18
     with boa.reverts(dev="nonzero eth amount"), boa.env.prank(user):

@@ -1,7 +1,6 @@
 import boa
+from boa.test import given, strategy
 from hypothesis import settings  # noqa
-from hypothesis import given
-from hypothesis import strategies as st
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils import simulation_int_many as sim
@@ -10,7 +9,6 @@ from tests.utils.tokens import mint_for_testing
 SETTINGS = {"max_examples": 100, "deadline": None}
 
 
-@boa.env.anchor()
 def test_1st_deposit_and_last_withdraw(
     tricrypto_swap, coins, tricrypto_lp_token, user
 ):
@@ -44,14 +42,11 @@ def test_1st_deposit_and_last_withdraw(
 
 
 @given(
-    values=st.lists(
-        st.integers(min_value=10**16, max_value=10**9 * 10**18),
-        min_size=3,
-        max_size=3,
+    values=strategy(
+        "uint256[3]", min_value=10**16, max_value=10**9 * 10**18
     )
 )
 @settings(**SETTINGS)
-@boa.env.anchor()
 def test_second_deposit(
     tricrypto_swap_with_deposit,
     tricrypto_lp_token,
@@ -118,11 +113,12 @@ def test_second_deposit(
 
 
 @given(
-    value=st.integers(min_value=10**16, max_value=10**6 * 10**18),
-    i=st.integers(min_value=0, max_value=2),
+    value=strategy(
+        "uint256", min_value=10**16, max_value=10**6 * 10**18
+    ),
+    i=strategy("uint", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-@boa.env.anchor()
 def test_second_deposit_one(
     tricrypto_swap_with_deposit,
     tricrypto_lp_token,
@@ -156,10 +152,11 @@ def test_second_deposit_one(
 
 
 @given(
-    token_amount=st.integers(min_value=10**12, max_value=4000 * 10**18)
+    token_amount=strategy(
+        "uint256", min_value=10**12, max_value=4000 * 10**18
+    )
 )  # supply is 2400 * 1e18
 @settings(**SETTINGS)
-@boa.env.anchor()
 def test_immediate_withdraw(
     tricrypto_swap_with_deposit, tricrypto_lp_token, coins, user, token_amount
 ):
@@ -201,13 +198,12 @@ def test_immediate_withdraw(
 
 
 @given(
-    token_amount=st.integers(
-        min_value=10**12, max_value=4 * 10**6 * 10**18
+    token_amount=strategy(
+        "uint256", min_value=10**12, max_value=4 * 10**6 * 10**18
     ),  # Can be more than we have
-    i=st.integers(min_value=0, max_value=2),
+    i=strategy("uint", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-@boa.env.anchor()
 def test_immediate_withdraw_one(
     tricrypto_swap_with_deposit,
     tricrypto_lp_token,
