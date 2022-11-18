@@ -1,10 +1,9 @@
 import boa
-import pytest
 from boa.test import strategy
+from hypothesis.stateful import rule, run_state_machine_as_test
 
+from tests.unitary.tricrypto.stateful_base import StatefulBase
 from tests.utils.tokens import mint_for_testing
-
-from .stateful_base import StatefulBase
 
 MAX_SAMPLES = 60
 STEP_COUNT = 100
@@ -22,17 +21,27 @@ class StatefulGas(StatefulBase):
     )
     sleep_time = strategy("uint256", max_value=100)
     update_D = strategy("bool")
+    exchange_i = strategy("uint8", max_value=2)
+    exchange_j = strategy("uint8", max_value=2)
+    user = strategy("address")
 
-    def rule_exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
+    @rule(
+        exchange_amount_in=exchange_amount_in,
+        exchange_i=exchange_i,
+        exchange_j=exchange_j,
+        user=user,
+    )
+    def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
         if exchange_i > 0:
             exchange_amount_in = (
                 exchange_amount_in
                 * 10**18
                 // self.swap.price_oracle(exchange_i - 1)
             )
-        super().rule_exchange(exchange_amount_in, exchange_i, exchange_j, user)
+        super().exchange(exchange_amount_in, exchange_i, exchange_j, user)
 
-    def rule_deposit(self, deposit_amount, exchange_i, user):
+    @rule(deposit_amount=deposit_amount, exchange_i=exchange_i, user=user)
+    def deposit(self, deposit_amount, exchange_i, user):
         amounts = [0] * 3
         if exchange_i > 0:
             amounts[exchange_i] = (
@@ -57,7 +66,13 @@ class StatefulGas(StatefulBase):
             if self.check_limits(amounts):
                 raise
 
-    def rule_remove_liquidity_one_coin(
+    @rule(
+        token_fraction=token_fraction,
+        exchange_i=exchange_i,
+        user=user,
+        update_D=update_D,
+    )
+    def remove_liquidity_one_coin(
         self, token_fraction, exchange_i, user, update_D
     ):
         if update_D:
@@ -111,20 +126,18 @@ class StatefulGas(StatefulBase):
             self.virtual_price = 10**18
 
 
-@pytest.mark.skip()
-def test_gas(crypto_swap, token, chain, accounts, coins, state_machine):
+# @pytest.mark.skip()
+def test_gas(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
+    from hypothesis import settings
     from hypothesis._settings import HealthCheck
 
-    state_machine(
-        StatefulGas,
-        chain,
-        accounts,
-        coins,
-        crypto_swap,
-        token,
-        settings={
-            "max_examples": MAX_SAMPLES,
-            "stateful_step_count": STEP_COUNT,
-            "suppress_health_check": HealthCheck.all(),
-        },
+    StatefulGas.TestCase.settings = settings(
+        max_examples=MAX_SAMPLES,
+        stateful_step_count=STEP_COUNT,
+        suppress_health_check=HealthCheck.all(),
     )
+
+    for k, v in locals().items():
+        setattr(StatefulGas, k, v)
+
+    run_state_machine_as_test(StatefulGas)

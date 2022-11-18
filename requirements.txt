@@ -2,6 +2,7 @@
 black
 flake8
 isort
+mamushi
 pip-tools
 pre-commit
 
@@ -15,5 +16,5 @@ pdbpp
 gmpy2
 
 # vyper and dev framework:
-git+https://github.com/bout3fiddy/titanoboa.git@b2581c885c24a1bc7b85ff9661da67d2faa4470b
+git+https://github.com/bout3fiddy/titanoboa.git@50b3f654653a1c95c0590118434109d704619f0c
 vyper==0.3.7

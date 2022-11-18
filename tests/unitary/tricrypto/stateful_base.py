@@ -2,6 +2,7 @@ from math import log
 
 import boa
 from boa.test import strategy
+from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
@@ -10,49 +11,51 @@ MAX_SAMPLES = 20
 MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
 
 
-class StatefulBase:
+class StatefulBase(RuleBasedStateMachine):
     exchange_amount_in = strategy("uint256", max_value=10**9 * 10**18)
     exchange_i = strategy("uint8", max_value=2)
     exchange_j = strategy("uint8", max_value=2)
     sleep_time = strategy("uint256", max_value=86400 * 7)
     user = strategy("address")
 
-    def __init__(self, chain, accounts, coins, crypto_swap, token):
-        self.accounts = accounts
-        self.swap = crypto_swap
-        self.coins = coins
-        self.chain = chain
-        self.token = token
+    def __init__(self):
+        super().__init__()
+        self.anchor = boa.env.anchor()
+        self.anchor.__enter__()
 
-    def setup(self, user_id=0):
+        self.accounts = self.users
+        self.swap = self.tricrypto_swap
+        self.coins = self.pool_coins
+        self.token = self.tricrypto_lp_token
+
         self.decimals = [int(c.decimals()) for c in self.coins]
-        self.user_balances = {u: [0] * 3 for u in self.accounts}
         self.initial_deposit = [
             10**4 * 10 ** (18 + d) // p
             for p, d in zip([10**18] + INITIAL_PRICES, self.decimals)
         ]  # $10k * 3
         self.initial_prices = [10**18] + INITIAL_PRICES
-        user = self.accounts[user_id]
+        self.user_balances = {u: [0] * 3 for u in self.accounts}
+        self.balances = self.initial_deposit[:]
+        self.xcp_profit = 10**18
+        self.total_supply = 0
 
+        for user in self.accounts:
+            for coin in self.coins:
+                with boa.env.prank(user):
+                    coin.approve(self.swap, 2**256 - 1)
+
+        # initial deposit:
+        user = self.accounts[0]
         for coin, q in zip(self.coins, self.initial_deposit):
             mint_for_testing(coin, user, q)
-            with boa.env.prank(user):
-                coin.approve(self.swap, 2**256 - 1)
 
-        # Inf approve all, too. Not always that's the best way though
-        for u in self.accounts:
-            if u != user:
-                for coin in self.coins:
-                    with boa.env.prank(user):
-                        coin.approve(self.swap, 2**256 - 1)
-
-        # Very first deposit
         with boa.env.prank(user):
             self.swap.add_liquidity(self.initial_deposit, 0)
 
-        self.balances = self.initial_deposit[:]
         self.total_supply = self.token.balanceOf(user)
-        self.xcp_profit = 10**18
+
+    def teardown(self):
+        self.anchor.__exit__(None, None, None)
 
     def convert_amounts(self, amounts):
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
@@ -98,12 +101,16 @@ class StatefulBase:
 
         return True
 
-    def rule_exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
-        return self._rule_exchange(
-            exchange_amount_in, exchange_i, exchange_j, user
-        )
+    @rule(
+        exchange_amount_in=exchange_amount_in,
+        exchange_i=exchange_i,
+        exchange_j=exchange_j,
+        user=user,
+    )
+    def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
+        return self._exchange(exchange_amount_in, exchange_i, exchange_j, user)
 
-    def _rule_exchange(
+    def _exchange(
         self,
         exchange_amount_in,
         exchange_i,
@@ -123,6 +130,7 @@ class StatefulBase:
             if self.check_limits(_amounts):
                 raise
             return False
+
         mint_for_testing(self.coins[exchange_i], user, exchange_amount_in)
 
         d_balance_i = self.coins[exchange_i].balanceOf(user)
@@ -172,20 +180,25 @@ class StatefulBase:
 
         return True
 
+    @rule(sleep_time=sleep_time)
     def rule_sleep(self, sleep_time):
-        self.chain.sleep(sleep_time)
+        boa.env.vm.patch.timestamp += sleep_time
+        boa.env.vm.patch.block_number += sleep_time // 12
 
-    def invariant_balances(self):
+    @invariant()
+    def balances(self):
         balances = [self.swap.balances(i) for i in range(3)]
         balances_of = [c.balanceOf(self.swap) for c in self.coins]
         for i in range(3):
             assert self.balances[i] == balances[i]
             assert self.balances[i] == balances_of[i]
 
-    def invariant_total_supply(self):
+    @invariant()
+    def total_supply(self):
         assert self.total_supply == self.token.totalSupply()
 
-    def invariant_virtual_price(self):
+    @invariant()
+    def virtual_price(self):
         virtual_price = self.swap.virtual_price()
         xcp_profit = self.swap.xcp_profit()
         get_virtual_price = self.swap.get_virtual_price()

@@ -23,3 +23,8 @@ def wbtc(deployer):
 @pytest.fixture(scope="module")
 def coins(usdt, wbtc, weth):
     yield [usdt, wbtc, weth]
+
+
+@pytest.fixture(scope="module")
+def pool_coins(coins):
+    yield coins
