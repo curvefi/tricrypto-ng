@@ -273,7 +273,6 @@ def halfpow(power: uint256) -> uint256:
     @param power: the exponent to raise e by
     @return the result of 1e18 * 0.5 ** (power/1e18)
     """
-
     # TODO: borrowed from unoptimised halfpow, please check the following:
     if unsafe_div(power, 10**18) > 59:
         return 0

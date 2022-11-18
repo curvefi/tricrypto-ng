@@ -137,6 +137,7 @@ class StatefulBase(RuleBasedStateMachine):
         d_balance_j = self.coins[exchange_j].balanceOf(user)
         try:
             with boa.env.prank(user):
+                self.coins[exchange_i].approve(self.swap, 2**256 - 1)
                 self.swap.exchange(
                     exchange_i, exchange_j, exchange_amount_in, 0
                 )

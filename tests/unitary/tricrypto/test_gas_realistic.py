@@ -135,6 +135,7 @@ def test_gas(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
         max_examples=MAX_SAMPLES,
         stateful_step_count=STEP_COUNT,
         suppress_health_check=HealthCheck.all(),
+        deadline=None,
     )
 
     for k, v in locals().items():
