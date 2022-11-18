@@ -5,6 +5,7 @@ from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
+from tests.utils import boa_sleep
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 20
@@ -44,7 +45,9 @@ class StatefulBase(RuleBasedStateMachine):
                 with boa.env.prank(user):
                     coin.approve(self.swap, 2**256 - 1)
 
-        # initial deposit:
+        self.setup()
+
+    def setup(self):
         user = self.accounts[0]
         for coin, q in zip(self.coins, self.initial_deposit):
             mint_for_testing(coin, user, q)
@@ -183,8 +186,7 @@ class StatefulBase(RuleBasedStateMachine):
 
     @rule(sleep_time=sleep_time)
     def rule_sleep(self, sleep_time):
-        boa.env.vm.patch.timestamp += sleep_time
-        boa.env.vm.patch.block_number += sleep_time // 12
+        boa_sleep(sleep_time)
 
     @invariant()
     def balances(self):

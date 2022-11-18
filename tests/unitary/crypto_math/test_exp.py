@@ -9,7 +9,7 @@ from vyper.utils import SizeLimits
 
 @given(
     strategy(
-        "uint256",
+        "int256",
         min_value=SizeLimits.MIN_INT256,
         max_value=SizeLimits.MAX_INT256,
     )

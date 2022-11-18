@@ -2,7 +2,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.unitary.tricrypto.stateful_base import StatefulBase
+from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 60
@@ -126,7 +126,6 @@ class StatefulGas(StatefulBase):
             self.virtual_price = 10**18
 
 
-# @pytest.mark.skip()
 def test_gas(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
