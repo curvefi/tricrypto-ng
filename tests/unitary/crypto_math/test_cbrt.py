@@ -1,6 +1,6 @@
 import pytest
-from boa.test import given, strategy
-from hypothesis import example, settings
+from boa.test import strategy
+from hypothesis import example, given, settings
 from vyper.utils import SizeLimits
 
 SETTINGS = {"max_examples": 10000, "deadline": None}

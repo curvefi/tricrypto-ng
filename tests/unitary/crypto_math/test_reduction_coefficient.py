@@ -1,5 +1,5 @@
-from boa.test import given, strategy
-from hypothesis import settings
+from boa.test import strategy
+from hypothesis import given, settings
 
 from tests.utils import simulation_int_many as sim
 

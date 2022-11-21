@@ -16,5 +16,5 @@ pdbpp
 gmpy2
 
 # vyper and dev framework:
-git+https://github.com/bout3fiddy/titanoboa.git@50b3f654653a1c95c0590118434109d704619f0c
+git+https://github.com/bout3fiddy/titanoboa.git@44496ac2f2b1498f8a58da1134a7ce2618733857
 vyper==0.3.7

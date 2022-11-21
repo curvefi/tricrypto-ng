@@ -2,8 +2,8 @@ import math
 
 import boa
 import pytest
-from boa.test import given, strategy
-from hypothesis import settings
+from boa.test import strategy
+from hypothesis import given, settings
 from vyper.utils import SizeLimits
 
 

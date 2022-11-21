@@ -1,7 +1,7 @@
 import boa
 import pytest
-from boa.test import given, strategy
-from hypothesis import settings
+from boa.test import strategy
+from hypothesis import given, settings
 
 
 def _exp_input(power):

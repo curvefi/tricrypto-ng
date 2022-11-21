@@ -1,7 +1,7 @@
 import boa
 import pytest
-from boa.test import given, strategy
-from hypothesis import example, settings
+from boa.test import strategy
+from hypothesis import example, given, settings
 from vyper.utils import SizeLimits
 
 SETTINGS = dict(max_examples=20000, deadline=None)

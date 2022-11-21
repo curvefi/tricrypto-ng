@@ -3,8 +3,8 @@
 from math import log, log2
 
 import boa
-from boa.test import given, strategy
-from hypothesis import settings
+from boa.test import strategy
+from hypothesis import given, settings
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils import boa_sleep

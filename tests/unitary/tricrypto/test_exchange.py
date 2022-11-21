@@ -1,7 +1,7 @@
 import boa
 import pytest
-from boa.test import given, strategy
-from hypothesis import settings  # noqa
+from boa.test import strategy
+from hypothesis import given, settings  # noqa
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
