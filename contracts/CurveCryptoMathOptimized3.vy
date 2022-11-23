@@ -15,26 +15,40 @@ MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 
 # --- Internal maff ---
 
+
 @internal
 @pure
-def sort(A0: uint256[N_COINS]) -> uint256[N_COINS]:
+def log2(x: uint256) -> int256:
     """
-    Insertion sort from high to low
+    @notice Compute the binary logarithm of `x`
+    @param x The number to compute the logarithm of
+    @return The binary logarithm of `x`
     """
-    A: uint256[N_COINS] = A0
-    for i in range(1, N_COINS):
-        x: uint256 = A[i]
-        cur: uint256 = i
-        for j in range(N_COINS):
-            y: uint256 = A[cur-1]
-            if y > x:
-                break
-            A[cur] = y
-            cur -= 1
-            if cur == 0:
-                break
-        A[cur] = x
-    return A
+    # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
+    # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
+    #
+    # More inspiration was derived from:
+    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
+
+    log2x: int256 = 0
+    if x > 340282366920938463463374607431768211455:
+        log2x = 128
+    if unsafe_div(x, shift(2, log2x)) > 18446744073709551615:
+        log2x = log2x | 64
+    if unsafe_div(x, shift(2, log2x)) > 4294967295:
+        log2x = log2x | 32
+    if unsafe_div(x, shift(2, log2x)) > 65535:
+        log2x = log2x | 16
+    if unsafe_div(x, shift(2, log2x)) > 255:
+        log2x = log2x | 8
+    if unsafe_div(x, shift(2, log2x)) > 15:
+        log2x = log2x | 4
+    if unsafe_div(x, shift(2, log2x)) > 3:
+        log2x = log2x | 2
+    if unsafe_div(x, shift(2, log2x)) > 1:
+        log2x = log2x | 1
+
+    return log2x
 
 
 @internal
@@ -62,31 +76,8 @@ def cbrt(x: uint256) -> uint256:
     # => y = cbrt(2**log2(a)) # <-- substituting `a = 2 ** log2(a)`
     # => y = 2**(log2(a) / 3) ≈ 2**|log2(a)/3|
 
-    # Calculate log2(x). The following is inspire from:
-    #
-    # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
-    # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
-    #
-    # More inspiration was derived from:
-    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
 
-    log2x: int256 = 0
-    if xx > 340282366920938463463374607431768211455:
-        log2x = 128
-    if unsafe_div(xx, shift(2, log2x)) > 18446744073709551615:
-        log2x = log2x | 64
-    if unsafe_div(xx, shift(2, log2x)) > 4294967295:
-        log2x = log2x | 32
-    if unsafe_div(xx, shift(2, log2x)) > 65535:
-        log2x = log2x | 16
-    if unsafe_div(xx, shift(2, log2x)) > 255:
-        log2x = log2x | 8
-    if unsafe_div(xx, shift(2, log2x)) > 15:
-        log2x = log2x | 4
-    if unsafe_div(xx, shift(2, log2x)) > 3:
-        log2x = log2x | 2
-    if unsafe_div(xx, shift(2, log2x)) > 1:
-        log2x = log2x | 1
+    log2x: int256 = self.log2(xx)
 
     # When we divide log2x by 3, the remainder is (log2x % 3).
     # So if we just multiply 2**(log2x/3) and discard the remainder to calculate our
@@ -208,28 +199,66 @@ def exp(_power: int256) -> uint256:
 
 
 @internal
-@view
-def _geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
+@pure
+def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
     """
-    (x[0] * x[1] * ...) ** (1/N)
+    @notice Sorts the array of 3 numbers in descending order
+    @param unsorted_x The array to sort
+    @return The sorted array
     """
     x: uint256[N_COINS] = unsorted_x
+    temp_var: uint256 = x[0]
+    if x[0] < x[1]:
+        x[0] = x[1]
+        x[1] = temp_var
+    if x[0] < x[2]:
+        temp_var = x[0]
+        x[0] = x[2]
+        x[2] = temp_var
+    if x[1] < x[2]:
+        temp_var = x[1]
+        x[1] = x[2]
+        x[2] = temp_var
+    return x
+
+
+@internal
+@view
+def _geometric_mean(_x: uint256[N_COINS], sort: bool = True) -> uint256:
+
+    x: uint256[N_COINS] = _x
     if sort:
-        x = self.sort(x)
+        x = self._sort(_x)
+
     D: uint256 = x[0]
     diff: uint256 = 0
+    D_prev: uint256 = 0
+    tmp: uint256 = 0
+
     for i in range(255):
-        D_prev: uint256 = D
-        tmp: uint256 = 10**18
-        for _x in x:
-            tmp = tmp * _x / D
-        D = D * ((N_COINS - 1) * 10**18 + tmp) / (N_COINS * 10**18)
+
+        D_prev = D
+
+        tmp = unsafe_div(unsafe_mul(10**18, x[0]), D)
+        tmp = unsafe_div(unsafe_mul(tmp, x[1]), D)
+        tmp = unsafe_div(unsafe_mul(tmp, x[2]), D)
+
+        D = unsafe_div(
+            unsafe_mul(
+                D,
+                unsafe_add(unsafe_mul(unsafe_sub(N_COINS, 1), 10**18), tmp)
+            ),
+            unsafe_mul(N_COINS, 10**18)
+        )
+
         if D > D_prev:
-            diff = D - D_prev
+            diff = unsafe_sub(D, D_prev)
         else:
-            diff = D_prev - D
-        if diff <= 1 or diff * 10**18 < D:
+            diff = unsafe_sub(D_prev, D)
+
+        if diff <= 1 or unsafe_mul(diff, 10**18) < D:
             return D
+
     raise "Did not converge"
 
 
@@ -251,17 +280,20 @@ def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
     K = prod(x) / (sum(x) / N)**N
     (all normalized to 1e18)
     """
-    # TODO: optimise add tests
     K: uint256 = 10**18
-    S: uint256 = 0
-    for x_i in x:
-        S += x_i
+    S: uint256 = x[0]
+    S = unsafe_add(S, x[1])
+    S = unsafe_add(S, x[2])
+
     # Could be good to pre-sort x, but it is used only for dynamic fee,
     # so that is not so important
-    for x_i in x:
-        K = K * N_COINS * x_i / S
+    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[0]), S)
+    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[1]), S)
+    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[2]), S)
+
     if fee_gamma > 0:
-        K = fee_gamma * 10**18 / (fee_gamma + 10**18 - K)
+        K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(unsafe_add(fee_gamma, 10**18), K)
+
     return K
 
 
@@ -300,7 +332,7 @@ def newton_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint
     assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
 
     # Initial value of invariant D is that for constant-product invariant
-    x: uint256[N_COINS] = self.sort(x_unsorted)
+    x: uint256[N_COINS] = self._sort(x_unsorted)
 
     assert x[0] > 10**9 - 1 and x[0] < 10**15 * 10**18 + 1  # dev: unsafe values x[0]
     assert x[1] * 10**18 / x[0] > 10**11-1  # dev: unsafe values x[1]
@@ -382,7 +414,7 @@ def newton_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: u
 
     x_sorted: uint256[N_COINS] = x
     x_sorted[i] = 0
-    x_sorted = self.sort(x_sorted)  # From high to low
+    x_sorted = self._sort(x_sorted)  # From high to low
 
     convergence_limit: uint256 = max(max(x_sorted[0] / 10**14, D / 10**14), 100)
     for j in range(2, N_COINS+1):
