@@ -21,7 +21,7 @@ interface Math:
     def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
     def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256: view
     def newton_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256: view
-    def get_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256: view
+    def newton_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256: view
     def halfpow(power: uint256) -> uint256: view
 
 interface WETH:
@@ -501,7 +501,7 @@ def tweak_price(A_gamma: uint256[2],
         dx_price: uint256 = __xp[0] / 10**6
         __xp[0] += dx_price
         for k in range(N_COINS-1):
-            last_prices[k] = price_scale[k] * dx_price / (_xp[k+1] - Math(math).get_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k+1))
+            last_prices[k] = price_scale[k] * dx_price / (_xp[k+1] - Math(math).newton_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k+1))
 
     packed_prices = 0
     for k in range(N_COINS-1):
@@ -657,7 +657,7 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool
 
         prec_j: uint256 = precisions[j]
 
-        dy = xp[j] - Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
+        dy = xp[j] - Math(math).newton_y(A_gamma[0], A_gamma[1], xp, self.D, j)
         # Not defining new "y" here to have less variables / make subsequent calls cheaper
         xp[j] -= dy
         dy -= 1
@@ -728,7 +728,7 @@ def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     A_gamma: uint256[2] = self._A_gamma()
 
     # get_y:
-    y: uint256 = Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
+    y: uint256 = Math(math).newton_y(A_gamma[0], A_gamma[1], xp, self.D, j)
     dy: uint256 = xp[j] - y - 1
     xp[j] = y
     if j > 0:
@@ -996,7 +996,7 @@ def _calc_withdraw_one_coin(
     fee: uint256 = self._fee(xp)
     dD: uint256 = token_amount * D / token_supply
     D -= (dD - (fee * dD / (2 * 10**10) + 1))
-    y: uint256 = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
+    y: uint256 = Math(math).newton_y(A_gamma[0], A_gamma[1], xp, D, i)
     dy: uint256 = (xp[i] - y) * PRECISION / price_scale_i
     xp[i] = y
 

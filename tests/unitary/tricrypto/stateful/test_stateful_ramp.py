@@ -14,7 +14,7 @@ class RampTest(NumbaGoUp):
     check_out_amount = strategy("bool")
     exchange_amount_in = strategy(
         "uint256", min_value=10**18, max_value=50000 * 10**18
-    )  # XXX
+    )
     token_amount = strategy(
         "uint256", min_value=10**18, max_value=10**12 * 10**18
     )
