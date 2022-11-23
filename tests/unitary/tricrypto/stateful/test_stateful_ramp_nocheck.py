@@ -1,7 +1,11 @@
 import boa
 from boa.test import strategy
-from hypothesis.stateful import (initialize, invariant, rule,
-                                 run_state_machine_as_test)
+from hypothesis.stateful import (
+    initialize,
+    invariant,
+    rule,
+    run_state_machine_as_test,
+)
 
 from tests.unitary.tricrypto.stateful.test_stateful import NumbaGoUp
 
