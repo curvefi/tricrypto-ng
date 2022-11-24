@@ -9,7 +9,7 @@ from hypothesis.stateful import (
 
 from tests.unitary.tricrypto.stateful.test_stateful import NumbaGoUp
 
-MAX_SAMPLES = 10000
+MAX_SAMPLES = 100
 MAX_COUNT = 100
 MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
 ALLOWED_DIFFERENCE = 0.02
@@ -24,7 +24,7 @@ class RampTest(NumbaGoUp):
     future_A = strategy(
         "uint256",
         min_value=135 * 3**3 * 10000 // 9,
-        max_value=135 * 3**3 * 10000 * 9,
+        max_value=3**3 * 10000 * 1000,
     )
     exchange_amount_in = strategy(
         "uint256", min_value=10**18, max_value=50000 * 10**18

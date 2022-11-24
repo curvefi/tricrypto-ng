@@ -7,7 +7,7 @@ from hypothesis.stateful import rule, run_state_machine_as_test
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
 from tests.utils import boa_sleep
 
-MAX_SAMPLES = 10000
+MAX_SAMPLES = 100
 STEP_COUNT = 100
 NO_CHANGE = 2**256 - 1
 

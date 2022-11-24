@@ -101,7 +101,7 @@ class RampTest(NumbaGoUp):
         pass
 
 
-def test_ramp(tricrypto_swap, tricrypto_lptoken, users, pool_coins):
+def test_ramp(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

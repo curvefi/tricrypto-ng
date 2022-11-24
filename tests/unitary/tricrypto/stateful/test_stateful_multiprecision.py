@@ -13,7 +13,7 @@ from tests.unitary.tricrypto.stateful.test_stateful import NumbaGoUp
 COINS = [("USDC", 6), ("WBTC", 8), ("WETH", 18)]
 INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
-MAX_SAMPLES = 10000
+MAX_SAMPLES = 100
 MAX_COUNT = 20
 
 

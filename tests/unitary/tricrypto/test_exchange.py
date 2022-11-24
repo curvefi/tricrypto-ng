@@ -6,7 +6,7 @@ from hypothesis import given, settings  # noqa
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
-SETTINGS = {"max_examples": 1000, "deadline": None}
+SETTINGS = {"max_examples": 100, "deadline": None}
 
 
 @given(

@@ -10,17 +10,12 @@ from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils import boa_sleep
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 10000
+MAX_SAMPLES = 100
 SETTINGS = {"max_examples": MAX_SAMPLES, "deadline": None}
 
 
 def approx(x1, x2, precision):
     return abs(log(x1 / x2)) <= precision
-
-
-def test_updated_oracles():
-    # dummy test to make sure updated oracles are tested:
-    assert False
 
 
 def test_initial(tricrypto_swap_with_deposit):
@@ -85,7 +80,7 @@ def test_last_price_exchange(
 )
 @settings(**SETTINGS)
 def test_last_price_remove_liq(
-    tricrypto_swap_with_deposit, tricrypto_lp_token, coins, user, token_frac, i
+    tricrypto_swap_with_deposit, tricrypto_lp_token, user, token_frac, i
 ):
 
     prices = [10**18] + INITIAL_PRICES
@@ -146,7 +141,7 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
     j=strategy("uint8", min_value=0, max_value=2),
     t=strategy("uint256", max_value=10 * 86400),
 )
-@settings(max_examples=MAX_SAMPLES)
+@settings(**SETTINGS)
 def test_price_scale_range(
     tricrypto_swap_with_deposit, coins, user, amount, i, j, t
 ):
@@ -179,6 +174,7 @@ def test_price_scale_range(
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
 )
+@settings(**SETTINGS)
 def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     amount = 10**5 * 10**18
     t = 86400
