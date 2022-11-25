@@ -10,8 +10,7 @@ from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils import boa_sleep
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 100
-SETTINGS = {"max_examples": MAX_SAMPLES, "deadline": None}
+SETTINGS = {"max_examples": 100, "deadline": None}
 
 
 def approx(x1, x2, precision):

@@ -12,10 +12,6 @@ MAX_SAMPLES = 100
 STEP_COUNT = 100
 
 
-def approx(x1, x2, precision):
-    return abs(log(x1 / x2)) <= precision
-
-
 class StatefulSimulation(StatefulBase):
     exchange_amount_in = strategy(
         "uint256", min_value=10**17, max_value=10**5 * 10**18
@@ -24,7 +20,7 @@ class StatefulSimulation(StatefulBase):
     exchange_j = strategy("uint8", max_value=2)
     user = strategy("address")
 
-    def setup(self):
+    def setup(self, user_id=0):
         super().setup()
 
         for u in self.accounts[1:]:
@@ -87,9 +83,12 @@ class StatefulSimulation(StatefulBase):
                 < 0.05
             )
         for i in range(2):
-            assert approx(
-                self.trader.curve.p[i + 1], self.swap.price_scale(i), 1e-4
-            )  # adjustment_step * 2
+            # approx
+            precision = 0.0001
+            assert (
+                abs(log(self.trader.curve.p[i + 1] / self.swap.price_scale(i)))
+                <= precision
+            )
 
 
 def test_sim(tricrypto_swap, tricrypto_lp_token, users, pool_coins):

@@ -3,9 +3,9 @@ from math import log
 import boa
 from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
+from pytest_check import check
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
-from tests.utils import boa_sleep
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 20
@@ -21,20 +21,17 @@ class StatefulBase(RuleBasedStateMachine):
 
     def __init__(self):
         super().__init__()
-        self.anchor = boa.env.anchor()
-        self.anchor.__enter__()
-
         self.accounts = self.users
         self.swap = self.tricrypto_swap
         self.coins = self.pool_coins
         self.token = self.tricrypto_lp_token
 
         self.decimals = [int(c.decimals()) for c in self.coins]
+        self.initial_prices = [10**18] + INITIAL_PRICES
         self.initial_deposit = [
             10**4 * 10 ** (18 + d) // p
-            for p, d in zip([10**18] + INITIAL_PRICES, self.decimals)
+            for p, d in zip(self.initial_prices, self.decimals)
         ]  # $10k * 3
-        self.initial_prices = [10**18] + INITIAL_PRICES
         self.user_balances = {u: [0] * 3 for u in self.accounts}
         self.balances = self.initial_deposit[:]
         self.xcp_profit = 10**18
@@ -47,8 +44,8 @@ class StatefulBase(RuleBasedStateMachine):
 
         self.setup()
 
-    def setup(self):
-        user = self.accounts[0]
+    def setup(self, user_id=0):
+        user = self.accounts[user_id]
         for coin, q in zip(self.coins, self.initial_deposit):
             mint_for_testing(coin, user, q)
 
@@ -56,9 +53,6 @@ class StatefulBase(RuleBasedStateMachine):
             self.swap.add_liquidity(self.initial_deposit, 0)
 
         self.total_supply = self.token.balanceOf(user)
-
-    def teardown(self):
-        self.anchor.__exit__(None, None, None)
 
     def convert_amounts(self, amounts):
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
@@ -185,8 +179,8 @@ class StatefulBase(RuleBasedStateMachine):
         return True
 
     @rule(sleep_time=sleep_time)
-    def rule_sleep(self, sleep_time):
-        boa_sleep(sleep_time)
+    def sleep(self, sleep_time):
+        boa.env.time_travel(sleep_time)
 
     @invariant()
     def balances(self):
@@ -198,7 +192,8 @@ class StatefulBase(RuleBasedStateMachine):
 
     @invariant()
     def total_supply(self):
-        assert self.total_supply == self.token.totalSupply()
+        with check:
+            assert self.total_supply == self.token.totalSupply()
 
     @invariant()
     def virtual_price(self):

@@ -26,7 +26,7 @@ class StatefulAdmin(StatefulBase):
 
     def setup(self):
         super().setup(user_id=1)
-        admin = self.accounts[0]
+        admin = self.swap.owner()
         with boa.env.prank(admin):
             self.swap.commit_new_parameters(
                 NO_CHANGE,
@@ -62,7 +62,7 @@ class StatefulAdmin(StatefulBase):
             )
         else:
             exchange_amount_in_converted = exchange_amount_in
-        super().rule_exchange(
+        super().exchange(
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
         admin_balance = self.token.balanceOf(self.accounts[0]) - admin_balance

@@ -10,11 +10,12 @@ pre-commit
 hypothesis
 pytest
 pytest-xdist
+pytest-check
 ipython
 jedi
 pdbpp
 gmpy2
 
 # vyper and dev framework:
-git+https://github.com/bout3fiddy/titanoboa.git@44496ac2f2b1498f8a58da1134a7ce2618733857
+git+https://github.com/vyperlang/titanoboa
 vyper==0.3.7
