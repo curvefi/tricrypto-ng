@@ -44,6 +44,21 @@ class StatefulBase(RuleBasedStateMachine):
 
         self.setup()
 
+    def state_dump(self):
+        amm_balances = []
+        for i in range(len(self.coins)):
+            amm_balances.append(self.swap.balances(i))
+
+        price_oracle = [self.swap.price_oracle(0), self.swap.price_oracle(1)]
+        price_scale = [self.swap.price_scale(0), self.swap.price_scale(1)]
+
+        return {
+            "balances": amm_balances,
+            "price_oracle": price_oracle,
+            "price_scale": price_scale,
+            "fee": self.swap.fee(),
+        }
+
     def setup(self, user_id=0):
         user = self.accounts[user_id]
         for coin, q in zip(self.coins, self.initial_deposit):

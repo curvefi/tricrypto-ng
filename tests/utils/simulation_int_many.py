@@ -357,6 +357,8 @@ class Trader:
             # Already close to the target price
             return norm
 
+        # calculate p_new
+        # p_new[k] = (price_scale[k] * (norm - adjustment_step) + adjustment_step * price_oracle[k]) / norm # noqa: E501
         p_new = [10**18]
         p_new += [
             p_target + adjustment_step * (p_real - p_target) // norm
@@ -372,6 +374,7 @@ class Trader:
         self.curve.p = p_new
         self.update_xcp(only_real=True)
 
+        # if not (virtual_price * 2 - 10**18 > xcp_profit + 2*self.allowed_extra_profit)  # noqa: E501
         if 2 * (self.xcp_profit_real - 10**18) <= self.xcp_profit - 10**18:
             # If real profit is less than half of maximum - revert params back
             self.curve.p = old_p

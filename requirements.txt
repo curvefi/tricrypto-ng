@@ -11,8 +11,8 @@ hypothesis
 pytest
 pytest-xdist
 pytest-check
+pytest-forked
 ipython
-jedi
 pdbpp
 gmpy2
 
