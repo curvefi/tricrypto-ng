@@ -5,7 +5,7 @@ from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
-from tests.utils import boa_sleep
+from tests.utils import mine
 
 MAX_SAMPLES = 100
 STEP_COUNT = 100
@@ -38,7 +38,7 @@ class StatefulAdmin(StatefulBase):
                 NO_CHANGE,
             )
 
-            boa_sleep(3 * 86400 + 1)
+            boa.env.time_travel(seconds=3 * 86400 + 1)
             self.swap.apply_new_parameters()
 
         assert self.swap.admin_fee() == 5 * 10**9
@@ -72,7 +72,8 @@ class StatefulAdmin(StatefulBase):
     def claim_admin_fees(self):
         balance = self.token.balanceOf(self.accounts[0])
 
-        self.swap.claim_admin_fees()
+        with mine():
+            self.swap.claim_admin_fees()
         admin_balance = self.token.balanceOf(self.accounts[0])
         balance = admin_balance - balance
         self.total_supply += balance

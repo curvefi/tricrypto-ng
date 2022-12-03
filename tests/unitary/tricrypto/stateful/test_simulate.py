@@ -56,26 +56,6 @@ class StatefulSimulation(StatefulBase):
         self.trader.xcp_profit_real = self.swap.virtual_price()
         self.trader.t = boa.env.vm.state.timestamp
 
-        setup_state = self.state_dump()
-        setup_state["trader_price_scale"] = self.trader.curve.p
-        setup_state["trader_price_oracle"] = self.trader.price_oracle
-        self.setup_state = setup_state
-        self.step_data = []
-        self.output_dump = []
-
-    def teardown(self):
-        if self.output_dump:
-            import json
-            import os
-            import time
-
-            if not os.path.exists("test_logs"):
-                os.mkdir("test_logs")
-            with open(
-                f"test_logs/state_log_{int(time.time())}.json", "w"
-            ) as f:
-                f.write(json.dumps(self.output_dump, indent=4))
-
     @rule(
         exchange_amount_in=exchange_amount_in,
         exchange_i=exchange_i,
@@ -96,19 +76,6 @@ class StatefulSimulation(StatefulBase):
             self.trader.tweak_price(
                 boa.env.vm.state.timestamp, exchange_i, exchange_j, price
             )
-            state_new = self.state_dump()
-            state_new["trader_price_scale"] = self.trader.curve.p
-            state_new["trader_price_oracle"] = self.trader.price_oracle
-
-            self.step_data.append(
-                {
-                    "step_num": len(self.step_data),
-                    "exchange_amount_in": exchange_amount_in,
-                    "exchange_i": exchange_i,
-                    "exchange_j": exchange_j,
-                    "state_after_swap": state_new,
-                }
-            )
 
     @invariant()
     def simulator(self):
@@ -124,13 +91,7 @@ class StatefulSimulation(StatefulBase):
             diff = abs(
                 log(self.trader.curve.p[i + 1] / self.swap.price_scale(i))
             )
-
             if not diff <= precision:
-                test_dump = {
-                    "setup_state": self.setup_state,
-                    "step_data": self.step_data,
-                }
-                self.output_dump.append(test_dump)
                 assert diff <= precision
 
 

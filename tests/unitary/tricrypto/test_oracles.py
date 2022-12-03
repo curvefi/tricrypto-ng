@@ -7,7 +7,7 @@ from boa.test import strategy
 from hypothesis import given, settings
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
-from tests.utils import boa_sleep, mine
+from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 100, "deadline": None}
@@ -118,7 +118,7 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
 
     prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
-    boa_sleep(t)
+    boa.env.time_travel(t)
 
     with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
@@ -155,7 +155,7 @@ def test_price_scale_range(
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
 
     prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
-    boa_sleep(t)
+    boa.env.time_travel(seconds=t)
 
     with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
@@ -206,7 +206,7 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
         out_price = amount * prices1[i] // out
 
     assert approx(out_price, prices2[ix - 1], 2e-10)
-    boa_sleep(t)
+    boa.env.time_travel(seconds=t)
 
     mint_for_testing(coins[0], user, 10**18)
     with boa.env.prank(user), mine():
