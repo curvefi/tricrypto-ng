@@ -6,6 +6,7 @@ from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 from pytest_check import check
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
+from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 20
@@ -39,7 +40,7 @@ class StatefulBase(RuleBasedStateMachine):
 
         for user in self.accounts:
             for coin in self.coins:
-                with boa.env.prank(user):
+                with boa.env.prank(user), mine():
                     coin.approve(self.swap, 2**256 - 1)
 
         self.setup()
@@ -64,7 +65,7 @@ class StatefulBase(RuleBasedStateMachine):
         for coin, q in zip(self.coins, self.initial_deposit):
             mint_for_testing(coin, user, q)
 
-        with boa.env.prank(user):
+        with boa.env.prank(user), mine():
             self.swap.add_liquidity(self.initial_deposit, 0)
 
         self.total_supply = self.token.balanceOf(user)
@@ -148,7 +149,7 @@ class StatefulBase(RuleBasedStateMachine):
         d_balance_i = self.coins[exchange_i].balanceOf(user)
         d_balance_j = self.coins[exchange_j].balanceOf(user)
         try:
-            with boa.env.prank(user):
+            with boa.env.prank(user), mine():
                 self.coins[exchange_i].approve(self.swap, 2**256 - 1)
                 self.swap.exchange(
                     exchange_i, exchange_j, exchange_amount_in, 0

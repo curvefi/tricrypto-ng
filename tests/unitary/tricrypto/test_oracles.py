@@ -7,7 +7,7 @@ from boa.test import strategy
 from hypothesis import given, settings
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
-from tests.utils import boa_sleep
+from tests.utils import boa_sleep, mine
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 100, "deadline": None}
@@ -43,7 +43,7 @@ def test_last_price_exchange(
     mint_for_testing(coins[i], user, amount)
 
     out = coins[j].balanceOf(user)
-    with boa.env.prank(user):
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
     out = coins[j].balanceOf(user) - out
 
@@ -85,7 +85,7 @@ def test_last_price_remove_liq(
     prices = [10**18] + INITIAL_PRICES
     token_amount = token_frac * tricrypto_lp_token.totalSupply() // 10**18
 
-    with boa.env.prank(user):
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.remove_liquidity_one_coin(
             token_amount, i, 0
         )
@@ -114,13 +114,13 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
 
     half_time = tricrypto_swap_with_deposit.ma_half_time()
 
-    with boa.env.prank(user):
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
 
     prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
-
     boa_sleep(t)
-    with boa.env.prank(user):
+
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
 
     prices3 = [tricrypto_swap_with_deposit.price_oracle(k) for k in [0, 1]]
@@ -151,13 +151,13 @@ def test_price_scale_range(
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
 
-    with boa.env.prank(user):
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
 
     prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
-
     boa_sleep(t)
-    with boa.env.prank(user):
+
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
 
     prices3 = [tricrypto_swap_with_deposit.price_scale(k) for k in [0, 1]]
@@ -186,7 +186,7 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     mint_for_testing(coins[i], user, amount)
 
     out = coins[j].balanceOf(user)
-    with boa.env.prank(user):
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
     out = coins[j].balanceOf(user) - out
 
@@ -209,7 +209,7 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     boa_sleep(t)
 
     mint_for_testing(coins[0], user, 10**18)
-    with boa.env.prank(user):
+    with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(0, 1, 10**18, 0)
     price_scale_2 = [
         tricrypto_swap_with_deposit.price_scale(i) for i in range(2)
