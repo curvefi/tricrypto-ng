@@ -3,6 +3,7 @@ from boa.test import strategy
 from hypothesis.stateful import invariant, rule, run_state_machine_as_test
 
 from tests.unitary.tricrypto.stateful.test_stateful import NumbaGoUp
+from tests.utils import mine
 
 MAX_SAMPLES = 100
 MAX_COUNT = 100
@@ -31,7 +32,7 @@ class RampTest(NumbaGoUp):
         new_gamma = self.swap.gamma() * 2
 
         block_time = boa.env.vm.state.timestamp
-        with boa.env.prank(self.swap.owner()):
+        with boa.env.prank(self.swap.owner()), mine():
             self.swap.ramp_A_gamma(new_A, new_gamma, block_time + 14 * 86400)
 
     @rule(deposit_amounts=deposit_amounts, user=user)

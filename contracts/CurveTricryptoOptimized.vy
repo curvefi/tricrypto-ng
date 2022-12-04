@@ -712,6 +712,8 @@ def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     precisions: uint256[N_COINS] = PRECISIONS
     packed_prices: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
+    A_gamma: uint256[2] = self._A_gamma()
+    D: uint256 = self.D
 
     for k in range(N_COINS-1):
         price_scale[k] = packed_prices & PRICE_MASK
@@ -720,12 +722,19 @@ def _get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     for k in range(N_COINS):
         xp[k] = self.balances[k]
+
+    # if A, gamma is currently being ramped, re-calculate D:
+    if self.future_A_gamma_time > 0:
+        _xp: uint256[N_COINS] = xp
+        _xp[0] *= precisions[0]
+        for k in range(N_COINS-1):
+            _xp[k+1] = _xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
+        D = Math(math).newton_D(A_gamma[0], A_gamma[1], _xp)
+
     xp[i] += dx
     xp[0] *= precisions[0]
     for k in range(N_COINS-1):
         xp[k+1] = xp[k+1] * price_scale[k] * precisions[k+1] / PRECISION
-
-    A_gamma: uint256[2] = self._A_gamma()
 
     # get_y:
     y: uint256 = Math(math).newton_y(A_gamma[0], A_gamma[1], xp, self.D, j)
