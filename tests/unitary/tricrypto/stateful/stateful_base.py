@@ -3,7 +3,6 @@ from math import log
 import boa
 from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
-from pytest_check import check
 
 from tests.fixtures.tricrypto import INITIAL_PRICES
 from tests.utils import mine
@@ -26,6 +25,7 @@ class StatefulBase(RuleBasedStateMachine):
         self.swap = self.tricrypto_swap
         self.coins = self.pool_coins
         self.token = self.tricrypto_lp_token
+        self.swap_admin = self.swap.owner()
 
         self.decimals = [int(c.decimals()) for c in self.coins]
         self.initial_prices = [10**18] + INITIAL_PRICES
@@ -45,6 +45,17 @@ class StatefulBase(RuleBasedStateMachine):
 
         self.setup()
 
+    def setup(self, user_id=0):
+        user = self.accounts[user_id]
+        for coin, q in zip(self.coins, self.initial_deposit):
+            mint_for_testing(coin, user, q)
+
+        with boa.env.prank(user), mine():
+            self.swap.add_liquidity(self.initial_deposit, 0)
+
+        assert self.token.totalSupply() > 0
+        self.total_supply = self.token.balanceOf(user)
+
     def state_dump(self):
         amm_balances = []
         for i in range(len(self.coins)):
@@ -59,16 +70,6 @@ class StatefulBase(RuleBasedStateMachine):
             "price_scale": price_scale,
             "fee": self.swap.fee(),
         }
-
-    def setup(self, user_id=0):
-        user = self.accounts[user_id]
-        for coin, q in zip(self.coins, self.initial_deposit):
-            mint_for_testing(coin, user, q)
-
-        with boa.env.prank(user), mine():
-            self.swap.add_liquidity(self.initial_deposit, 0)
-
-        self.total_supply = self.token.balanceOf(user)
 
     def convert_amounts(self, amounts):
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
@@ -207,9 +208,11 @@ class StatefulBase(RuleBasedStateMachine):
             assert self.balances[i] == balances_of[i]
 
     @invariant()
-    def total_supply(self):
-        with check:
-            assert self.total_supply == self.token.totalSupply()
+    def lp_token_total_supply(self):
+        if self.total_supply != self.token.totalSupply():
+            print("total_supply", self.total_supply)
+            print("token.totalSupply()", self.token.totalSupply())
+            raise AssertionError
 
     @invariant()
     def virtual_price(self):

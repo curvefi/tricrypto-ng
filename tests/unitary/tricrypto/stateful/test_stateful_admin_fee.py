@@ -26,8 +26,7 @@ class StatefulAdmin(StatefulBase):
 
     def setup(self):
         super().setup(user_id=1)
-        admin = self.swap.owner()
-        with boa.env.prank(admin):
+        with boa.env.prank(self.swap_admin), mine():
             self.swap.commit_new_parameters(
                 NO_CHANGE,
                 NO_CHANGE,
@@ -53,7 +52,7 @@ class StatefulAdmin(StatefulBase):
         user=user,
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
-        admin_balance = self.token.balanceOf(self.accounts[0])
+        admin_balance = self.token.balanceOf(self.swap_admin)
         if exchange_i > 0:
             exchange_amount_in_converted = (
                 exchange_amount_in
@@ -62,19 +61,20 @@ class StatefulAdmin(StatefulBase):
             )
         else:
             exchange_amount_in_converted = exchange_amount_in
+
         super().exchange(
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
-        admin_balance = self.token.balanceOf(self.accounts[0]) - admin_balance
+
+        admin_balance = self.token.balanceOf(self.swap_admin) - admin_balance
         self.total_supply += admin_balance
 
     @rule()
     def claim_admin_fees(self):
-        balance = self.token.balanceOf(self.accounts[0])
-
-        with mine():
+        balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+        with boa.env.prank(self.swap_admin), mine():
             self.swap.claim_admin_fees()
-        admin_balance = self.token.balanceOf(self.accounts[0])
+        admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
         balance = admin_balance - balance
         self.total_supply += balance
 
