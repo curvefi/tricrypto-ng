@@ -12,7 +12,7 @@ MAX_COUNT = 20
 MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
 
 
-class NumbaGoUp(StatefulBase):
+class ProfitableState(StatefulBase):
     """
     Test that profit goes up
     """
@@ -172,7 +172,7 @@ def test_numba_go_up(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 
-    NumbaGoUp.TestCase.settings = settings(
+    ProfitableState.TestCase.settings = settings(
         max_examples=MAX_SAMPLES,
         stateful_step_count=MAX_COUNT,
         suppress_health_check=HealthCheck.all(),
@@ -180,6 +180,6 @@ def test_numba_go_up(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
     )
 
     for k, v in locals().items():
-        setattr(NumbaGoUp, k, v)
+        setattr(ProfitableState, k, v)
 
-    run_state_machine_as_test(NumbaGoUp)
+    run_state_machine_as_test(ProfitableState)

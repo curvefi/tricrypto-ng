@@ -7,7 +7,7 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 
-from tests.unitary.tricrypto.stateful.test_stateful import NumbaGoUp
+from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
 from tests.utils import mine
 
 MAX_SAMPLES = 100
@@ -16,7 +16,7 @@ MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
 ALLOWED_DIFFERENCE = 0.02
 
 
-class RampTest(NumbaGoUp):
+class RampTest(ProfitableState):
     future_gamma = strategy(
         "uint256",
         min_value=int(7e-5 * 1e18 / 9),

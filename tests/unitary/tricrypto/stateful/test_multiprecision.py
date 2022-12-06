@@ -8,7 +8,7 @@ from tests.conftest import (
     _crypto_swap,
     _crypto_swap_with_deposit,
 )
-from tests.unitary.tricrypto.stateful.test_stateful import NumbaGoUp
+from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
 
 COINS = [("USDC", 6), ("WBTC", 8), ("WETH", 18)]
 INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
@@ -70,7 +70,7 @@ def crypto_swap_with_deposit_mp(pool_coins, user, tricrypto_lp_token):
     return _crypto_swap_with_deposit(pool_coins, user, tricrypto_lp_token)
 
 
-class MultiPrecision(NumbaGoUp):
+class MultiPrecision(ProfitableState):
     exchange_amount_in = strategy(
         "uint256", min_value=10**17, max_value=10**5 * 10**18
     )

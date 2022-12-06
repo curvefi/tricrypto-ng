@@ -2,7 +2,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import invariant, rule, run_state_machine_as_test
 
-from tests.unitary.tricrypto.stateful.test_stateful import NumbaGoUp
+from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
 from tests.utils import mine
 
 MAX_SAMPLES = 100
@@ -11,7 +11,7 @@ MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
 ALLOWED_DIFFERENCE = 0.001
 
 
-class RampTest(NumbaGoUp):
+class RampTest(ProfitableState):
     check_out_amount = strategy("bool")
     exchange_amount_in = strategy(
         "uint256", min_value=10**18, max_value=50000 * 10**18
