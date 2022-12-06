@@ -3,7 +3,7 @@ import pytest
 from boa.test import strategy
 from hypothesis import given, settings  # noqa
 
-from tests.fixtures.tricrypto import INITIAL_PRICES
+from tests.conftest import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 100, "deadline": None}

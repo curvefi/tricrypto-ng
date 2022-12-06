@@ -3,7 +3,7 @@ import pytest
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.fixtures.tricrypto import (
+from tests.conftest import (
     _compiled_swap,
     _crypto_swap,
     _crypto_swap_with_deposit,
@@ -31,13 +31,19 @@ def pool_coins(deployer, weth):
 def tricrypto_lp_token(deployer):
     with boa.env.prank(deployer):
         yield boa.load(
-            "contracts/CurveTokenV4.vy", "Curve USD-BTC-ETH", "crvUSDBTCETH"
+            "contracts/old/CurveTokenV4.vy",
+            "Curve USD-BTC-ETH",
+            "crvUSDBTCETH",
         )
 
 
 @pytest.fixture(scope="module", autouse=True)
-def compiled_swap(tricrypto_math, tricrypto_lp_token, pool_coins):
-    return _compiled_swap(pool_coins, tricrypto_math, tricrypto_lp_token)
+def compiled_swap(
+    tricrypto_math, tricrypto_lp_token, tricrypto_views, pool_coins
+):
+    return _compiled_swap(
+        pool_coins, tricrypto_math, tricrypto_lp_token, tricrypto_views
+    )
 
 
 @pytest.fixture(scope="module", autouse=True)

@@ -2,7 +2,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.fixtures.tricrypto import INITIAL_PRICES
+from tests.conftest import INITIAL_PRICES
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
 from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
@@ -99,7 +99,8 @@ class NumbaGoUp(StatefulBase):
         self, token_amount, exchange_i, user, check_out_amount
     ):
         if check_out_amount:
-            self.swap.claim_admin_fees()
+            with mine():
+                self.swap.claim_admin_fees()
 
         try:
             calc_out_amount = self.swap.calc_withdraw_one_coin(

@@ -6,7 +6,7 @@ import boa
 from boa.test import strategy
 from hypothesis import given, settings
 
-from tests.fixtures.tricrypto import INITIAL_PRICES
+from tests.conftest import INITIAL_PRICES
 from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
