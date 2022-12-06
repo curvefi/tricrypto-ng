@@ -12,6 +12,7 @@ pytest
 pytest-xdist
 pytest-check
 pytest-forked
+pytest-logging
 ipython
 pdbpp
 gmpy2

@@ -521,62 +521,64 @@ def tweak_price(A_gamma: uint256[2],
 
     self.xcp_profit = xcp_profit
 
-    norm: uint256 = 0
-    for k in range(N_COINS-1):
-        ratio: uint256 = price_oracle[k] * 10**18 / price_scale[k]
-        if ratio > 10**18:
-            ratio -= 10**18
-        else:
-            ratio = 10**18 - ratio
-        norm += ratio**2
-
-    norm = isqrt(norm)
-    adjustment_step: uint256 = max(self.adjustment_step, norm / 10)
-
     needs_adjustment: bool = self.not_adjusted
     if (
         not needs_adjustment and
-        virtual_price * 2 - 10**18 > xcp_profit + 2*self.allowed_extra_profit and
-        norm > adjustment_step and
-        old_virtual_price > 0
+        virtual_price * 2 - 10**18 > xcp_profit + 2*self.allowed_extra_profit
     ):
         needs_adjustment = True
         self.not_adjusted = True
 
     if needs_adjustment:
-        for k in range(N_COINS-1):
-            p_new[k] = (price_scale[k] * (norm - adjustment_step) + adjustment_step * price_oracle[k]) / norm
 
-        # Calculate balances*prices
-        xp = _xp
+        norm: uint256 = 0
         for k in range(N_COINS-1):
-            xp[k+1] = _xp[k+1] * p_new[k] / price_scale[k]
+            ratio: uint256 = price_oracle[k] * 10**18 / price_scale[k]
+            if ratio > 10**18:
+                ratio -= 10**18
+            else:
+                ratio = 10**18 - ratio
+            norm += ratio**2
 
-        # Calculate "extended constant product" invariant xCP and virtual price
-        D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
-        xp[0] = D / N_COINS
-        for k in range(N_COINS-1):
-            xp[k+1] = D * 10**18 / (N_COINS * p_new[k])
-        # We reuse old_virtual_price here but it's not old anymore
-        old_virtual_price = 10**18 * Math(math).geometric_mean(xp) / total_supply
+        norm = isqrt(norm)
+        adjustment_step: uint256 = max(self.adjustment_step, norm / 10)
 
-        # Proceed if we've got enough profit
-        # if (old_virtual_price > 10**18) and (2 * (old_virtual_price - 10**18) > xcp_profit - 10**18):
-        if (old_virtual_price > 10**18) and (2 * old_virtual_price - 10**18 > xcp_profit):
-            packed_prices = 0
+        if norm > adjustment_step and old_virtual_price > 0:
+
+            # Calculate new price scale
             for k in range(N_COINS-1):
-                packed_prices = shift(packed_prices, PRICE_SIZE)
-                p: uint256 = p_new[N_COINS-2 - k]  # / PRICE_PRECISION_MUL
-                assert p < PRICE_MASK
-                packed_prices = bitwise_or(p, packed_prices)
-            self.price_scale_packed = packed_prices
-            self.D = D
-            self.virtual_price = old_virtual_price
+                p_new[k] = (price_scale[k] * (norm - adjustment_step) + adjustment_step * price_oracle[k]) / norm
 
-            return
+            # Calculate balances * prices
+            xp = _xp
+            for k in range(N_COINS-1):
+                xp[k+1] = _xp[k+1] * p_new[k] / price_scale[k]
 
-        else:
-            self.not_adjusted = False
+            # Calculate "extended constant product" invariant xCP and virtual price
+            D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
+            xp[0] = D / N_COINS
+            for k in range(N_COINS-1):
+                xp[k+1] = D * 10**18 / (N_COINS * p_new[k])
+            # We reuse old_virtual_price here but it's not old anymore
+            old_virtual_price = 10**18 * Math(math).geometric_mean(xp) / total_supply
+
+            # Proceed if we've got enough profit
+            # if (old_virtual_price > 10**18) and (2 * (old_virtual_price - 10**18) > xcp_profit - 10**18):
+            if (old_virtual_price > 10**18) and (2 * old_virtual_price - 10**18 > xcp_profit):
+                packed_prices = 0
+                for k in range(N_COINS-1):
+                    packed_prices = shift(packed_prices, PRICE_SIZE)
+                    p: uint256 = p_new[N_COINS-2 - k]  # / PRICE_PRECISION_MUL
+                    assert p < PRICE_MASK
+                    packed_prices = bitwise_or(p, packed_prices)
+                self.price_scale_packed = packed_prices
+                self.D = D
+                self.virtual_price = old_virtual_price
+
+                return
+
+            else:
+                self.not_adjusted = False
 
     # If we are here, the price_scale adjustment did not happen
     # Still need to update the profit counter and D
