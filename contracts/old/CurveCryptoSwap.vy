@@ -19,7 +19,8 @@ interface Math:
     def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256: view
     def newton_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256: view
     def newton_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256: view
-    def halfpow(power: uint256) -> uint256: view
+    def halfpow(power: uint256, precision: uint256) -> uint256: view
+    def sqrt_int(x: uint256) -> uint256: view
 
 
 interface Views:
@@ -454,7 +455,7 @@ def tweak_price(A_gamma: uint256[2],
     if last_prices_timestamp < block.timestamp:
         # MA update required
         ma_half_time: uint256 = self.ma_half_time
-        alpha: uint256 = Math(math).halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time)
+        alpha: uint256 = Math(math).halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time, 10**10)
         packed_prices = 0
         for k in range(N_COINS-1):
             price_oracle[k] = (last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha) / 10**18
@@ -544,7 +545,7 @@ def tweak_price(A_gamma: uint256[2],
             norm += ratio**2
 
         if norm > adjustment_step ** 2 and old_virtual_price > 0:
-            norm = isqrt(norm)  # Need to convert to 1e18 units!
+            norm = Math(math).sqrt_int(norm / 10**18)  # Need to convert to 1e18 units!
 
             for k in range(N_COINS-1):
                 p_new[k] = (price_scale[k] * (norm - adjustment_step) + adjustment_step * price_oracle[k]) / norm

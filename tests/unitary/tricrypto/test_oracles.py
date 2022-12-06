@@ -211,6 +211,7 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     mint_for_testing(coins[0], user, 10**18)
     with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(0, 1, 10**18, 0)
+
     price_scale_2 = [
         tricrypto_swap_with_deposit.price_scale(i) for i in range(2)
     ]

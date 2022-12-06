@@ -39,10 +39,15 @@ def tricrypto_lp_token(deployer):
 
 @pytest.fixture(scope="module", autouse=True)
 def compiled_swap(
-    tricrypto_math, tricrypto_lp_token, tricrypto_views, pool_coins
+    tricrypto_math, tricrypto_lp_token, tricrypto_views, pool_coins, optimized
 ):
+
     return _compiled_swap(
-        pool_coins, tricrypto_math, tricrypto_lp_token, tricrypto_views
+        pool_coins,
+        tricrypto_math,
+        tricrypto_lp_token,
+        tricrypto_views,
+        optimized,
     )
 
 

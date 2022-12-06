@@ -1,6 +1,7 @@
 import boa
 import pytest
 
+from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 pytest_plugins = [
@@ -11,9 +12,18 @@ pytest_plugins = [
 INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
 
+def pytest_addoption(parser):
+    parser.addoption("--optimized", action="store", default="False")
+
+
+@pytest.fixture(scope="session")
+def optimized(request):
+    return request.config.getoption("--optimized") == "True"
+
+
 @pytest.fixture(scope="module", autouse=True)
 def tricrypto_lp_token(deployer):
-    with boa.env.prank(deployer):
+    with boa.env.prank(deployer), mine():
         return boa.load(
             "contracts/old/CurveTokenV4.vy",
             "Curve USD-BTC-ETH",
@@ -37,21 +47,26 @@ def tricrypto_pool_init_params():
 
 
 @pytest.fixture(scope="module")
-def tricrypto_math(deployer):
-    with boa.env.prank(deployer):
-        return boa.load("contracts/CurveCryptoMathOptimized3.vy")
+def tricrypto_math(deployer, optimized):
+    if optimized:
+        with boa.env.prank(deployer), mine():
+            return boa.load("contracts/CurveCryptoMathOptimized3.vy")
+    return boa.load("contracts/old/CurveCryptoMath3.vy")
 
 
 @pytest.fixture(scope="module")
 def tricrypto_views(deployer, tricrypto_math):
-    with boa.env.prank(deployer):
+    with boa.env.prank(deployer), mine():
         return boa.load("contracts/old/CurveCryptoViews3.vy", tricrypto_math)
 
 
-def _compiled_swap(coins, tricrypto_math, tricrypto_lp_token, tricrypto_views):
+def _compiled_swap(
+    coins, tricrypto_math, tricrypto_lp_token, tricrypto_views, optimized
+):
 
-    # path = "contracts/CurveTricryptoOptimized.vy"
     path = "contracts/old/CurveCryptoSwap.vy"
+    if optimized:
+        path = "contracts/CurveTricryptoOptimized.vy"
 
     with open(path, "r") as f:
         source = f.read()
@@ -99,7 +114,7 @@ def _crypto_swap(
     deployer,
 ):
 
-    with boa.env.prank(deployer):
+    with boa.env.prank(deployer), mine():
         swap = boa.loads(
             compiled_swap,
             owner,
@@ -131,10 +146,13 @@ def tricrypto_swap(
     tricrypto_views,
     coins,
     deployer,
+    optimized,
 ):
+
     source = _compiled_swap(
-        coins, tricrypto_math, tricrypto_lp_token, tricrypto_views
+        coins, tricrypto_math, tricrypto_lp_token, tricrypto_views, optimized
     )
+
     return _crypto_swap(
         source,
         tricrypto_lp_token,
@@ -161,7 +179,7 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap):
             coin.approve(tricrypto_swap, 2**256 - 1)
 
     # Very first deposit
-    with boa.env.prank(user):
+    with boa.env.prank(user), mine():
         tricrypto_swap.add_liquidity(quantities, 0)
 
     return tricrypto_swap
