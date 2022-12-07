@@ -8,11 +8,11 @@ MAX_VAL = SizeLimits.MAX_UINT256
 MAX_CBRT_PRECISE_VAL = MAX_VAL // 10**36
 
 
-def test_cbrt_expected_output(cbrt_1e18_base, tricrypto_math):
+def test_cbrt_expected_output(cbrt_1e18_base, math_optimized):
     vals = [9 * 10**18, 8 * 10**18, 10**18, 1]
     correct_cbrts = [2080083823051904114, 2 * 10**18, 10**18, 10**12]
     for ix, val in enumerate(vals):
-        assert tricrypto_math.internal.cbrt(val) == correct_cbrts[ix]
+        assert math_optimized.internal.cbrt(val) == correct_cbrts[ix]
         assert cbrt_1e18_base(val) == correct_cbrts[ix]
 
 
@@ -22,10 +22,10 @@ def test_cbrt_expected_output(cbrt_1e18_base, tricrypto_math):
 @settings(**SETTINGS)
 @example(0)
 @example(1)
-def test_cbrt_exact(tricrypto_math, cbrt_1e18_base, val):
+def test_cbrt_exact(math_optimized, cbrt_1e18_base, val):
 
     cbrt_python = cbrt_1e18_base(val)
-    cbrt_vyper = tricrypto_math.internal.cbrt(val)
+    cbrt_vyper = math_optimized.internal.cbrt(val)
 
     try:
         assert cbrt_python == cbrt_vyper
@@ -40,9 +40,9 @@ def test_cbrt_exact(tricrypto_math, cbrt_1e18_base, val):
 @settings(**SETTINGS)
 @example(MAX_VAL)
 @example(MAX_CBRT_PRECISE_VAL)
-def test_cbrt_precision_loss_gte_limit(cbrt_1e18_base, tricrypto_math, val):
+def test_cbrt_precision_loss_gte_limit(cbrt_1e18_base, math_optimized, val):
 
-    cbrt_vyper = tricrypto_math.internal.cbrt(val)
+    cbrt_vyper = math_optimized.internal.cbrt(val)
     cbrt_python = cbrt_1e18_base(val)
 
     assert cbrt_vyper != cbrt_python

@@ -15,10 +15,12 @@ INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
 
 def compile_swap_source_code(
-    coins, tricrypto_math, tricrypto_lp_token, tricrypto_views
+    coins, tricrypto_math, tricrypto_lp_token, tricrypto_views, optimized
 ):
 
-    path = "contracts/CurveTricryptoOptimized.vy"
+    path = "contracts/old/CurveCryptoSwap.vy"
+    if optimized:
+        path = "contracts/CurveTricryptoOptimized.vy"
 
     with open(path, "r") as f:
         source = f.read()
@@ -57,7 +59,7 @@ def compile_swap_source_code(
         return source
 
 
-def main():
+def deploy(optimized: bool = True):
 
     deployer = boa.env.generate_address()
 
@@ -72,11 +74,16 @@ def main():
             "Curve USD-BTC-ETH",
             "crvUSDBTCETH",
         )
-        math = boa.load("contracts/CurveCryptoMathOptimized3.vy")
+
+        math_contract = "contracts/old/CurveCryptoMath3.vy"
+        if optimized:
+            math_contract = "contracts/CurveCryptoMathOptimized3.vy"
+
+        math = boa.load(math_contract)
         views = boa.load("contracts/old/CurveCryptoViews3.vy", math)
 
         # tricrypto
-        source = compile_swap_source_code(coins, math, token, views)
+        source = compile_swap_source_code(coins, math, token, views, optimized)
         swap = boa.loads(
             source,
             boa.env.generate_address(),
@@ -94,16 +101,33 @@ def main():
         )
         token.set_minter(swap.address)
 
+    return swap, token, math, views
+
+
+def main():
+
+    swap, token, math, views = deploy(optimized=False)
+
     # print bytecode size
-    print("Bytecode size:")
+    print("OG Tricrypto Contract sizes:")
     print(f"Swap: {len(swap.bytecode)}")
     print(f"Token: {len(token.bytecode)}")
     print(f"Math: {len(math.bytecode)}")
     print(f"Views: {len(views.bytecode)}")
-    total_bytecode_size = sum(
-        len(i.bytecode) for i in [swap, token, math, views]
-    )
-    print(f"Total: {total_bytecode_size}")
+    total_size_og = sum(len(i.bytecode) for i in [swap, token, math, views])
+    print(f"Total: {total_size_og}")
+
+    swap, token, math, views = deploy(optimized=True)
+
+    # print bytecode size
+    print("Optimized Contract sizes:")
+    print(f"Swap: {len(swap.bytecode)}")
+    print(f"Token: {len(token.bytecode)}")
+    print(f"Math: {len(math.bytecode)}")
+    print(f"Views: {len(views.bytecode)}")
+    total_size = sum(len(i.bytecode) for i in [swap, token, math, views])
+    print(f"Total: {total_size}")
+    print(f"Difference: {total_size_og - total_size}")
 
 
 if __name__ == "__main__":

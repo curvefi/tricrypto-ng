@@ -1,6 +1,6 @@
 # TODO: update tests for upcoming get_p, _save_p, lp_price, etc.
 
-from math import log, log2
+from math import log, log2, sqrt
 
 import boa
 from boa.test import strategy
@@ -15,6 +15,18 @@ SETTINGS = {"max_examples": 1000, "deadline": None}
 
 def approx(x1, x2, precision):
     return abs(log(x1 / x2)) <= precision
+
+
+def norm(swap):
+    norm = 0
+    for k in range(2):
+        ratio = swap.price_oracle(k) * 10**18 / swap.price_scale(k)
+        if ratio > 10**18:
+            ratio -= 10**18
+        else:
+            ratio = 10**18 - ratio
+        norm += ratio**2
+    return sqrt(norm) / 10**18
 
 
 def test_initial(tricrypto_swap_with_deposit):
@@ -196,8 +208,8 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     price_scale_1 = [
         tricrypto_swap_with_deposit.price_scale(i) for i in range(2)
     ]
-
     prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
+
     if i == 0:
         out_price = amount * 10**18 // out
         ix = j
@@ -220,15 +232,13 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     ]
 
     price_diff = abs(log(price_scale_2[ix - 1] / price_scale_1[ix - 1]))
-    assert (
-        abs(
-            log(
-                price_diff
-                / (tricrypto_swap_with_deposit.adjustment_step() / 1e18)
-            )
-        )
-        < 1e-2
+    step = max(
+        tricrypto_swap_with_deposit.adjustment_step() / 10**18,
+        norm(tricrypto_swap_with_deposit) / 10,
     )
+
+    if not approx(price_diff, step, 0.15):
+        assert False
 
     assert approx(
         tricrypto_swap_with_deposit.virtual_price(),
