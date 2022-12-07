@@ -8,7 +8,7 @@ PARAMS = {
     "allowed_extra_profit": 2 * 10**12,
     "fee_gamma": int(0.01 * 1e18),
     "adjustment_step": int(0.0015 * 1e18),
-    "admin_fee": 0,
+    "admin_fee": 5 * 10**9,
     "ma_time": 600,
 }
 INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]

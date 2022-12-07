@@ -116,7 +116,9 @@ def test_last_price_remove_liq(
     t=strategy("uint256", min_value=10, max_value=10 * 86400),
 )
 @settings(**SETTINGS)
-def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
+def test_ma(
+    tricrypto_swap_with_deposit, optimized, coins, user, amount, i, j, t
+):
     if i == j:
         return
 
@@ -124,7 +126,7 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
 
-    exp_time = tricrypto_swap_with_deposit.ma_exp_time()
+    ma_time = tricrypto_swap_with_deposit.ma_time()
 
     with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
@@ -139,7 +141,12 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
     prices3 = [tricrypto_swap_with_deposit.price_oracle(k) for k in [0, 1]]
 
     for p1, p2, p3 in zip(INITIAL_PRICES, prices2, prices3):
-        alpha = exp(-1 * t / exp_time)
+
+        if optimized:
+            alpha = exp(-1 * t / ma_time)
+        else:
+            alpha = 0.5 ** (t / ma_time)
+
         theory = p1 * alpha + p2 * (1 - alpha)
         assert abs(log2(theory / p3)) < 0.001
 

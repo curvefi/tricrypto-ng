@@ -8,9 +8,6 @@ from tests.conftest import INITIAL_PRICES
 from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 100
-MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
-
 
 class StatefulBase(RuleBasedStateMachine):
     exchange_amount_in = strategy("uint256", max_value=10**9 * 10**18)
@@ -209,10 +206,7 @@ class StatefulBase(RuleBasedStateMachine):
 
     @invariant()
     def lp_token_total_supply(self):
-        if self.total_supply != self.token.totalSupply():
-            print("total_supply", self.total_supply)
-            print("token.totalSupply()", self.token.totalSupply())
-            raise AssertionError
+        assert self.total_supply == self.token.totalSupply()
 
     @invariant()
     def virtual_price(self):

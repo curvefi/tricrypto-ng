@@ -45,7 +45,7 @@ def tricrypto_pool_init_params(optimized):
         "allowed_extra_profit": 2 * 10**12,
         "fee_gamma": int(0.01 * 1e18),
         "adjustment_step": int(0.0015 * 1e18),
-        "admin_fee": 5000000000,
+        "admin_fee": 0,
         "ma_time": ma_time,
     }
 
