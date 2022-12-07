@@ -176,12 +176,6 @@ NOISE_FEE: constant(uint256) = 10**5  # 0.1 bps
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS-1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
-
-# This must be changed for different N_COINS
-# For example:
-# N_COINS = 3 -> 1  (10**18 -> 10**18)
-# N_COINS = 4 -> 10**8  (10**18 -> 10**10)
-# PRICE_PRECISION_MUL: constant(uint256) = 1
 PRECISIONS: constant(uint256[N_COINS]) = [
     1,#0
     1,#1

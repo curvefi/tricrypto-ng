@@ -10,7 +10,7 @@ from tests.conftest import INITIAL_PRICES
 from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
-SETTINGS = {"max_examples": 20000, "deadline": None}
+SETTINGS = {"max_examples": 1000, "deadline": None}
 
 
 def approx(x1, x2, precision):
@@ -129,7 +129,9 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
     for p1, p2, p3 in zip(INITIAL_PRICES, prices2, prices3):
         alpha = 0.5 ** (t / half_time)
         theory = p1 * alpha + p2 * (1 - alpha)
-        assert abs(log2(theory / p3)) < 0.04
+        assert (
+            abs(log2(theory / p3)) < 0.04
+        )  # <- TODO: check this large error value!
 
 
 # Sanity check for price scale
