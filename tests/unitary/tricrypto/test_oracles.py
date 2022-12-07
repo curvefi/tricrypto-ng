@@ -148,7 +148,7 @@ def test_ma(
             alpha = 0.5 ** (t / ma_time)
 
         theory = p1 * alpha + p2 * (1 - alpha)
-        assert abs(log2(theory / p3)) < 0.001
+        assert abs(log2(theory / p3)) < 0.003
 
 
 # Sanity check for price scale
@@ -195,11 +195,12 @@ def test_price_scale_range(
 )
 @settings(**SETTINGS)
 def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
-    amount = 10**5 * 10**18
-    t = 86400
 
     if i == j:
         return
+
+    amount = 10**5 * 10**18
+    t = 86400
 
     prices1 = [10**18] + INITIAL_PRICES
     amount = amount * 10**18 // prices1[i]
@@ -227,8 +228,8 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
 
     assert approx(out_price, prices2[ix - 1], 2e-10)
     boa.env.time_travel(seconds=t)
-
     mint_for_testing(coins[0], user, 10**18)
+
     with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(0, 1, 10**18, 0)
 
@@ -237,13 +238,15 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     ]
 
     price_diff = abs(log(price_scale_2[ix - 1] / price_scale_1[ix - 1]))
+    _norm = norm(tricrypto_swap_with_deposit)
     step = max(
         tricrypto_swap_with_deposit.adjustment_step() / 10**18,
-        norm(tricrypto_swap_with_deposit) / 10,
+        _norm / 10,
     )
 
-    if not approx(price_diff, step, 0.15):
-        assert False
+    if not approx(price_diff, step, 0.01):
+        breakpoint()
+        raise
 
     assert approx(
         tricrypto_swap_with_deposit.virtual_price(),

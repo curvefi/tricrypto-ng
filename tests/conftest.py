@@ -13,7 +13,7 @@ INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
 
 def pytest_addoption(parser):
-    parser.addoption("--optimized", action="store", default="False")
+    parser.addoption("--optimized", action="store", default="True")
 
 
 @pytest.fixture(scope="session")

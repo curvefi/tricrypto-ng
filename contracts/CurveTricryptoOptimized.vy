@@ -36,6 +36,11 @@ event TokenExchange:
     bought_id: uint256
     tokens_bought: uint256
 
+event RebalanceLiquidity:
+    price_scale_old: uint256[2]
+    price_scale_new: uint256[2]
+    adjustment_step: uint256
+
 event AddLiquidity:
     provider: indexed(address)
     token_amounts: uint256[N_COINS]
@@ -607,8 +612,6 @@ def tweak_price(
 
         if norm > adjustment_step and old_virtual_price > 0:
 
-
-
             # Calculate new price scale
             for k in range(N_COINS-1):
                 p_new[k] = (price_scale[k] * (norm - adjustment_step) + adjustment_step * price_oracle[k]) / norm
@@ -639,6 +642,7 @@ def tweak_price(
                 self.D = D
                 self.virtual_price = old_virtual_price
 
+                log RebalanceLiquidity(price_scale, p_new, adjustment_step)
                 return
 
             else:
