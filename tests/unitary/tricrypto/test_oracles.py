@@ -1,6 +1,6 @@
 # TODO: update tests for upcoming get_p, _save_p, lp_price, etc.
 
-from math import log, log2, sqrt
+from math import exp, log, log2, sqrt
 
 import boa
 from boa.test import strategy
@@ -124,7 +124,7 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
 
-    half_time = tricrypto_swap_with_deposit.ma_half_time()
+    exp_time = tricrypto_swap_with_deposit.ma_exp_time()
 
     with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
@@ -139,11 +139,9 @@ def test_ma(tricrypto_swap_with_deposit, coins, user, amount, i, j, t):
     prices3 = [tricrypto_swap_with_deposit.price_oracle(k) for k in [0, 1]]
 
     for p1, p2, p3 in zip(INITIAL_PRICES, prices2, prices3):
-        alpha = 0.5 ** (t / half_time)
+        alpha = exp(-1 * t / exp_time)
         theory = p1 * alpha + p2 * (1 - alpha)
-        assert (
-            abs(log2(theory / p3)) < 0.04
-        )  # <- TODO: check this large error value!
+        assert abs(log2(theory / p3)) < 0.001
 
 
 # Sanity check for price scale

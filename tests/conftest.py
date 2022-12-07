@@ -32,8 +32,12 @@ def tricrypto_lp_token(deployer):
 
 
 @pytest.fixture(scope="module")
-def tricrypto_pool_init_params():
-    yield {
+def tricrypto_pool_init_params(optimized):
+    ma_time = 600  # 10 minutes
+    if optimized:
+        ma_time = 866  # 600 / ln(2)
+
+    return {
         "A": 135 * 3**3 * 10000,
         "gamma": int(7e-5 * 1e18),
         "mid_fee": int(4e-4 * 1e10),
@@ -41,8 +45,8 @@ def tricrypto_pool_init_params():
         "allowed_extra_profit": 2 * 10**12,
         "fee_gamma": int(0.01 * 1e18),
         "adjustment_step": int(0.0015 * 1e18),
-        "admin_fee": 0,
-        "ma_half_time": 600,
+        "admin_fee": 5000000000,
+        "ma_time": ma_time,
     }
 
 
@@ -127,7 +131,7 @@ def _crypto_swap(
             tricrypto_pool_init_params["fee_gamma"],
             tricrypto_pool_init_params["adjustment_step"],
             tricrypto_pool_init_params["admin_fee"],
-            tricrypto_pool_init_params["ma_half_time"],
+            tricrypto_pool_init_params["ma_time"],
             INITIAL_PRICES,
         )
 

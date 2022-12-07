@@ -128,78 +128,6 @@ def cbrt(x: uint256) -> uint256:
 
 @internal
 @pure
-def exp(_power: int256) -> uint256:
-    """
-    @notice Calculates the e**x with 1e18 precision
-    @param _power The number to calculate the exponential of
-    @return The exponential of the given number
-    """
-
-    # This implementation is borrowed from efforts from transmissions11 and Remco Bloemen:
-    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
-    # Method: wadExp
-
-    # For exp(_power) < 0.5, wadExp returns 0. This is the case for:
-    # _power <= floor(log(0.5e18) * 1e18) ~ -42e18
-    if _power <= -42139678854452767551:
-        return 0
-
-    # for exp(_power) > (2**255 - 1) / 1e18, wadExp will overflow. So, set a cap to
-    # _power here:
-    if _power >= 135305999368893231589:
-        raise "exp overflow"
-
-    # If the above two conditions are satisfied, _power ∈ (-42e18, 135e18). Conversion
-    # to binary basis and increasing precision involves dividing by 10**18 and multiplying
-    # by 2**96 (calculations in binary basis is cheaper than 1e18 basis). So 256 - 96 = 160
-    # bits is the whole number part, and 96 bits is the fractional part:
-    x: int256 = unsafe_div(unsafe_mul(_power, 2**96), 10**18)
-
-    # Explanation borrowed from solmate:
-    # Reduce range of x to (-½ ln 2, ½ ln 2) * 2**96 by factoring out powers
-    # of two such that exp(x) = exp(x') * 2**k, where k is an integer.
-    # Solving this gives k = round(x / log(2)) and x' = x - k * log(2).
-    # k ∈ [-61, 195].
-    k: int256 = unsafe_div(
-        unsafe_add(
-            unsafe_div(unsafe_mul(x, 2**96), 54916777467707473351141471128),
-            2**95
-        ),
-        2**96
-    )
-    x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
-
-    # Explanation borrowed from solmate:
-    # Evaluate using a (6, 7)-term rational approximation.
-    # p is made monic, we'll multiply by a scale factor later.
-    y: int256 = unsafe_add(x, 1346386616545796478920950773328)
-    y = unsafe_add(unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442)
-    p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
-    p = unsafe_add(unsafe_div(unsafe_mul(p, y), 2**96), 28719021644029726153956944680412240)
-    p = unsafe_add(unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96))
-
-    # Explanation borrowed from solmate:
-    # We leave p in 2**192 basis so we don't need to scale it back up for the division.
-    q: int256 = x - 2855989394907223263936484059900
-    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945)
-    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380)
-    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 3604857256930695427073651918091429)
-    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 14423608567350463180887372962807573)
-    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 26449188498355588339934803723976023)
-
-    # Explanation borrowed from solmate:
-    # r = unsafe_div(p, q)
-    # We now need to multiply r by:
-    # * the scale factor s = ~6.031367120.
-    # * the 2**k factor from the range reduction.
-    # * the 1e18 / 2**96 factor for base conversion.
-    return shift(
-        unsafe_mul(convert(unsafe_div(p, q), uint256), 3822833074963236453042738258902158003155416615667),
-        unsafe_sub(k, 195))
-
-
-@internal
-@pure
 def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
     """
     @notice Sorts the array of 3 numbers in descending order
@@ -295,22 +223,6 @@ def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
         K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(unsafe_add(fee_gamma, 10**18), K)
 
     return K
-
-
-@external
-@view
-def halfpow(power: uint256) -> uint256:
-    """
-    @notice halfpow(power) = 1e18 * 0.5 ** (power/1e18)
-    @param power: the exponent to raise e by
-    @return the result of 1e18 * 0.5 ** (power/1e18)
-    """
-    # TODO: borrowed from unoptimised halfpow, please check the following:
-    if unsafe_div(power, 10**18) > 59:
-        return 0
-
-    # exp(-ln(2) * x) = 0.5 ** x. so, get -ln(2) * x:
-    return self.exp(-1 * 693147180559945344 * convert(power, int256) / 10 ** 18)
 
 
 @external

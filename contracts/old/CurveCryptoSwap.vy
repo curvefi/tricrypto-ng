@@ -73,7 +73,7 @@ event CommitNewParameters:
     fee_gamma: uint256
     allowed_extra_profit: uint256
     adjustment_step: uint256
-    ma_half_time: uint256
+    ma_time: uint256
 
 event NewParameters:
     admin_fee: uint256
@@ -82,7 +82,7 @@ event NewParameters:
     fee_gamma: uint256
     allowed_extra_profit: uint256
     adjustment_step: uint256
-    ma_half_time: uint256
+    ma_time: uint256
 
 event RampAgamma:
     initial_A: uint256
@@ -136,8 +136,8 @@ future_fee_gamma: public(uint256)
 adjustment_step: public(uint256)
 future_adjustment_step: public(uint256)
 
-ma_half_time: public(uint256)
-future_ma_half_time: public(uint256)
+ma_time: public(uint256)
+future_ma_time: public(uint256)
 
 mid_fee: public(uint256)
 out_fee: public(uint256)
@@ -207,7 +207,7 @@ def __init__(
     fee_gamma: uint256,
     adjustment_step: uint256,
     admin_fee: uint256,
-    ma_half_time: uint256,
+    ma_time: uint256,
     initial_prices: uint256[N_COINS-1]
 ):
     self.owner = owner
@@ -238,7 +238,7 @@ def __init__(
     self.price_oracle_packed = packed_prices
     self.last_prices_packed = packed_prices
     self.last_prices_timestamp = block.timestamp
-    self.ma_half_time = ma_half_time
+    self.ma_time = ma_time
 
     self.xcp_profit_a = 10**18
 
@@ -454,8 +454,8 @@ def tweak_price(A_gamma: uint256[2],
 
     if last_prices_timestamp < block.timestamp:
         # MA update required
-        ma_half_time: uint256 = self.ma_half_time
-        alpha: uint256 = Math(math).halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_half_time, 10**10)
+        ma_time: uint256 = self.ma_time
+        alpha: uint256 = Math(math).halfpow((block.timestamp - last_prices_timestamp) * 10**18 / ma_time, 10**10)
         packed_prices = 0
         for k in range(N_COINS-1):
             price_oracle[k] = (last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha) / 10**18
@@ -1025,7 +1025,7 @@ def commit_new_parameters(
     _new_fee_gamma: uint256,
     _new_allowed_extra_profit: uint256,
     _new_adjustment_step: uint256,
-    _new_ma_half_time: uint256,
+    _new_ma_time: uint256,
     ):
     assert msg.sender == self.owner  # dev: only owner
     assert self.admin_actions_deadline == 0  # dev: active action
@@ -1036,7 +1036,7 @@ def commit_new_parameters(
     new_fee_gamma: uint256 = _new_fee_gamma
     new_allowed_extra_profit: uint256 = _new_allowed_extra_profit
     new_adjustment_step: uint256 = _new_adjustment_step
-    new_ma_half_time: uint256 = _new_ma_half_time
+    new_ma_time: uint256 = _new_ma_time
 
     # Fees
     if new_out_fee < MAX_FEE+1:
@@ -1060,10 +1060,10 @@ def commit_new_parameters(
         new_adjustment_step = self.adjustment_step
 
     # MA
-    if new_ma_half_time < 7*86400:
-        assert new_ma_half_time > 0  # dev: MA time should be longer than 1 second
+    if new_ma_time < 7*86400:
+        assert new_ma_time > 0  # dev: MA time should be longer than 1 second
     else:
-        new_ma_half_time = self.ma_half_time
+        new_ma_time = self.ma_time
 
     _deadline: uint256 = block.timestamp + ADMIN_ACTIONS_DELAY
     self.admin_actions_deadline = _deadline
@@ -1074,12 +1074,12 @@ def commit_new_parameters(
     self.future_fee_gamma = new_fee_gamma
     self.future_allowed_extra_profit = new_allowed_extra_profit
     self.future_adjustment_step = new_adjustment_step
-    self.future_ma_half_time = new_ma_half_time
+    self.future_ma_time = new_ma_time
 
     log CommitNewParameters(_deadline, new_admin_fee, new_mid_fee, new_out_fee,
                             new_fee_gamma,
                             new_allowed_extra_profit, new_adjustment_step,
-                            new_ma_half_time)
+                            new_ma_time)
 
 
 @external
@@ -1106,13 +1106,13 @@ def apply_new_parameters():
     self.allowed_extra_profit = allowed_extra_profit
     adjustment_step: uint256 = self.future_adjustment_step
     self.adjustment_step = adjustment_step
-    ma_half_time: uint256 = self.future_ma_half_time
-    self.ma_half_time = ma_half_time
+    ma_time: uint256 = self.future_ma_time
+    self.ma_time = ma_time
 
     log NewParameters(admin_fee, mid_fee, out_fee,
                       fee_gamma,
                       allowed_extra_profit, adjustment_step,
-                      ma_half_time)
+                      ma_time)
 
 
 @external

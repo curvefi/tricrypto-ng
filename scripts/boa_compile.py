@@ -9,7 +9,7 @@ PARAMS = {
     "fee_gamma": int(0.01 * 1e18),
     "adjustment_step": int(0.0015 * 1e18),
     "admin_fee": 0,
-    "ma_half_time": 600,
+    "ma_time": 600,
 }
 INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
@@ -59,7 +59,7 @@ def compile_swap_source_code(
         return source
 
 
-def deploy(optimized: bool = True):
+def deploy(optimized: bool = True, params: dict = PARAMS):
 
     deployer = boa.env.generate_address()
 
@@ -96,7 +96,7 @@ def deploy(optimized: bool = True):
             PARAMS["fee_gamma"],
             PARAMS["adjustment_step"],
             PARAMS["admin_fee"],
-            PARAMS["ma_half_time"],
+            PARAMS["ma_time"],
             INITIAL_PRICES,
         )
         token.set_minter(swap.address)
@@ -117,7 +117,9 @@ def main():
     total_size_og = sum(len(i.bytecode) for i in [swap, token, math, views])
     print(f"Total: {total_size_og}")
 
-    swap, token, math, views = deploy(optimized=True)
+    params = PARAMS
+    params["ma_time"] = 866  # 600 / ln(2)
+    swap, token, math, views = deploy(optimized=True, params=params)
 
     # print bytecode size
     print("Optimized Contract sizes:")

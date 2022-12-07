@@ -1,4 +1,5 @@
 import json
+from math import exp
 
 A_MULTIPLIER = 10000
 
@@ -213,7 +214,8 @@ class Trader:
         allowed_extra_profit=2 * 10**13,
         fee_gamma=None,
         adjustment_step=0.003,
-        ma_half_time=500,
+        ma_time=600,  # 10 minutes
+        exp_ma=False,
         log=True,
     ):
         # allowed_extra_profit is actually not used
@@ -234,7 +236,8 @@ class Trader:
         self.log = log
         self.fee_gamma = fee_gamma or gamma
         self.total_vol = 0.0
-        self.ma_half_time = ma_half_time
+        self.ma_time = ma_time
+        self.exp_ma = exp_ma
         self.ext_fee = 0  # 0.03e-2
         self.slippage = 0
         self.slippage_count = 0
@@ -325,11 +328,17 @@ class Trader:
         except ValueError:
             return False
 
+    def _ma_multiplier(self, t):
+        if not self.exp_ma:
+            return 0.5 ** ((t - self.t) / self.ma_time)
+        else:
+            return exp((t - self.t) / self.ma_time)
+
     def ma_recorder(self, t, price_vector):
         # XXX what if every block only has p_b being last
         N = len(price_vector)
         if t > self.t:
-            alpha = 0.5 ** ((t - self.t) / self.ma_half_time)
+            alpha = self._ma_multiplier(t)
             for k in range(1, N):
                 self.price_oracle[k] = int(
                     price_vector[k] * (1 - alpha)
@@ -512,23 +521,3 @@ def get_price_vector(n, data):
             p[d["pair"][1]] = int(d["close"] * 1e18)
         if all(x is not None for x in p):
             return p
-
-
-if __name__ == "__main__":
-    test_data = get_all()[-100000:]
-
-    trader = Trader(
-        135 * 3**3 * 10000,
-        int(7e-5 * 1e18),
-        5_000_000 * 10**18,
-        3,
-        get_price_vector(3, test_data),
-        mid_fee=4e-4,
-        out_fee=4.0e-3,
-        allowed_extra_profit=2 * 10**13,
-        fee_gamma=int(0.01 * 1e18),
-        adjustment_step=0.0015,
-        ma_half_time=600,
-    )
-
-    trader.simulate(test_data)
