@@ -17,10 +17,10 @@ def approx(x1, x2, precision):
     return abs(log(x1 / x2)) <= precision
 
 
-def norm(swap):
+def norm(price_oracle, price_scale):
     norm = 0
     for k in range(2):
-        ratio = swap.price_oracle(k) * 10**18 / swap.price_scale(k)
+        ratio = price_oracle[k] * 10**18 / price_scale[k]
         if ratio > 10**18:
             ratio -= 10**18
         else:
@@ -232,22 +232,24 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
 
     with boa.env.prank(user), mine():
         tricrypto_swap_with_deposit.exchange(0, 1, 10**18, 0)
+    rebalance_logs = tricrypto_swap_with_deposit.get_logs()[2]
 
     price_scale_2 = [
         tricrypto_swap_with_deposit.price_scale(i) for i in range(2)
     ]
 
     price_diff = abs(log(price_scale_2[ix - 1] / price_scale_1[ix - 1]))
-    _norm = norm(tricrypto_swap_with_deposit)
+    price_oracle = [
+        tricrypto_swap_with_deposit.price_oracle(k) for k in range(2)
+    ]
+    _norm = norm(price_oracle, rebalance_logs.args[0])
     step = max(
         tricrypto_swap_with_deposit.adjustment_step() / 10**18,
         _norm / 10,
     )
 
-    if not approx(price_diff, step, 0.01):
-        breakpoint()
-        raise
-
+    # checks if price scale changed is as expected:
+    assert approx(price_diff, step, 0.01)
     assert approx(
         tricrypto_swap_with_deposit.virtual_price(),
         tricrypto_swap_with_deposit.get_virtual_price(),
