@@ -506,7 +506,7 @@ def tweak_price(
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     last_prices_timestamp: uint256 = self.last_prices_timestamp
-    packed_prices = self.last_prices_packed
+    packed_prices = self.last_prices_packed  # reuse `packed_prices`
     for k in range(N_COINS-1):
         last_prices[k] = packed_prices & PRICE_MASK
         packed_prices = shift(packed_prices, -PRICE_SIZE)

@@ -125,17 +125,17 @@ def test_ma(
     prices1 = [10**18] + INITIAL_PRICES
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
-
     ma_time = tricrypto_swap_with_deposit.ma_time()
 
-    with boa.env.prank(user), mine():
+    # here we dont mine because we're time travelling later
+    with boa.env.prank(user):
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
 
     prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
 
     boa.env.time_travel(t)
 
-    with boa.env.prank(user), mine():
+    with boa.env.prank(user):
         tricrypto_swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
 
     prices3 = [tricrypto_swap_with_deposit.price_oracle(k) for k in [0, 1]]
@@ -148,7 +148,7 @@ def test_ma(
             alpha = 0.5 ** (t / ma_time)
 
         theory = p1 * alpha + p2 * (1 - alpha)
-        assert abs(log2(theory / p3)) < 0.003
+        assert abs(log2(theory / p3)) < 0.001
 
 
 # Sanity check for price scale
