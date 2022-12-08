@@ -12,7 +12,7 @@ def test_cbrt_expected_output(cbrt_1e18_base, math_optimized):
     vals = [9 * 10**18, 8 * 10**18, 10**18, 1]
     correct_cbrts = [2080083823051904114, 2 * 10**18, 10**18, 10**12]
     for ix, val in enumerate(vals):
-        assert math_optimized.internal.cbrt(val) == correct_cbrts[ix]
+        assert math_optimized.cbrt(val) == correct_cbrts[ix]
         assert cbrt_1e18_base(val) == correct_cbrts[ix]
 
 
@@ -25,7 +25,7 @@ def test_cbrt_expected_output(cbrt_1e18_base, math_optimized):
 def test_cbrt_exact(math_optimized, cbrt_1e18_base, val):
 
     cbrt_python = cbrt_1e18_base(val)
-    cbrt_vyper = math_optimized.internal.cbrt(val)
+    cbrt_vyper = math_optimized.cbrt(val)
 
     try:
         assert cbrt_python == cbrt_vyper
@@ -42,7 +42,7 @@ def test_cbrt_exact(math_optimized, cbrt_1e18_base, val):
 @example(MAX_CBRT_PRECISE_VAL)
 def test_cbrt_precision_loss_gte_limit(cbrt_1e18_base, math_optimized, val):
 
-    cbrt_vyper = math_optimized.internal.cbrt(val)
+    cbrt_vyper = math_optimized.cbrt(val)
     cbrt_python = cbrt_1e18_base(val)
 
     assert cbrt_vyper != cbrt_python

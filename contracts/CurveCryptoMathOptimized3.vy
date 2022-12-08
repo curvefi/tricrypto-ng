@@ -53,7 +53,7 @@ def log2(x: uint256) -> int256:
 
 @internal
 @pure
-def cbrt(x: uint256) -> uint256:
+def _cbrt(x: uint256) -> uint256:
     """
     @notice Calculate the cubic root of a number in 1e18 precision
     @dev Consumes around 1500 gas units
@@ -191,6 +191,12 @@ def _geometric_mean(_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
 
 # --- External maff functions ---
+
+
+@external
+@view
+def cbrt(x: uint256) -> uint256:
+    return self._cbrt(x)
 
 
 @external

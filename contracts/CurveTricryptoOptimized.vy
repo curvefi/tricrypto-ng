@@ -18,6 +18,7 @@ interface Math:
     def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256: view
     def newton_D(ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]) -> uint256: view
     def newton_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256: view
+    def cbrt(x: uint256) -> uint256: view
 
 interface Views:
     def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256: view
@@ -333,14 +334,38 @@ def _packed_view(k: uint256, p: uint256) -> uint256:
 
 @external
 @view
+@nonreentrant("lock")
 def price_oracle(k: uint256) -> uint256:
-    return self._packed_view(k, self.price_oracle_packed)
+    price_oracle: uint256 = self._packed_view(k, self.price_oracle_packed)
+    last_prices_timestamp: uint256 = self.last_prices_timestamp
+
+    if last_prices_timestamp < block.timestamp:
+        last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
+        ma_time: uint256 = self.ma_time
+        alpha: uint256 = self._exp(
+            -convert((block.timestamp - last_prices_timestamp) * 10**18 / ma_time, int256)
+        )
+        return (last_prices * (10**18 - alpha) + price_oracle * alpha) / 10**18
+
+    return price_oracle
 
 
 @external
 @view
 def price_scale(k: uint256) -> uint256:
     return self._packed_view(k, self.price_scale_packed)
+
+
+@external
+@view
+@nonreentrant("lock")
+def lp_price() -> uint256:
+    price_oracle: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
+    packed_prices: uint256 = self.price_oracle_packed
+    for k in range(N_COINS-1):
+        price_oracle[k] = packed_prices & PRICE_MASK
+        packed_prices = shift(packed_prices, -PRICE_SIZE)
+    return 3 * self.virtual_price * Math(math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
 
 
 @external
@@ -444,6 +469,7 @@ def get_xcp(D: uint256) -> uint256:
 
 @external
 @view
+@nonreentrant("lock")
 def get_virtual_price() -> uint256:
     return 10**18 * self.get_xcp(self.D) / CurveToken(token).totalSupply()
 
@@ -630,12 +656,11 @@ def tweak_price(
             old_virtual_price = 10**18 * Math(math).geometric_mean(xp) / total_supply
 
             # Proceed if we've got enough profit
-            # if (old_virtual_price > 10**18) and (2 * (old_virtual_price - 10**18) > xcp_profit - 10**18):
             if (old_virtual_price > 10**18) and (2 * old_virtual_price - 10**18 > xcp_profit):
                 packed_prices = 0
                 for k in range(N_COINS-1):
                     packed_prices = shift(packed_prices, PRICE_SIZE)
-                    p: uint256 = p_new[N_COINS-2 - k]  # / PRICE_PRECISION_MUL
+                    p: uint256 = p_new[N_COINS-2 - k]
                     assert p < PRICE_MASK
                     packed_prices = p | packed_prices
                 self.price_scale_packed = packed_prices
