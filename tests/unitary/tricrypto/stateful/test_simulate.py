@@ -69,7 +69,6 @@ class StatefulSimulation(StatefulBase):
         )
 
         if super().exchange(exchange_amount_in, exchange_i, exchange_j, user):
-            boa.env.time_travel(12)
             dy = self.trader.buy(exchange_amount_in, exchange_i, exchange_j)
             price = exchange_amount_in * 10**18 // dy
             self.trader.tweak_price(
