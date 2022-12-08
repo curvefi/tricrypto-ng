@@ -5,7 +5,6 @@ from boa.test import strategy
 from hypothesis.stateful import invariant, rule, run_state_machine_as_test
 
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
-from tests.utils import mine
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
@@ -30,7 +29,7 @@ class StatefulSimulation(StatefulBase):
                 mint_for_testing(coin, u, q)
             for i in range(3):
                 self.balances[i] += self.initial_deposit[i]
-            with boa.env.prank(u), mine():
+            with boa.env.prank(u):
                 self.swap.add_liquidity(self.initial_deposit, 0)
             self.total_supply += self.token.balanceOf(u)
 

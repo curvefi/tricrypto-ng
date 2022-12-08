@@ -3,7 +3,6 @@ from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
-from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 100
@@ -58,7 +57,7 @@ class StatefulGas(StatefulBase):
 
         try:
             tokens = self.token.balanceOf(user)
-            with boa.env.prank(user), mine():
+            with boa.env.prank(user):
                 self.swap.add_liquidity(amounts, 0)
             tokens = self.token.balanceOf(user) - tokens
             self.total_supply += tokens
@@ -97,7 +96,7 @@ class StatefulGas(StatefulBase):
 
         d_balance = self.coins[exchange_i].balanceOf(user)
         try:
-            with boa.env.prank(user), mine():
+            with boa.env.prank(user):
                 self.swap.remove_liquidity_one_coin(
                     token_amount, exchange_i, 0
                 )

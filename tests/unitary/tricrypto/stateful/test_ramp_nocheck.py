@@ -8,7 +8,6 @@ from hypothesis.stateful import (
 )
 
 from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
-from tests.utils import mine
 
 MAX_SAMPLES = 100
 MAX_COUNT = 100
@@ -40,7 +39,7 @@ class RampTest(ProfitableState):
 
     @initialize(future_A=future_A, future_gamma=future_gamma)
     def initialize(self, future_A, future_gamma):
-        with boa.env.prank(self.swap.owner()), mine():
+        with boa.env.prank(self.swap.owner()):
             self.swap.ramp_A_gamma(
                 future_A,
                 future_gamma,

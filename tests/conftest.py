@@ -1,7 +1,6 @@
 import boa
 import pytest
 
-from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 pytest_plugins = [
@@ -23,7 +22,7 @@ def optimized(request):
 
 @pytest.fixture(scope="module", autouse=True)
 def tricrypto_lp_token(deployer):
-    with boa.env.prank(deployer), mine():
+    with boa.env.prank(deployer):
         return boa.load(
             "contracts/old/CurveTokenV4.vy",
             "Curve USD-BTC-ETH",
@@ -53,14 +52,14 @@ def tricrypto_pool_init_params(optimized):
 @pytest.fixture(scope="module")
 def tricrypto_math(deployer, optimized):
     if optimized:
-        with boa.env.prank(deployer), mine():
+        with boa.env.prank(deployer):
             return boa.load("contracts/CurveCryptoMathOptimized3.vy")
     return boa.load("contracts/old/CurveCryptoMath3.vy")
 
 
 @pytest.fixture(scope="module")
 def tricrypto_views(deployer, tricrypto_math):
-    with boa.env.prank(deployer), mine():
+    with boa.env.prank(deployer):
         return boa.load("contracts/old/CurveCryptoViews3.vy", tricrypto_math)
 
 
@@ -118,7 +117,7 @@ def _crypto_swap(
     deployer,
 ):
 
-    with boa.env.prank(deployer), mine():
+    with boa.env.prank(deployer):
         swap = boa.loads(
             compiled_swap,
             owner,
@@ -183,7 +182,7 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap):
             coin.approve(tricrypto_swap, 2**256 - 1)
 
     # Very first deposit
-    with boa.env.prank(user), mine():
+    with boa.env.prank(user):
         tricrypto_swap.add_liquidity(quantities, 0)
 
     return tricrypto_swap

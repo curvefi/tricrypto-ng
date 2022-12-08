@@ -7,7 +7,6 @@ from boa.test import strategy
 from hypothesis import given, settings
 
 from tests.conftest import INITIAL_PRICES
-from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 1000, "deadline": None}
@@ -55,7 +54,7 @@ def test_last_price_exchange(
     mint_for_testing(coins[i], user, amount)
 
     out = coins[j].balanceOf(user)
-    with boa.env.prank(user), mine():
+    with boa.env.prank(user):
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
     out = coins[j].balanceOf(user) - out
 
@@ -97,7 +96,7 @@ def test_last_price_remove_liq(
     prices = [10**18] + INITIAL_PRICES
     token_amount = token_frac * tricrypto_lp_token.totalSupply() // 10**18
 
-    with boa.env.prank(user), mine():
+    with boa.env.prank(user):
         tricrypto_swap_with_deposit.remove_liquidity_one_coin(
             token_amount, i, 0
         )
@@ -171,7 +170,6 @@ def test_price_scale_range(
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
 
-    # we won't `mine()` since we will time travel:
     with boa.env.prank(user):
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
 

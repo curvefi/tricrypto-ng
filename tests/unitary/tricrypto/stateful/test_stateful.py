@@ -4,7 +4,6 @@ from hypothesis.stateful import rule, run_state_machine_as_test
 
 from tests.conftest import INITIAL_PRICES
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
-from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 100
@@ -38,7 +37,7 @@ class ProfitableState(StatefulBase):
 
         try:
             tokens = self.token.balanceOf(user)
-            with boa.env.prank(user), mine():
+            with boa.env.prank(user):
                 self.swap.add_liquidity(amounts, 0)
             tokens = self.token.balanceOf(user) - tokens
             self.total_supply += tokens
@@ -76,7 +75,7 @@ class ProfitableState(StatefulBase):
         else:
             amounts = [c.balanceOf(user) for c in self.coins]
             tokens = self.token.balanceOf(user)
-            with boa.env.prank(user), mine():
+            with boa.env.prank(user):
                 self.swap.remove_liquidity(token_amount, [0] * 3)
             tokens -= self.token.balanceOf(user)
             self.total_supply -= tokens
@@ -99,8 +98,7 @@ class ProfitableState(StatefulBase):
         self, token_amount, exchange_i, user, check_out_amount
     ):
         if check_out_amount:
-            with mine():
-                self.swap.claim_admin_fees()
+            self.swap.claim_admin_fees()
 
         try:
             calc_out_amount = self.swap.calc_withdraw_one_coin(
@@ -123,7 +121,7 @@ class ProfitableState(StatefulBase):
 
         d_balance = self.coins[exchange_i].balanceOf(user)
         try:
-            with boa.env.prank(user), mine():
+            with boa.env.prank(user):
                 self.swap.remove_liquidity_one_coin(
                     token_amount, exchange_i, 0
                 )

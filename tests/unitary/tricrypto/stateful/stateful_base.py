@@ -5,7 +5,6 @@ from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
 from tests.conftest import INITIAL_PRICES
-from tests.utils import mine
 from tests.utils.tokens import mint_for_testing
 
 
@@ -37,7 +36,7 @@ class StatefulBase(RuleBasedStateMachine):
 
         for user in self.accounts:
             for coin in self.coins:
-                with boa.env.prank(user), mine():
+                with boa.env.prank(user):
                     coin.approve(self.swap, 2**256 - 1)
 
         self.setup()
@@ -47,7 +46,7 @@ class StatefulBase(RuleBasedStateMachine):
         for coin, q in zip(self.coins, self.initial_deposit):
             mint_for_testing(coin, user, q)
 
-        with boa.env.prank(user), mine():
+        with boa.env.prank(user):
             self.swap.add_liquidity(self.initial_deposit, 0)
 
         assert self.token.totalSupply() > 0
@@ -147,7 +146,7 @@ class StatefulBase(RuleBasedStateMachine):
         d_balance_i = self.coins[exchange_i].balanceOf(user)
         d_balance_j = self.coins[exchange_j].balanceOf(user)
         try:
-            with boa.env.prank(user), mine():
+            with boa.env.prank(user):
                 self.coins[exchange_i].approve(self.swap, 2**256 - 1)
                 self.swap.exchange(
                     exchange_i, exchange_j, exchange_amount_in, 0
