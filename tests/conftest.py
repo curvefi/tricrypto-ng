@@ -4,9 +4,9 @@ import pytest
 from tests.utils.tokens import mint_for_testing
 
 pytest_plugins = [
-    "fixtures.accounts",
-    "fixtures.tokens",
-    "fixtures.functions",
+    "tests.fixtures.accounts",
+    "tests.fixtures.tokens",
+    "tests.fixtures.functions",
 ]
 INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
