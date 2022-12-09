@@ -1,14 +1,13 @@
 import typing
-from datetime import timedelta
 
+from boa.test import strategy
 from gmpy2 import mpz, root
 from hypothesis import given, settings
-from hypothesis import strategies as st
 from vyper.utils import SizeLimits
 
 SETTINGS = dict(
-    max_examples=20000,
-    deadline=timedelta(seconds=1000),
+    max_examples=10000,
+    deadline=None,
 )
 MAX_VAL = SizeLimits.MAX_UINT256 / 10**18
 
@@ -21,13 +20,21 @@ def geometric_mean_int(x: typing.List[int]) -> int:
 
 
 @given(
-    x0=st.integers(min_value=10**9, max_value=10**9 * 10**18),
-    x1=st.integers(min_value=10**9, max_value=10**9 * 10**18),
-    x2=st.integers(min_value=10**9, max_value=10**9 * 10**18),
+    x=strategy("uint256[3]", min_value=10**9, max_value=10**9 * 10**18),
 )
 @settings(**SETTINGS)
-def test_geometric_mean(tricrypto_math, x0, x1, x2):
-    val = tricrypto_math.geometric_mean([x0, x1, x2])
+def test_geometric_mean(math_optimized, x):
+    val = math_optimized.geometric_mean(x)
     assert val > 0
-    diff = abs(geometric_mean_int([x0, x1, x2]) - val)
-    assert diff / val <= max(1e-10, 1 / min([x0, x1, x2]))
+    diff = abs(geometric_mean_int(x) - val)
+    assert diff / val <= max(1e-10, 1 / min(x))
+
+
+@given(
+    x=strategy("uint256[3]", min_value=10**9, max_value=10**9 * 10**18),
+)
+@settings(**SETTINGS)
+def test_compare_geometric_mean(math_optimized, math_unoptimized, x):
+    val_optimized_math = math_optimized.geometric_mean(x)
+    val_unoptimized_math = math_unoptimized.geometric_mean(x)
+    assert val_optimized_math == val_unoptimized_math

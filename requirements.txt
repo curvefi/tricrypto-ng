@@ -2,6 +2,7 @@
 black
 flake8
 isort
+mamushi
 pip-tools
 pre-commit
 
@@ -9,11 +10,13 @@ pre-commit
 hypothesis
 pytest
 pytest-xdist
+pytest-check
+pytest-forked
+pytest-logging
 ipython
-jedi
 pdbpp
 gmpy2
 
 # vyper and dev framework:
-git+https://github.com/vyperlang/titanoboa.git@ad59fd9a9dc72057dfffdbb6db455ae0ff0f96e8
+git+https://github.com/vyperlang/titanoboa
 vyper==0.3.7

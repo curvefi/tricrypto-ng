@@ -1,27 +1,32 @@
+import boa
 import pytest
-
-
-def _format_addr(t):
-    if isinstance(t, str):
-        t = t.encode("utf-8")
-    return t.rjust(20, b"\x00")
 
 
 @pytest.fixture(scope="module")
 def deployer():
-    yield _format_addr("deployer")
+    return boa.env.generate_address()
 
 
 @pytest.fixture(scope="module")
 def owner():
-    yield _format_addr("fiddy")
+    return boa.env.generate_address()
 
 
 @pytest.fixture(scope="module")
 def fee_receiver():
-    yield _format_addr("ecb")
+    return boa.env.generate_address()
 
 
 @pytest.fixture(scope="module")
 def user():
-    yield _format_addr("user")
+    acc = boa.env.generate_address()
+    boa.env.set_balance(acc, 10**25)
+    return acc
+
+
+@pytest.fixture(scope="module")
+def users():
+    accs = [i() for i in [boa.env.generate_address] * 10]
+    for acc in accs:
+        boa.env.set_balance(acc, 10**25)
+    return accs

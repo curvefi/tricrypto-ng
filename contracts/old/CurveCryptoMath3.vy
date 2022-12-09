@@ -1,11 +1,11 @@
-# @version 0.3.1
+# @version 0.3.7
 # (c) Curve.Fi, 2021
 # Math for crypto pools
 #
 # Unless otherwise agreed on, only contracts owned by Curve DAO or
 # Swiss Stake GmbH are allowed to call this contract.
 
-N_COINS: constant(int128) = 3  # <- change
+N_COINS: constant(uint256) = 3  # <- change
 A_MULTIPLIER: constant(uint256) = 10000
 
 MIN_GAMMA: constant(uint256) = 10**10
