@@ -9,7 +9,7 @@ from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 100
-STEP_COUNT = 100
+STEP_COUNT = 200
 
 
 class StatefulSimulation(StatefulBase):
@@ -84,7 +84,6 @@ class StatefulSimulation(StatefulBase):
                 < 0.05
             )
         for i in range(2):
-            # approx
             precision = 0.001
             diff = abs(
                 log(self.trader.curve.p[i + 1] / self.swap.price_scale(i))
