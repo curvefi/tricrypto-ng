@@ -101,12 +101,12 @@ def deploy(optimized: bool = True, params: dict = PARAMS):
         )
         token.set_minter(swap.address)
 
-    return swap, token, math, views
+    return swap, token, math, views, coins
 
 
 def main():
 
-    swap, token, math, views = deploy(optimized=False)
+    swap, token, math, views, _ = deploy(optimized=False)
 
     # print bytecode size
     print("OG Tricrypto Contract sizes:")
@@ -119,7 +119,7 @@ def main():
 
     params = PARAMS
     params["ma_time"] = 866  # 600 / ln(2)
-    swap, token, math, views = deploy(optimized=True, params=params)
+    swap, token, math, views, _ = deploy(optimized=True, params=params)
 
     # print bytecode size
     print("Optimized Contract sizes:")

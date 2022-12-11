@@ -5,9 +5,9 @@ from hypothesis import given, settings
 from vyper.utils import SizeLimits
 
 try:
-    from gmpy2 import mpz, mpq
+    from gmpy2 import mpq, mpz
 except ModuleNotFoundError:
-    from gmpy_cffi import mpz, mpq
+    from gmpy_cffi import mpq, mpz
 
 SETTINGS = dict(
     max_examples=10000,

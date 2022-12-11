@@ -7,6 +7,7 @@ pip-tools
 pre-commit
 
 # testing:
+ipython
 hypothesis
 pytest
 pytest-xdist
