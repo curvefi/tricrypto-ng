@@ -96,7 +96,9 @@ class MultiPrecision(ProfitableState):
         super().exchange(exchange_amount_in, exchange_i, exchange_j, user)
 
 
-def test_multiprecision(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
+def test_multiprecision(
+    tricrypto_swap, tricrypto_lp_token, tricrypto_views, users, pool_coins
+):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

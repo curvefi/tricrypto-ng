@@ -19,6 +19,7 @@ class StatefulBase(RuleBasedStateMachine):
         super().__init__()
         self.accounts = self.users
         self.swap = self.tricrypto_swap
+        self.views = self.tricrypto_views
         self.coins = self.pool_coins
         self.token = self.tricrypto_lp_token
         self.swap_admin = self.swap.owner()

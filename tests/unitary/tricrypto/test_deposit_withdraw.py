@@ -50,6 +50,7 @@ def test_1st_deposit_and_last_withdraw(
 def test_second_deposit(
     tricrypto_swap_with_deposit,
     tricrypto_lp_token,
+    tricrypto_views,
     coins,
     user,
     values,
@@ -79,9 +80,7 @@ def test_second_deposit(
 
     try:
 
-        calculated = tricrypto_swap_with_deposit.calc_token_amount(
-            amounts, True
-        )
+        calculated = tricrypto_views.calc_token_amount(amounts, True)
         measured = tricrypto_lp_token.balanceOf(user)
         d_balances = [
             tricrypto_swap_with_deposit.balances(i) for i in range(3)
@@ -122,6 +121,7 @@ def test_second_deposit(
 def test_second_deposit_one(
     tricrypto_swap_with_deposit,
     tricrypto_lp_token,
+    tricrypto_views,
     coins,
     user,
     value,
@@ -132,7 +132,7 @@ def test_second_deposit_one(
     amounts[i] = value * 10**18 // ([10**18] + INITIAL_PRICES)[i]
     mint_for_testing(coins[i], user, amounts[i])
 
-    calculated = tricrypto_swap_with_deposit.calc_token_amount(amounts, True)
+    calculated = tricrypto_views.calc_token_amount(amounts, True)
     measured = tricrypto_lp_token.balanceOf(user)
     d_balances = [tricrypto_swap_with_deposit.balances(i) for i in range(3)]
 
@@ -158,7 +158,12 @@ def test_second_deposit_one(
 )  # supply is 2400 * 1e18
 @settings(**SETTINGS)
 def test_immediate_withdraw(
-    tricrypto_swap_with_deposit, tricrypto_lp_token, coins, user, token_amount
+    tricrypto_swap_with_deposit,
+    tricrypto_lp_token,
+    tricrypto_views,
+    coins,
+    user,
+    token_amount,
 ):
 
     f = token_amount / tricrypto_lp_token.totalSupply()
@@ -167,9 +172,7 @@ def test_immediate_withdraw(
             int(f * tricrypto_swap_with_deposit.balances(i)) for i in range(3)
         ]
         measured = [c.balanceOf(user) for c in coins]
-        token_amount_calc = tricrypto_swap_with_deposit.calc_token_amount(
-            expected, False
-        )
+        token_amount_calc = tricrypto_views.calc_token_amount(expected, False)
         assert abs(token_amount_calc - token_amount) / token_amount < 1e-3
         d_balances = [
             tricrypto_swap_with_deposit.balances(i) for i in range(3)

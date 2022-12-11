@@ -8,14 +8,12 @@ def main():
     boa.env.enable_gas_profiling()
 
     swap, _, _, _, coins = deploy(optimized=True)
-    
+
     trader = boa.env.generate_address()
     lp = boa.env.generate_address()
     boa.env.set_balance(trader, 10**22)
 
-    quantities = [
-        10 ** 6 * 10 ** 36 // p for p in [10 ** 18] + INITIAL_PRICES
-    ]
+    quantities = [10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES]
 
     for user in [trader, lp]:
         for coin in coins:
@@ -29,7 +27,7 @@ def main():
 
     with boa.env.prank(trader):
         swap.exchange(0, 1, 10**18, 0)
-        
+
     line_profile = swap.line_profile().summary()
     print(line_profile)  # it should die here because too many computations
 

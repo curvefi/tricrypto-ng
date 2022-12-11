@@ -143,7 +143,7 @@ class ProfitableState(StatefulBase):
             * 10 ** self.decimals[exchange_i]
             // ([10**18] + INITIAL_PRICES)[exchange_i]
         )
-        self.swap.calc_token_amount(_deposit, True)
+        self.views.calc_token_amount(_deposit, True)
 
         d_balance = self.coins[exchange_i].balanceOf(user) - d_balance
         d_token = d_token - self.token.balanceOf(user)
@@ -166,7 +166,9 @@ class ProfitableState(StatefulBase):
             self.virtual_price = 10**18
 
 
-def test_numba_go_up(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
+def test_numba_go_up(
+    tricrypto_swap, tricrypto_lp_token, tricrypto_views, users, pool_coins
+):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

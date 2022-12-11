@@ -20,10 +20,6 @@ interface Math:
     def newton_y(ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256) -> uint256: view
     def cbrt(x: uint256) -> uint256: view
 
-interface Views:
-    def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256: view
-    def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256: view
-
 interface WETH:
     def deposit(): payable
     def withdraw(_amount: uint256): nonpayable
@@ -110,7 +106,7 @@ A_MULTIPLIER: constant(uint256) = 10000
 # These addresses are replaced by the deployer
 math: public(constant(address)) = 0x0000000000000000000000000000000000000000
 token: public(constant(address)) = 0x0000000000000000000000000000000000000001
-views: public(constant(address)) = 0x0000000000000000000000000000000000000002
+# views: public(constant(address)) = 0x0000000000000000000000000000000000000002
 coins: constant(address[N_COINS]) = [
     0x0000000000000000000000000000000000000010,
     0x0000000000000000000000000000000000000011,
@@ -263,27 +259,14 @@ def _exp(_power: int256) -> uint256:
     # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
     # Method: wadExp
 
-    # For exp(_power) < 0.5, wadExp returns 0. This is the case for:
-    # _power <= floor(log(0.5e18) * 1e18) ~ -42e18
     if _power <= -42139678854452767551:
         return 0
 
-    # for exp(_power) > (2**255 - 1) / 1e18, wadExp will overflow. So, set a cap to
-    # _power here:
     if _power >= 135305999368893231589:
         raise "exp overflow"
 
-    # If the above two conditions are satisfied, _power ∈ (-42e18, 135e18). Conversion
-    # to binary basis and increasing precision involves dividing by 10**18 and multiplying
-    # by 2**96 (calculations in binary basis is cheaper than 1e18 basis). So 256 - 96 = 160
-    # bits is the whole number part, and 96 bits is the fractional part:
     x: int256 = unsafe_div(unsafe_mul(_power, 2**96), 10**18)
 
-    # Explanation borrowed from solmate:
-    # Reduce range of x to (-½ ln 2, ½ ln 2) * 2**96 by factoring out powers
-    # of two such that exp(x) = exp(x') * 2**k, where k is an integer.
-    # Solving this gives k = round(x / log(2)) and x' = x - k * log(2).
-    # k ∈ [-61, 195].
     k: int256 = unsafe_div(
         unsafe_add(
             unsafe_div(unsafe_mul(x, 2**96), 54916777467707473351141471128),
@@ -293,17 +276,12 @@ def _exp(_power: int256) -> uint256:
     )
     x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
 
-    # Explanation borrowed from solmate:
-    # Evaluate using a (6, 7)-term rational approximation.
-    # p is made monic, we'll multiply by a scale factor later.
     y: int256 = unsafe_add(x, 1346386616545796478920950773328)
     y = unsafe_add(unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442)
     p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
     p = unsafe_add(unsafe_div(unsafe_mul(p, y), 2**96), 28719021644029726153956944680412240)
     p = unsafe_add(unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96))
 
-    # Explanation borrowed from solmate:
-    # We leave p in 2**192 basis so we don't need to scale it back up for the division.
     q: int256 = x - 2855989394907223263936484059900
     q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945)
     q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380)
@@ -311,15 +289,13 @@ def _exp(_power: int256) -> uint256:
     q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 14423608567350463180887372962807573)
     q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 26449188498355588339934803723976023)
 
-    # Explanation borrowed from solmate:
-    # r = unsafe_div(p, q)
-    # We now need to multiply r by:
-    # * the scale factor s = ~6.031367120.
-    # * the 2**k factor from the range reduction.
-    # * the 1e18 / 2**96 factor for base conversion.
     return shift(
-        unsafe_mul(convert(unsafe_div(p, q), uint256), 3822833074963236453042738258902158003155416615667),
-        unsafe_sub(k, 195))
+        unsafe_mul(
+            convert(unsafe_div(p, q), uint256),
+            3822833074963236453042738258902158003155416615667
+        ),
+        unsafe_sub(k, 195)
+    )
 
 
 # --- cryptoswap ---
@@ -391,8 +367,8 @@ def xp() -> uint256[N_COINS]:
 
     result[0] *= PRECISIONS[0]
     for i in range(1, N_COINS):
-        p: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
-        result[i] = result[i] * p / PRECISION
+        p: uint256 = unsafe_mul((packed_prices & PRICE_MASK), precisions[i])
+        result[i] = unsafe_mul(result[i], p) / PRECISION
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     return result
@@ -412,12 +388,18 @@ def _A_gamma() -> uint256[2]:
         A_gamma_0: uint256 = self.initial_A_gamma
         t0: uint256 = self.initial_A_gamma_time
 
-        t1 -= t0
-        t0 = block.timestamp - t0
-        t2: uint256 = t1 - t0
+        t1 = unsafe_sub(t1, t0)
+        t0 = unsafe_sub(block.timestamp, t0)
+        t2: uint256 = unsafe_sub(t1, t0)
 
-        A1 = (shift(A_gamma_0, -128) * t2 + A1 * t0) / t1
-        gamma1 = ((A_gamma_0 & 2**128-1) * t2 + gamma1 * t0) / t1
+        A1 = unsafe_add(
+            unsafe_mul(shift(A_gamma_0, -128), t2),
+            unsafe_mul(A1, t0)
+        ) / t1
+        gamma1 = unsafe_add(
+            unsafe_mul(A_gamma_0 & 2**128-1, t2),
+            unsafe_mul(gamma1, t0)
+        ) / t1
 
     return [A1, gamma1]
 
@@ -438,7 +420,10 @@ def gamma() -> uint256:
 @view
 def _fee(xp: uint256[N_COINS]) -> uint256:
     f: uint256 = Math(math).reduction_coefficient(xp, self.fee_gamma)
-    return (self.mid_fee * f + self.out_fee * (10**18 - f)) / 10**18
+    return unsafe_add(
+        unsafe_mul(self.mid_fee, f),
+        unsafe_mul(self.out_fee, unsafe_sub(10**18, f))
+    ) / 10**18
 
 
 @external
@@ -457,11 +442,14 @@ def fee_calc(xp: uint256[N_COINS]) -> uint256:
 @view
 def get_xcp(D: uint256) -> uint256:
     x: uint256[N_COINS] = empty(uint256[N_COINS])
-    x[0] = D / N_COINS
+    x[0] = unsafe_div(D, N_COINS)
     packed_prices: uint256 = self.price_scale_packed
 
     for i in range(1, N_COINS):
-        x[i] = D * 10**18 / (N_COINS * (packed_prices & PRICE_MASK))
+        x[i] = unsafe_div(
+            unsafe_mul(D, 10**18),
+            unsafe_mul(N_COINS, (packed_prices & PRICE_MASK))
+        )
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     return Math(math).geometric_mean(x)
@@ -471,7 +459,10 @@ def get_xcp(D: uint256) -> uint256:
 @view
 @nonreentrant("lock")
 def get_virtual_price() -> uint256:
-    return 10**18 * self.get_xcp(self.D) / CurveToken(token).totalSupply()
+    return unsafe_div(
+        unsafe_mul(10**18, self.get_xcp(self.D)),
+        CurveToken(token).totalSupply()
+    )
 
 
 @internal
@@ -787,12 +778,6 @@ def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool
     return dy
 
 
-@external
-@view
-def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
-    return Views(views).get_dy(i, j, dx)
-
-
 @view
 @internal
 def _calc_token_fee(amounts: uint256[N_COINS], xp: uint256[N_COINS]) -> uint256:
@@ -946,12 +931,6 @@ def remove_liquidity(_amount: uint256, min_amounts: uint256[N_COINS]):
     self.D = D - D * amount / total_supply
 
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
-
-
-@view
-@external
-def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
-    return Views(views).calc_token_amount(amounts, deposit)
 
 
 @internal

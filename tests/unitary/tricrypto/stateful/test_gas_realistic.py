@@ -126,7 +126,9 @@ class StatefulGas(StatefulBase):
             self.virtual_price = 10**18
 
 
-def test_gas(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
+def test_gas(
+    tricrypto_swap, tricrypto_lp_token, tricrypto_views, users, pool_coins
+):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

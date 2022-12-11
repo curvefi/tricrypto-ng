@@ -23,6 +23,7 @@ def compile_swap_source_code(
         path = "contracts/CurveTricryptoOptimized.vy"
 
     with open(path, "r") as f:
+
         source = f.read()
         source = source.replace(
             "0x0000000000000000000000000000000000000000",
@@ -32,6 +33,7 @@ def compile_swap_source_code(
             "0x0000000000000000000000000000000000000001",
             tricrypto_lp_token.address,
         )
+
         source = source.replace(
             "0x0000000000000000000000000000000000000002",
             tricrypto_views.address,
@@ -113,8 +115,8 @@ def main():
     print(f"Swap: {len(swap.bytecode)}")
     print(f"Token: {len(token.bytecode)}")
     print(f"Math: {len(math.bytecode)}")
-    print(f"Views: {len(views.bytecode)}")
-    total_size_og = sum(len(i.bytecode) for i in [swap, token, math, views])
+    print(f"Views: {len(views.bytecode)} (not included in calcs)")
+    total_size_og = sum(len(i.bytecode) for i in [swap, token, math])
     print(f"Total: {total_size_og}")
 
     params = PARAMS
@@ -126,10 +128,10 @@ def main():
     print(f"Swap: {len(swap.bytecode)}")
     print(f"Token: {len(token.bytecode)}")
     print(f"Math: {len(math.bytecode)}")
-    print(f"Views: {len(views.bytecode)}")
-    total_size = sum(len(i.bytecode) for i in [swap, token, math, views])
+    print(f"Views: {len(views.bytecode)} (not included in calcs)")
+    total_size = sum(len(i.bytecode) for i in [swap, token, math])
     print(f"Total: {total_size}")
-    print(f"Difference: {total_size_og - total_size}")
+    print(f"Optimized Swap is larger by: {total_size - total_size_og}")
 
 
 if __name__ == "__main__":
