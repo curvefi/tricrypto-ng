@@ -54,6 +54,7 @@ def test_second_deposit(
     coins,
     user,
     values,
+    optimized,
 ):
 
     amounts = [
@@ -107,8 +108,12 @@ def test_second_deposit(
 
     # This is to check that we didn't end up in a borked state after
     # a deposit succeeded
-    tricrypto_swap_with_deposit.get_dy(0, 1, 10**16)
-    tricrypto_swap_with_deposit.get_dy(0, 2, 10**16)
+    if not optimized:
+        tricrypto_swap_with_deposit.get_dy(0, 1, 10**16)
+        tricrypto_swap_with_deposit.get_dy(0, 2, 10**16)
+    else:
+        tricrypto_views.get_dy(0, 1, 10**16)
+        tricrypto_views.get_dy(0, 2, 10**16)
 
 
 @given(
@@ -210,10 +215,12 @@ def test_immediate_withdraw(
 def test_immediate_withdraw_one(
     tricrypto_swap_with_deposit,
     tricrypto_lp_token,
+    tricrypto_views,
     coins,
     user,
     token_amount,
     i,
+    optimized,
 ):
 
     if token_amount >= tricrypto_lp_token.totalSupply():
@@ -287,5 +294,9 @@ def test_immediate_withdraw_one(
 
         # This is to check that we didn't end up in a borked state after
         # a withdrawal succeeded
-        tricrypto_swap_with_deposit.get_dy(0, 1, 10**16)
-        tricrypto_swap_with_deposit.get_dy(0, 2, 10**16)
+        if not optimized:
+            tricrypto_swap_with_deposit.get_dy(0, 1, 10**16)
+            tricrypto_swap_with_deposit.get_dy(0, 2, 10**16)
+        else:
+            tricrypto_views.get_dy(0, 1, 10**16)
+            tricrypto_views.get_dy(0, 2, 10**16)

@@ -2,16 +2,18 @@
 # (c) Curve.Fi, 2021
 # Pool for USDT/BTC/ETH or similar
 
-interface ERC20:  # Custom ERC20 which works for USDT, WETH and WBTC
-    def transfer(_to: address, _amount: uint256): nonpayable
-    def transferFrom(_from: address, _to: address, _amount: uint256): nonpayable
-    def balanceOf(_user: address) -> uint256: view
+from vyper.interfaces import ERC20
 
-interface CurveToken:
-    def totalSupply() -> uint256: view
-    def mint(_to: address, _value: uint256) -> bool: nonpayable
-    def mint_relative(_to: address, frac: uint256) -> uint256: nonpayable
-    def burnFrom(_to: address, _value: uint256) -> bool: nonpayable
+
+# interfaces
+interface ERC1271:
+    def isValidSignature(_hash: bytes32, _signature: Bytes[65]) -> bytes32: view
+
+# Custom ERC20 which works for USDT, WETH and WBTC. To be removed?
+# interface ERC20:
+#     def transfer(_to: address, _amount: uint256): nonpayable
+#     def transferFrom(_from: address, _to: address, _amount: uint256): nonpayable
+#     def balanceOf(_user: address) -> uint256: view
 
 interface Math:
     def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
@@ -26,6 +28,16 @@ interface WETH:
 
 
 # Events
+event Transfer:
+    sender: indexed(address)
+    receiver: indexed(address)
+    value: uint256
+
+event Approval:
+    owner: indexed(address)
+    spender: indexed(address)
+    value: uint256
+
 event TokenExchange:
     buyer: indexed(address)
     sold_id: uint256
@@ -105,8 +117,6 @@ A_MULTIPLIER: constant(uint256) = 10000
 
 # These addresses are replaced by the deployer
 math: public(constant(address)) = 0x0000000000000000000000000000000000000000
-token: public(constant(address)) = 0x0000000000000000000000000000000000000001
-# views: public(constant(address)) = 0x0000000000000000000000000000000000000002
 coins: constant(address[N_COINS]) = [
     0x0000000000000000000000000000000000000010,
     0x0000000000000000000000000000000000000011,
@@ -185,6 +195,22 @@ PRECISIONS: constant(uint256[N_COINS]) = [
 
 INF_COINS: constant(uint256) = 15
 
+# erc20 implementation vars
+name: public(String[64])
+symbol: public(String[32])
+balanceOf: public(HashMap[address, uint256])
+allowance: public(HashMap[address, HashMap[address, uint256]])
+totalSupply: public(uint256)
+nonces: public(HashMap[address, uint256])
+DOMAIN_SEPARATOR: public(bytes32)
+
+EIP712_TYPEHASH: constant(bytes32) = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+PERMIT_TYPEHASH: constant(bytes32) = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)")
+
+# keccak256("isValidSignature(bytes32,bytes)")[:4] << 224
+ERC1271_MAGIC_VAL: constant(bytes32) = 0x1626ba7e00000000000000000000000000000000000000000000000000000000
+VERSION: constant(String[8]) = "v5.0.0"
+
 
 @external
 def __init__(
@@ -221,7 +247,7 @@ def __init__(
     packed_prices: uint256 = 0
     for k in range(N_COINS-1):
         packed_prices = shift(packed_prices, PRICE_SIZE)
-        p: uint256 = initial_prices[N_COINS-2 - k]  # / PRICE_PRECISION_MUL
+        p: uint256 = initial_prices[N_COINS-2 - k]
         assert p < PRICE_MASK
         packed_prices = p | packed_prices
 
@@ -230,18 +256,193 @@ def __init__(
     self.last_prices_packed = packed_prices
     self.last_prices_timestamp = block.timestamp
     self.ma_time = ma_time
-
     self.xcp_profit_a = 10**18
-
     self.kill_deadline = block.timestamp + KILL_DEADLINE_DT
-
     self.admin_fee_receiver = admin_fee_receiver
+
+    # init erc20 vars
+    self.name = "Curve.fi USDT-BTC-ETH"
+    self.symbol = "crv3crypto2"
+    self.DOMAIN_SEPARATOR = keccak256(
+        _abi_encode(
+            EIP712_TYPEHASH,
+            keccak256("Curve.fi USDT-BTC-ETH"),
+            keccak256(VERSION),
+            chain.id,
+            self
+        )
+    )
+    log Transfer(empty(address), self, 0)
 
 
 @payable
 @external
 def __default__():
     pass
+
+
+# --- erc20 ---
+
+# TODO: check if can just use public var instead:
+@view
+@external
+def decimals() -> uint256:
+    """
+    @notice Get the number of decimals for this token
+    @dev Implemented as a view method to reduce gas costs
+    @return uint256 decimal places
+    """
+    return 18
+
+
+@internal
+def _transfer(_from: address, _to: address, _value: uint256):
+    self.balanceOf[_from] -= _value
+    self.balanceOf[_to] += _value
+
+    log Transfer(_from, _to, _value)
+
+
+@external
+def transfer(_to : address, _value : uint256) -> bool:
+    """
+    @dev Transfer token for a specified address
+    @param _to The address to transfer to.
+    @param _value The amount to be transferred.
+    """
+    self._transfer(msg.sender, _to, _value)
+    return True
+
+
+@external
+def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
+    """
+     @dev Transfer tokens from one address to another.
+     @param _from address The address which you want to send tokens from
+     @param _to address The address which you want to transfer to
+     @param _value uint256 the amount of tokens to be transferred
+    """
+    self._transfer(_from, _to, _value)
+
+    _allowance: uint256 = self.allowance[_from][msg.sender]
+    if _allowance != max_value(uint256):
+        self.allowance[_from][msg.sender] = _allowance - _value
+
+    return True
+
+
+@external
+def approve(_spender : address, _value : uint256) -> bool:
+    """
+    @notice Approve the passed address to transfer the specified amount of
+            tokens on behalf of msg.sender
+    @dev Beware that changing an allowance via this method brings the risk that
+         someone may use both the old and new allowance by unfortunate transaction
+         ordering: https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+    @param _spender The address which will transfer the funds
+    @param _value The amount of tokens that may be transferred
+    @return bool success
+    """
+    self.allowance[msg.sender][_spender] = _value
+
+    log Approval(msg.sender, _spender, _value)
+    return True
+
+
+@external
+def permit(
+    _owner: address,
+    _spender: address,
+    _value: uint256,
+    _deadline: uint256,
+    _v: uint8,
+    _r: bytes32,
+    _s: bytes32
+) -> bool:
+    """
+    @notice Approves spender by owner's signature to expend owner's tokens.
+        See https://eips.ethereum.org/EIPS/eip-2612.
+    @dev Inspired by https://github.com/yearn/yearn-vaults/blob/main/contracts/Vault.vy#L753-L793
+    @dev Supports smart contract wallets which implement ERC1271
+        https://eips.ethereum.org/EIPS/eip-1271
+    @param _owner The address which is a source of funds and has signed the Permit.
+    @param _spender The address which is allowed to spend the funds.
+    @param _value The amount of tokens to be spent.
+    @param _deadline The timestamp after which the Permit is no longer valid.
+    @param _v The bytes[64] of the valid secp256k1 signature of permit by owner
+    @param _r The bytes[0:32] of the valid secp256k1 signature of permit by owner
+    @param _s The bytes[32:64] of the valid secp256k1 signature of permit by owner
+    @return True, if transaction completes successfully
+    """
+    assert _owner != empty(address)
+    assert block.timestamp <= _deadline
+
+    nonce: uint256 = self.nonces[_owner]
+    digest: bytes32 = keccak256(
+        concat(
+            b"\x19\x01",
+            self.DOMAIN_SEPARATOR,
+            keccak256(_abi_encode(PERMIT_TYPEHASH, _owner, _spender, _value, nonce, _deadline))
+        )
+    )
+
+    if _owner.is_contract:
+        sig: Bytes[65] = concat(_abi_encode(_r, _s), slice(convert(_v, bytes32), 31, 1))
+        # reentrancy not a concern since this is a staticcall
+        assert ERC1271(_owner).isValidSignature(digest, sig) == ERC1271_MAGIC_VAL
+    else:
+        assert ecrecover(digest, convert(_v, uint256), convert(_r, uint256), convert(_s, uint256)) == _owner
+
+    self.allowance[_owner][_spender] = _value
+    self.nonces[_owner] = unsafe_add(nonce, 1)  # can use unsafe add here safely
+
+    log Approval(_owner, _spender, _value)
+    return True
+
+
+@internal
+def mint(_to: address, _value: uint256) -> bool:
+    """
+    @dev Mint an amount of the token and assigns it to an account.
+         This encapsulates the modification of balances such that the
+         proper events are emitted.
+    @param _to The account that will receive the created tokens.
+    @param _value The amount that will be created.
+    """
+    self.totalSupply += _value
+    self.balanceOf[_to] += _value
+
+    log Transfer(empty(address), _to, _value)
+    return True
+
+
+@internal
+def mint_relative(_to: address, frac: uint256) -> uint256:
+    """
+    @dev Increases supply by factor of (1 + frac/1e18) and mints it for _to
+    """
+    supply: uint256 = self.totalSupply
+    d_supply: uint256 = supply * frac / 10**18
+    if d_supply > 0:
+        self.totalSupply = supply + d_supply
+        self.balanceOf[_to] += d_supply
+        log Transfer(empty(address), _to, d_supply)
+
+    return d_supply
+
+
+@internal
+def burnFrom(_to: address, _value: uint256) -> bool:
+    """
+    @dev Burn an amount of the token from a given account.
+    @param _to The account whose tokens will be burned.
+    @param _value The amount that will be burned.
+    """
+    self.totalSupply -= _value
+    self.balanceOf[_to] -= _value
+
+    log Transfer(_to, empty(address), _value)
+    return True
 
 
 # --- math ---
@@ -461,7 +662,7 @@ def get_xcp(D: uint256) -> uint256:
 def get_virtual_price() -> uint256:
     return unsafe_div(
         unsafe_mul(10**18, self.get_xcp(self.D)),
-        CurveToken(token).totalSupply()
+        self.totalSupply
     )
 
 
@@ -485,12 +686,12 @@ def _claim_admin_fees():
             receiver: address = self.admin_fee_receiver
             if receiver != empty(address):
                 frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
-                claimed: uint256 = CurveToken(token).mint_relative(receiver, frac)
+                claimed: uint256 = self.mint_relative(receiver, frac)
                 xcp_profit -= fees*2
                 self.xcp_profit = xcp_profit
                 log ClaimAdminFee(receiver, claimed)
 
-    total_supply: uint256 = CurveToken(token).totalSupply()
+    total_supply: uint256 = self.totalSupply
 
     # Recalculate D b/c we gulped
     D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], self.xp())
@@ -580,7 +781,7 @@ def tweak_price(
         packed_prices = p | packed_prices
     self.last_prices_packed = packed_prices
 
-    total_supply: uint256 = CurveToken(token).totalSupply()
+    total_supply: uint256 = self.totalSupply
     old_xcp_profit: uint256 = self.xcp_profit
     old_virtual_price: uint256 = self.virtual_price
 
@@ -859,7 +1060,7 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
 
     D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
 
-    token_supply: uint256 = CurveToken(token).totalSupply()
+    token_supply: uint256 = self.totalSupply
     if old_D > 0:
         d_token = token_supply * D / old_D - token_supply
     else:
@@ -870,7 +1071,7 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
         d_token_fee = self._calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
         d_token -= d_token_fee
         token_supply += d_token
-        CurveToken(token).mint(msg.sender, d_token)
+        self.mint(msg.sender, d_token)
 
         # Calculate price
         # p_i * (dx_i - dtoken / token_supply * xx_i) = sum{k!=i}(p_k * (dtoken / token_supply * xx_k - dx_k))
@@ -900,7 +1101,7 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
         self.D = D
         self.virtual_price = 10**18
         self.xcp_profit = 10**18
-        CurveToken(token).mint(msg.sender, d_token)
+        self.mint(msg.sender, d_token)
 
     assert d_token >= min_mint_amount, "Slippage"
 
@@ -914,8 +1115,8 @@ def remove_liquidity(_amount: uint256, min_amounts: uint256[N_COINS]):
     This withdrawal method is very safe, does no complex math
     """
     _coins: address[N_COINS] = coins
-    total_supply: uint256 = CurveToken(token).totalSupply()
-    CurveToken(token).burnFrom(msg.sender, _amount)
+    total_supply: uint256 = self.totalSupply
+    self.burnFrom(msg.sender, _amount)
     balances: uint256[N_COINS] = self.balances
     amount: uint256 = _amount - 1  # Make rounding errors favoring other LPs a tiny bit
 
@@ -935,9 +1136,16 @@ def remove_liquidity(_amount: uint256, min_amounts: uint256[N_COINS]):
 
 @internal
 @view
-def _calc_withdraw_one_coin(A_gamma: uint256[2], token_amount: uint256, i: uint256, update_D: bool,
-                            calc_price: bool) -> (uint256, uint256, uint256, uint256[N_COINS]):
-    token_supply: uint256 = CurveToken(token).totalSupply()
+def _calc_withdraw_one_coin(
+    A_gamma: uint256[2],
+    token_amount: uint256,
+    i: uint256,
+    update_D: bool,
+    calc_price: bool
+    ) -> (uint256, uint256, uint256, uint256[N_COINS]
+):
+
+    token_supply: uint256 = self.totalSupply
     assert token_amount <= token_supply  # dev: token amount more than supply
     assert i < N_COINS  # dev: coin out of range
 
@@ -1019,7 +1227,7 @@ def remove_liquidity_one_coin(token_amount: uint256, i: uint256, min_amount: uin
         self.future_A_gamma_time = 1
 
     self.balances[i] -= dy
-    CurveToken(token).burnFrom(msg.sender, token_amount)
+    self.burnFrom(msg.sender, token_amount)
     _coins: address[N_COINS] = coins
     # assert might be needed for some tokens - removed one to save bytespace
     ERC20(_coins[i]).transfer(msg.sender, dy)

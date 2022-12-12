@@ -28,7 +28,7 @@ def pool_coins(deployer, weth):
 
 
 @pytest.fixture(scope="module", autouse=True)
-def tricrypto_lp_token(deployer):
+def tricrypto_lp_token_init(deployer):
     with boa.env.prank(deployer):
         yield boa.load(
             "contracts/old/CurveTokenV4.vy",
@@ -39,13 +39,17 @@ def tricrypto_lp_token(deployer):
 
 @pytest.fixture(scope="module", autouse=True)
 def compiled_swap(
-    tricrypto_math, tricrypto_lp_token, tricrypto_views, pool_coins, optimized
+    tricrypto_math,
+    tricrypto_lp_token_init,
+    tricrypto_views,
+    pool_coins,
+    optimized,
 ):
 
     return _compiled_swap(
         pool_coins,
         tricrypto_math,
-        tricrypto_lp_token,
+        tricrypto_lp_token_init,
         tricrypto_views,
         optimized,
     )
@@ -54,20 +58,29 @@ def compiled_swap(
 @pytest.fixture(scope="module", autouse=True)
 def tricrypto_swap(
     compiled_swap,
-    tricrypto_lp_token,
+    tricrypto_lp_token_init,
     owner,
     fee_receiver,
     tricrypto_pool_init_params,
     deployer,
+    optimized,
 ):
     return _crypto_swap(
         compiled_swap,
-        tricrypto_lp_token,
+        tricrypto_lp_token_init,
         owner,
         fee_receiver,
         tricrypto_pool_init_params,
         deployer,
+        optimized,
     )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def tricrypto_lp_token(tricrypto_lp_token_init, tricrypto_swap, optimized):
+    if optimized:
+        return tricrypto_swap
+    return tricrypto_lp_token_init
 
 
 @pytest.fixture(scope="module")
@@ -97,7 +110,12 @@ class MultiPrecision(ProfitableState):
 
 
 def test_multiprecision(
-    tricrypto_swap, tricrypto_lp_token, tricrypto_views, users, pool_coins
+    tricrypto_swap,
+    tricrypto_lp_token,
+    tricrypto_views,
+    users,
+    pool_coins,
+    optimized,
 ):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
