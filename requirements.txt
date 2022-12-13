@@ -8,6 +8,7 @@ pre-commit
 
 # testing:
 eip712
+eth_account
 ipython
 hypothesis
 pytest

@@ -17,7 +17,7 @@ symbol: public(String[32])
 decimals: public(uint256)
 balanceOf: public(HashMap[address, uint256])
 allowances: HashMap[address, HashMap[address, uint256]]
-total_supply: uint256
+totalSupply: public(uint256)
 
 
 @external
@@ -25,12 +25,6 @@ def __init__(_name: String[64], _symbol: String[32], _decimals: uint256):
     self.name = _name
     self.symbol = _symbol
     self.decimals = _decimals
-
-
-@external
-@view
-def totalSupply() -> uint256:
-    return self.total_supply
 
 
 @external

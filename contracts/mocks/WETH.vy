@@ -17,7 +17,7 @@ symbol: public(String[32])
 decimals: public(uint256)
 balanceOf: public(HashMap[address, uint256])
 allowances: HashMap[address, HashMap[address, uint256]]
-total_supply: uint256
+totalSupply: public(uint256)
 
 
 @payable
@@ -26,12 +26,6 @@ def __init__():
     self.name = "Wrapped Ether"
     self.symbol = "WETH"
     self.decimals = 18
-
-
-@external
-@view
-def totalSupply() -> uint256:
-    return self.total_supply
 
 
 @external

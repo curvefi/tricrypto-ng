@@ -374,8 +374,8 @@ def permit(
     @param _s The bytes[32:64] of the valid secp256k1 signature of permit by owner
     @return True, if transaction completes successfully
     """
-    assert _owner != empty(address)
-    assert block.timestamp <= _deadline
+    assert _owner != empty(address), "dev: invalid owner"
+    assert block.timestamp <= _deadline, "dev: permit expired"
 
     nonce: uint256 = self.nonces[_owner]
     digest: bytes32 = keccak256(
@@ -389,9 +389,9 @@ def permit(
     if _owner.is_contract:
         sig: Bytes[65] = concat(_abi_encode(_r, _s), slice(convert(_v, bytes32), 31, 1))
         # reentrancy not a concern since this is a staticcall
-        assert ERC1271(_owner).isValidSignature(digest, sig) == ERC1271_MAGIC_VAL
+        assert ERC1271(_owner).isValidSignature(digest, sig) == ERC1271_MAGIC_VAL, "dev: invalid signature"
     else:
-        assert ecrecover(digest, convert(_v, uint256), convert(_r, uint256), convert(_s, uint256)) == _owner
+        assert ecrecover(digest, convert(_v, uint256), convert(_r, uint256), convert(_s, uint256)) == _owner , "dev: invalid signature"
 
     self.allowance[_owner][_spender] = _value
     self.nonces[_owner] = unsafe_add(nonce, 1)  # can use unsafe add here safely
@@ -1449,3 +1449,12 @@ def unkill_me():
 def set_admin_fee_receiver(_admin_fee_receiver: address):
     assert msg.sender == self.owner  # dev: only owner
     self.admin_fee_receiver = _admin_fee_receiver
+
+
+@pure
+@external
+def version() -> String[8]:
+    """
+    @notice Get the version of this token contract
+    """
+    return VERSION
