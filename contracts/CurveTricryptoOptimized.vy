@@ -213,9 +213,6 @@ EIP2612_TYPEHASH: constant(bytes32) = keccak256(
 )
 VERSION_HASH: constant(bytes32) = keccak256(version)
 
-# keccak256("isValidSignature(bytes32,bytes)")[:4] << 224
-ERC1271_MAGIC_VAL: constant(bytes32) = 0x1626ba7e00000000000000000000000000000000000000000000000000000000
-
 
 @external
 def __init__(
