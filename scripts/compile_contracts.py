@@ -84,8 +84,9 @@ def deploy(optimized: bool = True, params: dict = PARAMS):
         math_contract = "contracts/old/CurveCryptoMath3.vy"
         if optimized:
             math_contract = "contracts/CurveCryptoMathOptimized3.vy"
-
         math = boa.load(math_contract)
+
+        views = None
         if not optimized:
             views = boa.load("contracts/old/CurveCryptoViews3.vy", math)
 
@@ -112,6 +113,7 @@ def deploy(optimized: bool = True, params: dict = PARAMS):
     # optimized tricrypto is an erc20 implementation:
     if optimized:
         token = swap
+        views = boa.load("contracts/CurveCryptoViews3Optimized.vy", math, swap)
 
     return swap, token, math, views, coins
 

@@ -1,13 +1,25 @@
 import boa
-from eth_account.account import Account
+
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
-# tests inspired by yearn-vaults:
+# tests inspired by:
 # https://github.com/yearn/yearn-vaults/blob/master/tests/functional/vault/test_permit.py  # noqa: E501
-def test_permit(eth_acc, bob, tricrypto_swap, sign_permit, skip_unoptimized):
+# https://github.com/curvefi/curve-stablecoin/blob/5b6708138d82419917328e8042f3857eac034796/tests/stablecoin/test_approve.py  # noqa: E501
+
+
+def test_permit_success(
+    eth_acc, bob, tricrypto_swap, sign_permit, skip_unoptimized
+):
 
     sig = sign_permit(
-        tricrypto_swap, eth_acc, bob, 2**256 - 1, 2**256 - 1, 0
+        swap=tricrypto_swap,
+        owner=eth_acc,
+        spender=bob,
+        value=2**256 - 1,
+        deadline=2**256 - 1,
+        nonce=tricrypto_swap.nonces(eth_acc),
+        salt=tricrypto_swap.salt(),
     )
 
     assert tricrypto_swap.allowance(eth_acc.address, bob) == 0
@@ -34,86 +46,54 @@ def test_permit(eth_acc, bob, tricrypto_swap, sign_permit, skip_unoptimized):
     assert logs[0].args[0] == 2**256 - 1
 
 
-def test_permit_contract(
-    eth_acc, bob, tricrypto_swap, sign_permit, skip_unoptimized
+def test_permit_reverts_owner_is_invalid(
+    bob, tricrypto_swap, skip_unoptimized
 ):
-
-    src = """
-@view
-@external
-def isValidSignature(_hash: bytes32, _sig: Bytes[65]) -> bytes32:
-    return 0x1626ba7e00000000000000000000000000000000000000000000000000000000
-"""
-
-    mock_contract = boa.loads(src)
-    sig = sign_permit(
-        tricrypto_swap, eth_acc, bob, 2**256 - 1, 2**256 - 1, 0
-    )
-
-    with boa.env.prank(bob):
+    with boa.reverts("dev: invalid owner"), boa.env.prank(bob):
         tricrypto_swap.permit(
-            mock_contract,
+            ZERO_ADDRESS,
             bob,
             2**256 - 1,
+            boa.env.vm.state.timestamp + 600,
+            27,
+            b"\x00" * 32,
+            b"\x00" * 32,
+        )
+
+
+def test_permit_reverts_deadline_is_invalid(
+    bob, tricrypto_swap, skip_unoptimized
+):
+    with boa.reverts("dev: permit expired"), boa.env.prank(bob):
+        tricrypto_swap.permit(
+            bob,
+            bob,
             2**256 - 1,
-            sig.v,
-            (sig.r).to_bytes(32, "big"),
-            (sig.s).to_bytes(32, "big"),
+            boa.env.vm.state.timestamp - 600,
+            27,
+            b"\x00" * 32,
+            b"\x00" * 32,
         )
 
-    # make sure this is hit when owner is a contract
-    last_computation = tricrypto_swap._computation.children[-1]
-    subcall_obj = boa.env.lookup_contract(last_computation.msg.code_address)
-    assert hasattr(subcall_obj, "isValidSignature")
 
-
-def test_permit_wrong_signature(bob, tricrypto_swap, sign_permit):
-    owner = Account.create()
-    deadline = boa.env.vm.state.timestamp + 3600
-    sig = sign_permit(tricrypto_swap, owner, bob, 0, deadline, 0)
-    with boa.env.prank(bob), boa.reverts("dev: invalid signature"):
+def test_permit_reverts_signature_is_invalid(
+    bob, tricrypto_swap, skip_unoptimized
+):
+    with boa.reverts("dev: invalid signature"), boa.env.prank(bob):
         tricrypto_swap.permit(
-            owner.address,
             bob,
-            10**19,
-            deadline,
-            sig.v,
-            (sig.r).to_bytes(32, "big"),
-            (sig.s).to_bytes(32, "big"),
+            bob,
+            2**256 - 1,
+            boa.env.vm.state.timestamp + 600,
+            27,
+            b"\x00" * 32,
+            b"\x00" * 32,
         )
 
 
-def test_permit_expired(bob, tricrypto_swap, sign_permit):
-    owner = Account.create()
-    deadline = boa.env.vm.state.timestamp - 600
-    amount = 10**19
-    sig = sign_permit(tricrypto_swap, owner, bob, amount, deadline, 0)
+def test_domain_separator_updates_when_chain_id_updates(tricrypto_swap):
 
-    with boa.env.prank(bob), boa.reverts("dev: permit expired"):
-        tricrypto_swap.permit(
-            owner.address,
-            bob,
-            amount,
-            deadline,
-            sig.v,
-            (sig.r).to_bytes(32, "big"),
-            (sig.s).to_bytes(32, "big"),
-        )
-
-
-def test_permit_bad_owner(bob, tricrypto_swap, sign_permit):
-    owner = Account.create()
-    deadline = boa.env.vm.state.timestamp + 3600
-    amount = 10**19
-    sig = sign_permit(tricrypto_swap, owner, bob, amount, deadline, 0)
-
-    with boa.env.prank(bob), boa.reverts("dev: invalid owner"):
-        tricrypto_swap.permit(
-            "0x0000000000000000000000000000000000000000",
-            bob,
-            amount,
-            deadline,
-            sig.v,
-            (sig.r).to_bytes(32, "big"),
-            (sig.s).to_bytes(32, "big"),
-        )
+    domain_separator = tricrypto_swap.DOMAIN_SEPARATOR()
+    with boa.env.anchor():
+        boa.env.vm.patch.chain_id = 42
+        assert domain_separator != tricrypto_swap.DOMAIN_SEPARATOR()

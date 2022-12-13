@@ -9,12 +9,6 @@ from vyper.interfaces import ERC20
 interface ERC1271:
     def isValidSignature(_hash: bytes32, _signature: Bytes[65]) -> bytes32: view
 
-# Custom ERC20 which works for USDT, WETH and WBTC. To be removed?
-# interface ERC20:
-#     def transfer(_to: address, _amount: uint256): nonpayable
-#     def transferFrom(_from: address, _to: address, _amount: uint256): nonpayable
-#     def balanceOf(_user: address) -> uint256: view
-
 interface Math:
     def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
     def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256: view
@@ -196,20 +190,31 @@ PRECISIONS: constant(uint256[N_COINS]) = [
 INF_COINS: constant(uint256) = 15
 
 # erc20 implementation vars
-name: public(String[64])
-symbol: public(String[32])
+name: public(immutable(String[64]))
+symbol: public(immutable(String[32]))
+decimals: public(constant(uint8)) = 18
+version: public(constant(String[8])) = "1"
+
+NAME_HASH: immutable(bytes32)
+CACHED_CHAIN_ID: immutable(uint256)
+salt: public(immutable(bytes32))
+CACHED_DOMAIN_SEPARATOR: immutable(bytes32)
+
 balanceOf: public(HashMap[address, uint256])
 allowance: public(HashMap[address, HashMap[address, uint256]])
 totalSupply: public(uint256)
 nonces: public(HashMap[address, uint256])
-DOMAIN_SEPARATOR: public(bytes32)
 
-EIP712_TYPEHASH: constant(bytes32) = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
-PERMIT_TYPEHASH: constant(bytes32) = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)")
+EIP712_TYPEHASH: constant(bytes32) = keccak256(
+    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+)
+EIP2612_TYPEHASH: constant(bytes32) = keccak256(
+    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+)
+VERSION_HASH: constant(bytes32) = keccak256(version)
 
 # keccak256("isValidSignature(bytes32,bytes)")[:4] << 224
 ERC1271_MAGIC_VAL: constant(bytes32) = 0x1626ba7e00000000000000000000000000000000000000000000000000000000
-VERSION: constant(String[8]) = "v5.0.0"
 
 
 @external
@@ -261,15 +266,20 @@ def __init__(
     self.admin_fee_receiver = admin_fee_receiver
 
     # init erc20 vars
-    self.name = "Curve.fi USDT-BTC-ETH"
-    self.symbol = "crv3crypto2"
-    self.DOMAIN_SEPARATOR = keccak256(
+    name = "Curve.fi USDT-BTC-ETH"
+    symbol = "crv3crypto2"
+
+    NAME_HASH = keccak256("Curve.fi USDT-BTC-ETH")
+    CACHED_CHAIN_ID = chain.id
+    salt = block.prevhash
+    CACHED_DOMAIN_SEPARATOR = keccak256(
         _abi_encode(
             EIP712_TYPEHASH,
             keccak256("Curve.fi USDT-BTC-ETH"),
-            keccak256(VERSION),
+            VERSION_HASH,
             chain.id,
-            self
+            self,
+            block.prevhash,
         )
     )
     log Transfer(empty(address), self, 0)
@@ -283,24 +293,54 @@ def __default__():
 
 # --- erc20 ---
 
-# TODO: check if can just use public var instead:
-@view
-@external
-def decimals() -> uint256:
-    """
-    @notice Get the number of decimals for this token
-    @dev Implemented as a view method to reduce gas costs
-    @return uint256 decimal places
-    """
-    return 18
+@internal
+def _approve(_owner: address, _spender: address, _value: uint256):
+    self.allowance[_owner][_spender] = _value
+
+    log Approval(_owner, _spender, _value)
 
 
 @internal
 def _transfer(_from: address, _to: address, _value: uint256):
+    assert _to not in [self, empty(address)]
+
     self.balanceOf[_from] -= _value
     self.balanceOf[_to] += _value
 
     log Transfer(_from, _to, _value)
+
+
+@view
+@internal
+def _domain_separator() -> bytes32:
+    if chain.id != CACHED_CHAIN_ID:
+        return keccak256(
+            _abi_encode(
+                EIP712_TYPEHASH,
+                NAME_HASH,
+                VERSION_HASH,
+                chain.id,
+                self,
+                salt,
+            )
+        )
+    return CACHED_DOMAIN_SEPARATOR
+
+
+@external
+def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
+    """
+     @dev Transfer tokens from one address to another.
+     @param _from address The address which you want to send tokens from
+     @param _to address The address which you want to transfer to
+     @param _value uint256 the amount of tokens to be transferred
+    """
+    _allowance: uint256 = self.allowance[_from][msg.sender]
+    if _allowance != max_value(uint256):
+        self._approve(_from, msg.sender, _allowance - _value)
+
+    self._transfer(_from, _to, _value)
+    return True
 
 
 @external
@@ -315,37 +355,63 @@ def transfer(_to : address, _value : uint256) -> bool:
 
 
 @external
-def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
+def approve(_spender : address, _value : uint256) -> bool:
     """
-     @dev Transfer tokens from one address to another.
-     @param _from address The address which you want to send tokens from
-     @param _to address The address which you want to transfer to
-     @param _value uint256 the amount of tokens to be transferred
+    @notice Allow `_spender` to transfer up to `_value` amount
+            of tokens from the caller's account.
+    @dev Non-zero to non-zero approvals are allowed, but should
+         be used cautiously. The methods increaseAllowance + decreaseAllowance
+         are available to prevent any front-running that may occur.
+    @param _spender The account permitted to spend up to `_value` amount of caller's funds.
+    @param _value The amount of tokens `_spender` is allowed to spend.
+    @return bool success
     """
-    self._transfer(_from, _to, _value)
+    self._approve(msg.sender, _spender, _value)
+    return True
 
-    _allowance: uint256 = self.allowance[_from][msg.sender]
-    if _allowance != max_value(uint256):
-        self.allowance[_from][msg.sender] = _allowance - _value
+
+@external
+def increaseAllowance(_spender: address, _add_value: uint256) -> bool:
+    """
+    @notice Increase the allowance granted to `_spender`.
+    @dev This function will never overflow, and instead will bound
+         allowance to MAX_UINT256. This has the potential to grant an
+         infinite approval.
+    @param _spender The account to increase the allowance of.
+    @param _add_value The amount to increase the allowance by.
+    """
+    cached_allowance: uint256 = self.allowance[msg.sender][_spender]
+    allowance: uint256 = unsafe_add(cached_allowance, _add_value)
+
+    # check for an overflow
+    if allowance < cached_allowance:
+        allowance = max_value(uint256)
+
+    if allowance != cached_allowance:
+        self._approve(msg.sender, _spender, allowance)
 
     return True
 
 
 @external
-def approve(_spender : address, _value : uint256) -> bool:
+def decreaseAllowance(_spender: address, _sub_value: uint256) -> bool:
     """
-    @notice Approve the passed address to transfer the specified amount of
-            tokens on behalf of msg.sender
-    @dev Beware that changing an allowance via this method brings the risk that
-         someone may use both the old and new allowance by unfortunate transaction
-         ordering: https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
-    @param _spender The address which will transfer the funds
-    @param _value The amount of tokens that may be transferred
-    @return bool success
+    @notice Decrease the allowance granted to `_spender`.
+    @dev This function will never underflow, and instead will bound
+        allowance to 0.
+    @param _spender The account to decrease the allowance of.
+    @param _sub_value The amount to decrease the allowance by.
     """
-    self.allowance[msg.sender][_spender] = _value
+    cached_allowance: uint256 = self.allowance[msg.sender][_spender]
+    allowance: uint256 = unsafe_sub(cached_allowance, _sub_value)
 
-    log Approval(msg.sender, _spender, _value)
+    # check for an underflow
+    if cached_allowance < allowance:
+        allowance = 0
+
+    if allowance != cached_allowance:
+        self._approve(msg.sender, _spender, allowance)
+
     return True
 
 
@@ -381,22 +447,14 @@ def permit(
     digest: bytes32 = keccak256(
         concat(
             b"\x19\x01",
-            self.DOMAIN_SEPARATOR,
-            keccak256(_abi_encode(PERMIT_TYPEHASH, _owner, _spender, _value, nonce, _deadline))
+            self._domain_separator(),
+            keccak256(_abi_encode(EIP2612_TYPEHASH, _owner, _spender, _value, nonce, _deadline)),
         )
     )
+    assert ecrecover(digest, _v, _r, _s) == _owner, "dev: invalid signature"
 
-    if _owner.is_contract:
-        sig: Bytes[65] = concat(_abi_encode(_r, _s), slice(convert(_v, bytes32), 31, 1))
-        # reentrancy not a concern since this is a staticcall
-        assert ERC1271(_owner).isValidSignature(digest, sig) == ERC1271_MAGIC_VAL, "dev: invalid signature"
-    else:
-        assert ecrecover(digest, convert(_v, uint256), convert(_r, uint256), convert(_s, uint256)) == _owner , "dev: invalid signature"
-
-    self.allowance[_owner][_spender] = _value
-    self.nonces[_owner] = unsafe_add(nonce, 1)  # can use unsafe add here safely
-
-    log Approval(_owner, _spender, _value)
+    self.nonces[_owner] = unsafe_add(nonce, 1)
+    self._approve(_owner, _spender, _value)
     return True
 
 
@@ -409,6 +467,8 @@ def mint(_to: address, _value: uint256) -> bool:
     @param _to The account that will receive the created tokens.
     @param _value The amount that will be created.
     """
+    # no need to check _to address since it is always msg.sender
+
     self.totalSupply += _value
     self.balanceOf[_to] += _value
 
@@ -421,6 +481,8 @@ def mint_relative(_to: address, frac: uint256) -> uint256:
     """
     @dev Increases supply by factor of (1 + frac/1e18) and mints it for _to
     """
+    # no need to check _to address since it is always msg.sender
+
     supply: uint256 = self.totalSupply
     d_supply: uint256 = supply * frac / 10**18
     if d_supply > 0:
@@ -438,6 +500,8 @@ def burnFrom(_to: address, _value: uint256) -> bool:
     @param _to The account whose tokens will be burned.
     @param _value The amount that will be burned.
     """
+    # no need to check _to address since it is always msg.sender
+
     self.totalSupply -= _value
     self.balanceOf[_to] -= _value
 
@@ -1451,10 +1515,10 @@ def set_admin_fee_receiver(_admin_fee_receiver: address):
     self.admin_fee_receiver = _admin_fee_receiver
 
 
-@pure
+@view
 @external
-def version() -> String[8]:
+def DOMAIN_SEPARATOR() -> bytes32:
     """
-    @notice Get the version of this token contract
+    @notice EIP712 domain separator.
     """
-    return VERSION
+    return self._domain_separator()
