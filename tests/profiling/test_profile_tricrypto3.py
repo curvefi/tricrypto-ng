@@ -4,9 +4,8 @@ from boa.test import strategy
 from hypothesis import given, settings
 
 from tests.conftest import INITIAL_PRICES
-from tests.utils.tokens import mint_for_testing
 from tests.utils import simulation_int_many as sim
-
+from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 100, "deadline": None}
 
@@ -31,8 +30,8 @@ def test_deposit_swap3(
     mint_for_testing(coins[i], user, amounts[i])
     with boa.env.prank(user):
         swap3.add_liquidity(amounts, 0)
-        
-        
+
+
 @given(
     amount=strategy(
         "uint256", min_value=10**6, max_value=2 * 10**6 * 10**18
@@ -62,7 +61,7 @@ def test_profile_exchange_swap3(
 
     with boa.env.prank(user):
         swap3.exchange(i, j, amount, int(0.999 * calculated))
-        
+
 
 @given(
     token_amount=strategy(
@@ -80,16 +79,14 @@ def test_withdraw_swap3(
     f = token_amount / swap3.totalSupply()
     if not f <= 1:
         return
-    
-    expected = [
-        int(f * swap3.balances(i)) for i in range(3)
-    ]
+
+    expected = [int(f * swap3.balances(i)) for i in range(3)]
     with boa.env.prank(user):
         swap3.remove_liquidity(
             token_amount,
             [int(0.999 * e) for e in expected],
         )
-        
+
 
 @given(
     token_amount=strategy(
@@ -119,11 +116,7 @@ def test_withdraw_one_swap3(
         _supply = swap3.totalSupply()
         _A = swap3.A()
         _gamma = swap3.gamma()
-        _D = (
-            swap3.D()
-            * (_supply - token_amount)
-            // _supply
-        )
+        _D = swap3.D() * (_supply - token_amount) // _supply
         xp[i] = sim.solve_x(_A, _gamma, xp, _D, i)
         safe = all(
             f >= 1.1e16 and f <= 0.9e20
@@ -131,18 +124,14 @@ def test_withdraw_one_swap3(
         )
 
         try:
-            calculated = swap3.calc_withdraw_one_coin(
-                token_amount, i
-            )
+            calculated = swap3.calc_withdraw_one_coin(token_amount, i)
         except Exception:
             if safe:
                 raise
             return
 
         measured = coins[i].balanceOf(user)
-        d_balances = [
-            swap3.balances(k) for k in range(3)
-        ]
+        d_balances = [swap3.balances(k) for k in range(3)]
         try:
             with boa.env.prank(user):
                 swap3.remove_liquidity_one_coin(
@@ -163,10 +152,7 @@ def test_withdraw_one_swap3(
             else:
                 return
 
-        d_balances = [
-            d_balances[k] - swap3.balances(k)
-            for k in range(3)
-        ]
+        d_balances = [d_balances[k] - swap3.balances(k) for k in range(3)]
         measured = coins[i].balanceOf(user) - measured
 
         assert calculated == measured
