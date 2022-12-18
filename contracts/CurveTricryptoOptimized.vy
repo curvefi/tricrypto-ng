@@ -190,15 +190,10 @@ PRECISIONS: constant(uint256[N_COINS]) = [
 INF_COINS: constant(uint256) = 15
 
 # erc20 implementation vars
-name: public(immutable(String[64]))
-symbol: public(immutable(String[32]))
+name: public(constant(String[64])) = "Curve.fi USDT-BTC-ETH"
+symbol: public(constant(String[32])) = "crv3crypto2"
 decimals: public(constant(uint8)) = 18
 version: public(constant(String[8])) = "1"
-
-NAME_HASH: immutable(bytes32)
-CACHED_CHAIN_ID: immutable(uint256)
-salt: public(immutable(bytes32))
-CACHED_DOMAIN_SEPARATOR: immutable(bytes32)
 
 balanceOf: public(HashMap[address, uint256])
 allowance: public(HashMap[address, HashMap[address, uint256]])
@@ -212,6 +207,10 @@ EIP2612_TYPEHASH: constant(bytes32) = keccak256(
     "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
 )
 VERSION_HASH: constant(bytes32) = keccak256(version)
+NAME_HASH: constant(bytes32) = keccak256("Curve USDT-BTC-ETH")
+CACHED_CHAIN_ID: immutable(uint256)
+salt: public(immutable(bytes32))
+CACHED_DOMAIN_SEPARATOR: immutable(bytes32)
 
 
 @external
@@ -262,17 +261,12 @@ def __init__(
     self.kill_deadline = block.timestamp + KILL_DEADLINE_DT
     self.admin_fee_receiver = admin_fee_receiver
 
-    # init erc20 vars
-    name = "Curve.fi USDT-BTC-ETH"
-    symbol = "crv3crypto2"
-
-    NAME_HASH = keccak256("Curve.fi USDT-BTC-ETH")
     CACHED_CHAIN_ID = chain.id
     salt = block.prevhash
     CACHED_DOMAIN_SEPARATOR = keccak256(
         _abi_encode(
             EIP712_TYPEHASH,
-            keccak256("Curve.fi USDT-BTC-ETH"),
+            NAME_HASH,
             VERSION_HASH,
             chain.id,
             self,

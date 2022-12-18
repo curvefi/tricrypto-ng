@@ -1,6 +1,5 @@
 import boa
 import pytest
-
 from boa.test import strategy
 from hypothesis import given, settings  # noqa
 
