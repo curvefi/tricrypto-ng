@@ -1,6 +1,6 @@
 import boa
 from boa.test import strategy
-from hypothesis import given, settings  # noqa
+from hypothesis import given, settings
 
 from tests.conftest import INITIAL_PRICES
 from tests.utils import simulation_int_many as sim
