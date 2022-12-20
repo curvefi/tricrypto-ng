@@ -400,7 +400,7 @@ def increaseAllowance(_spender: address, _add_value: uint256) -> bool:
     @param _add_value The amount to increase the allowance by.
     """
     cached_allowance: uint256 = self.allowance[msg.sender][_spender]
-    allowance: uint256 = unsafe_add(cached_allowance, _add_value)
+    allowance: uint256 = cached_allowance + _add_value
 
     # check for an overflow
     if allowance < cached_allowance:
@@ -422,7 +422,7 @@ def decreaseAllowance(_spender: address, _sub_value: uint256) -> bool:
     @param _sub_value The amount to decrease the allowance by.
     """
     cached_allowance: uint256 = self.allowance[msg.sender][_spender]
-    allowance: uint256 = unsafe_sub(cached_allowance, _sub_value)
+    allowance: uint256 = cached_allowance - _sub_value
 
     # check for an underflow
     if cached_allowance < allowance:
@@ -678,8 +678,10 @@ def xp() -> uint256[N_COINS]:
 
     result[0] *= PRECISIONS[0]
     for i in range(1, N_COINS):
-        p: uint256 = unsafe_mul((packed_prices & PRICE_MASK), precisions[i])
-        result[i] = unsafe_mul(result[i], p) / PRECISION
+        p: uint256 = (
+            (packed_prices & PRICE_MASK) * precisions[i]
+        ) 
+        result[i] = result[i] * p / PRECISION
         packed_prices = shift(packed_prices, - PRICE_SIZE)
 
     return result
@@ -695,26 +697,17 @@ def _A_gamma() -> uint256[2]:
     A1: uint256 = shift(A_gamma_1, -128)
 
     if block.timestamp < t1:
+
         # handle ramping up and down of A
         A_gamma_0: uint256 = self.initial_A_gamma
         t0: uint256 = self.initial_A_gamma_time
 
-        t1 = unsafe_sub(t1, t0)
-        t0 = unsafe_sub(block.timestamp, t0)
-        t2: uint256 = unsafe_sub(t1, t0)
+        t1 -= t0
+        t0 = block.timestamp - t0
+        t2: uint256 = t1 - t0
 
-        A1 = (
-            unsafe_add(
-                unsafe_mul(shift(A_gamma_0, -128), t2), unsafe_mul(A1, t0)
-            )
-            / t1
-        )
-        gamma1 = (
-            unsafe_add(
-                unsafe_mul(A_gamma_0 & 2**128 - 1, t2), unsafe_mul(gamma1, t0)
-            )
-            / t1
-        )
+        A1 = (shift(A_gamma_0, -128) * t2 + A1 * t0) / t1
+        gamma1 = ((A_gamma_0 & 2**128 - 1) * t2 + gamma1 * t0) / t1
 
     return [A1, gamma1]
 
@@ -735,10 +728,7 @@ def gamma() -> uint256:
 @view
 def _fee(xp: uint256[N_COINS]) -> uint256:
     f: uint256 = Math(math).reduction_coefficient(xp, self.fee_gamma)
-    return unsafe_add(
-        unsafe_mul(self.mid_fee, f),
-        unsafe_mul(self.out_fee, unsafe_sub(10**18, f)),
-    ) / 10**18
+    return (self.mid_fee * f + self.out_fee * (10**18 - f)) / 10**18
 
 
 @external
@@ -757,13 +747,13 @@ def fee_calc(xp: uint256[N_COINS]) -> uint256:
 @view
 def get_xcp(D: uint256) -> uint256:
     x: uint256[N_COINS] = empty(uint256[N_COINS])
-    x[0] = unsafe_div(D, N_COINS)
+    x[0] = D / N_COINS
     packed_prices: uint256 = self.price_scale_packed
+    # No precisions here because we don't switch to "real" units
 
     for i in range(1, N_COINS):
-        x[i] = unsafe_div(
-            unsafe_mul(D, 10**18),
-            unsafe_mul(N_COINS, (packed_prices & PRICE_MASK)),
+        x[i] = (
+            D * 10**18 / (N_COINS * (packed_prices & PRICE_MASK))
         )
         packed_prices = shift(packed_prices, - PRICE_SIZE)
 
@@ -774,9 +764,7 @@ def get_xcp(D: uint256) -> uint256:
 @view
 @nonreentrant("lock")
 def get_virtual_price() -> uint256:
-    return unsafe_div(
-        unsafe_mul(10**18, self.get_xcp(self.D)), self.totalSupply
-    )
+    return 10**18 * self.get_xcp(self.D) / self.totalSupply
 
 
 @internal
