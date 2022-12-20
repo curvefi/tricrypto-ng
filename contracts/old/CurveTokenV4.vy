@@ -1,4 +1,5 @@
 # @version 0.3.7
+
 """
 @title Curve LP Token
 @author Curve.Fi
@@ -12,6 +13,7 @@ from vyper.interfaces import ERC20
 
 implements: ERC20
 
+
 interface Curve:
     def owner() -> address: view
 
@@ -21,10 +23,12 @@ event Transfer:
     _to: indexed(address)
     _value: uint256
 
+
 event Approval:
     _owner: indexed(address)
     _spender: indexed(address)
     _value: uint256
+
 
 event SetName:
     old_name: String[64]
@@ -65,7 +69,7 @@ def decimals() -> uint256:
 
 
 @external
-def transfer(_to : address, _value : uint256) -> bool:
+def transfer(_to: address, _value: uint256) -> bool:
     """
     @dev Transfer token for a specified address
     @param _to The address to transfer to.
@@ -81,12 +85,12 @@ def transfer(_to : address, _value : uint256) -> bool:
 
 
 @external
-def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
+def transferFrom(_from: address, _to: address, _value: uint256) -> bool:
     """
-     @dev Transfer tokens from one address to another.
-     @param _from address The address which you want to send tokens from
-     @param _to address The address which you want to transfer to
-     @param _value uint256 the amount of tokens to be transferred
+    @dev Transfer tokens from one address to another.
+    @param _from address The address which you want to send tokens from
+    @param _to address The address which you want to transfer to
+    @param _value uint256 the amount of tokens to be transferred
     """
     self.balanceOf[_from] -= _value
     self.balanceOf[_to] += _value
@@ -100,7 +104,7 @@ def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
 
 
 @external
-def approve(_spender : address, _value : uint256) -> bool:
+def approve(_spender: address, _value: uint256) -> bool:
     """
     @notice Approve the passed address to transfer the specified amount of
             tokens on behalf of msg.sender
@@ -146,7 +150,9 @@ def decreaseAllowance(_spender: address, _subtracted_value: uint256) -> bool:
     @param _subtracted_value The amount of to decrease the allowance
     @return bool success
     """
-    allowance: uint256 = self.allowance[msg.sender][_spender] - _subtracted_value
+    allowance: uint256 = (
+        self.allowance[msg.sender][_spender] - _subtracted_value
+    )
     self.allowance[msg.sender][_spender] = allowance
 
     log Approval(msg.sender, _spender, allowance)
@@ -218,4 +224,6 @@ def set_name(_name: String[64], _symbol: String[32]):
     self.name = _name
     self.symbol = _symbol
 
-    log SetName(old_name, old_symbol, _name, _symbol, msg.sender, block.timestamp)
+    log SetName(
+        old_name, old_symbol, _name, _symbol, msg.sender, block.timestamp
+    )

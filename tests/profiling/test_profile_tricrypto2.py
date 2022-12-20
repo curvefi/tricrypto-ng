@@ -17,7 +17,7 @@ SETTINGS = {"max_examples": 100, "deadline": None}
     i=strategy("uint", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-@pytest.mark.profile_calls
+@pytest.mark.profile
 def test_deposit_swap2(
     swap2,
     coins,
@@ -40,7 +40,7 @@ def test_deposit_swap2(
     j=strategy("uint", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-@pytest.mark.profile_calls
+@pytest.mark.profile
 def test_profile_exchange_swap2(
     swap2,
     coins,
@@ -68,7 +68,7 @@ def test_profile_exchange_swap2(
     )
 )
 @settings(**SETTINGS)
-@pytest.mark.profile_calls
+@pytest.mark.profile
 def test_withdraw_swap2(
     swap2,
     token2,
@@ -95,7 +95,7 @@ def test_withdraw_swap2(
     i=strategy("uint", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-@pytest.mark.profile_calls
+@pytest.mark.profile
 def test_withdraw_one_swap2(
     swap2,
     token2,

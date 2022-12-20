@@ -2,15 +2,18 @@
 @notice Mock ERC20 for testing
 """
 
+
 event Transfer:
     _from: indexed(address)
     _to: indexed(address)
     _value: uint256
 
+
 event Approval:
     _owner: indexed(address)
     _spender: indexed(address)
     _value: uint256
+
 
 name: public(String[64])
 symbol: public(String[32])
@@ -29,12 +32,12 @@ def __init__(_name: String[64], _symbol: String[32], _decimals: uint256):
 
 @external
 @view
-def allowance(_owner : address, _spender : address) -> uint256:
+def allowance(_owner: address, _spender: address) -> uint256:
     return self.allowances[_owner][_spender]
 
 
 @external
-def transfer(_to : address, _value : uint256) -> bool:
+def transfer(_to: address, _value: uint256) -> bool:
     self.balanceOf[msg.sender] -= _value
     self.balanceOf[_to] += _value
     log Transfer(msg.sender, _to, _value)
@@ -42,7 +45,7 @@ def transfer(_to : address, _value : uint256) -> bool:
 
 
 @external
-def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
+def transferFrom(_from: address, _to: address, _value: uint256) -> bool:
     self.balanceOf[_from] -= _value
     self.balanceOf[_to] += _value
     self.allowances[_from][msg.sender] -= _value
@@ -51,7 +54,7 @@ def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
 
 
 @external
-def approve(_spender : address, _value : uint256) -> bool:
+def approve(_spender: address, _value: uint256) -> bool:
     self.allowances[msg.sender][_spender] = _value
     log Approval(msg.sender, _spender, _value)
     return True
