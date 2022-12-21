@@ -235,7 +235,7 @@ EIP2612_TYPEHASH: constant(bytes32) = keccak256(
     "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
 )
 VERSION_HASH: constant(bytes32) = keccak256(version)
-NAME_HASH: constant(bytes32) = keccak256("Curve USDT-BTC-ETH")
+NAME_HASH: constant(bytes32) = keccak256(name)
 CACHED_CHAIN_ID: immutable(uint256)
 salt: public(immutable(bytes32))
 CACHED_DOMAIN_SEPARATOR: immutable(bytes32)
@@ -381,7 +381,8 @@ def approve(_spender: address, _value: uint256) -> bool:
     @dev Non-zero to non-zero approvals are allowed, but should
          be used cautiously. The methods increaseAllowance + decreaseAllowance
          are available to prevent any front-running that may occur.
-    @param _spender The account permitted to spend up to `_value` amount of caller's funds.
+    @param _spender The account permitted to spend up to `_value` amount of
+                    caller's funds.
     @param _value The amount of tokens `_spender` is allowed to spend.
     @return bool success
     """
@@ -400,7 +401,7 @@ def increaseAllowance(_spender: address, _add_value: uint256) -> bool:
     @param _add_value The amount to increase the allowance by.
     """
     cached_allowance: uint256 = self.allowance[msg.sender][_spender]
-    allowance: uint256 = cached_allowance + _add_value
+    allowance: uint256 = unsafe_add(cached_allowance, _add_value)
 
     # check for an overflow
     if allowance < cached_allowance:
@@ -422,7 +423,7 @@ def decreaseAllowance(_spender: address, _sub_value: uint256) -> bool:
     @param _sub_value The amount to decrease the allowance by.
     """
     cached_allowance: uint256 = self.allowance[msg.sender][_spender]
-    allowance: uint256 = cached_allowance - _sub_value
+    allowance: uint256 = unsafe_sub(cached_allowance, _sub_value)
 
     # check for an underflow
     if cached_allowance < allowance:
@@ -442,22 +443,22 @@ def permit(
     _deadline: uint256,
     _v: uint8,
     _r: bytes32,
-    _s: bytes32
+    _s: bytes32,
 ) -> bool:
     """
-    @notice Approves spender by owner's signature to expend owner's tokens.
-        See https://eips.ethereum.org/EIPS/eip-2612.
-    @dev Inspired by https://github.com/yearn/yearn-vaults/blob/main/contracts/Vault.vy#L753-L793
-    @dev Supports smart contract wallets which implement ERC1271
-        https://eips.ethereum.org/EIPS/eip-1271
-    @param _owner The address which is a source of funds and has signed the Permit.
-    @param _spender The address which is allowed to spend the funds.
-    @param _value The amount of tokens to be spent.
-    @param _deadline The timestamp after which the Permit is no longer valid.
-    @param _v The bytes[64] of the valid secp256k1 signature of permit by owner
-    @param _r The bytes[0:32] of the valid secp256k1 signature of permit by owner
-    @param _s The bytes[32:64] of the valid secp256k1 signature of permit by owner
-    @return True, if transaction completes successfully
+    @notice Permit `_spender` to spend up to `_value` amount of `_owner`'s
+            tokens via a signature.
+    @dev In the event of a chain fork, replay attacks are prevented as
+         domain separator is recalculated. However, this is only if the
+         resulting chains update their chainId.
+    @param _owner The account which generated the signature and is granting an
+                  allowance.
+    @param _spender The account which will be granted an allowance.
+    @param _value The approval amount.
+    @param _deadline The deadline by which the signature must be submitted.
+    @param _v The last byte of the ECDSA signature.
+    @param _r The first 32 bytes of the ECDSA signature.
+    @param _s The second 32 bytes of the ECDSA signature.
     """
     assert _owner != empty(address), "dev: invalid owner"
     assert block.timestamp <= _deadline, "dev: permit expired"
@@ -467,12 +468,21 @@ def permit(
         concat(
             b"\x19\x01",
             self._domain_separator(),
-            keccak256(_abi_encode(EIP2612_TYPEHASH, _owner, _spender, _value, nonce, _deadline)),
+            keccak256(
+                _abi_encode(
+                    EIP2612_TYPEHASH,
+                    _owner,
+                    _spender,
+                    _value,
+                    nonce,
+                    _deadline
+                )
+            ),
         )
     )
     assert ecrecover(digest, _v, _r, _s) == _owner, "dev: invalid signature"
 
-    self.nonces[_owner] = unsafe_add(nonce, 1)
+    self.nonces[_owner] = nonce + 1
     self._approve(_owner, _spender, _value)
     return True
 
@@ -680,7 +690,7 @@ def xp() -> uint256[N_COINS]:
     for i in range(1, N_COINS):
         p: uint256 = (
             (packed_prices & PRICE_MASK) * precisions[i]
-        ) 
+        )
         result[i] = result[i] * p / PRECISION
         packed_prices = shift(packed_prices, - PRICE_SIZE)
 

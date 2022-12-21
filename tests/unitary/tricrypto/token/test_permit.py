@@ -1,4 +1,5 @@
 import boa
+from hexbytes import HexBytes
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -12,38 +13,38 @@ def test_permit_success(
     eth_acc, bob, tricrypto_swap, sign_permit, skip_unoptimized
 ):
 
+    value = 2**256 - 1
+    deadline = boa.env.vm.state.timestamp + 600
+
     sig = sign_permit(
         swap=tricrypto_swap,
         owner=eth_acc,
         spender=bob,
-        value=2**256 - 1,
-        deadline=2**256 - 1,
-        nonce=tricrypto_swap.nonces(eth_acc),
-        salt=tricrypto_swap.salt(),
+        value=value,
+        deadline=deadline,
     )
 
     assert tricrypto_swap.allowance(eth_acc.address, bob) == 0
     with boa.env.prank(bob):
-
         assert tricrypto_swap.permit(
             eth_acc.address,
             bob,
-            2**256 - 1,
-            2**256 - 1,
+            value,
+            deadline,
             sig.v,
-            (sig.r).to_bytes(32, "big"),
-            (sig.s).to_bytes(32, "big"),
+            HexBytes(sig.r),
+            HexBytes(sig.s),
         )
 
     logs = tricrypto_swap.get_logs()
 
-    assert tricrypto_swap.allowance(eth_acc.address, bob) == 2**256 - 1
+    assert tricrypto_swap.allowance(eth_acc.address, bob) == value
     assert len(logs) == 1
     assert tricrypto_swap.nonces(eth_acc.address) == 1
     assert logs[0].event_type.name == "Approval"
     assert logs[0].topics[0] == eth_acc.address
     assert logs[0].topics[1] == bob
-    assert logs[0].args[0] == 2**256 - 1
+    assert logs[0].args[0] == value
 
 
 def test_permit_reverts_owner_is_invalid(
