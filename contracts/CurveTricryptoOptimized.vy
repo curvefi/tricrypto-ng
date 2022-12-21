@@ -184,7 +184,7 @@ xcp_profit_a: public(uint256)  # Full profit at last claim of admin fees
 virtual_price: public(
     uint256
 )  # Cached (fast to read) virtual price also used internally
-not_adjusted: bool
+not_adjusted: uint8
 
 is_killed: public(bool)
 kill_deadline: public(uint256)
@@ -936,18 +936,18 @@ def tweak_price(
     # wherever tweak_price is called.
     # TODO: is removing self.not_adjusted worth it?
 
-    needs_adjustment: bool = self.not_adjusted
+    needs_adjustment: uint8 = self.not_adjusted
     if (
-        not needs_adjustment
+        needs_adjustment == 1
         and virtual_price * 2 - 10**18
         > xcp_profit + 2 * self.allowed_extra_profit
     ):
-        needs_adjustment = True
-        self.not_adjusted = True  # costs 20k gas!
+        needs_adjustment = 2
+        self.not_adjusted = 2  # costs 20k gas!
 
     # ---------------------------------------------------------
 
-    if needs_adjustment:
+    if needs_adjustment == 2:
         norm: uint256 = 0
 
         for k in range(N_COINS - 1):
@@ -1005,7 +1005,7 @@ def tweak_price(
 
             else:
 
-                self.not_adjusted = False
+                self.not_adjusted = 1
 
     # If we are here, the price_scale adjustment did not happen
     # Still need to update the profit counter and D
