@@ -42,8 +42,8 @@ def test_permit_success(
     assert len(logs) == 1
     assert tricrypto_swap.nonces(eth_acc.address) == 1
     assert logs[0].event_type.name == "Approval"
-    assert logs[0].topics[0] == eth_acc.address
-    assert logs[0].topics[1] == bob
+    assert logs[0].topics[0].lower() == eth_acc.address.lower()
+    assert logs[0].topics[1].lower() == bob.lower()
     assert logs[0].args[0] == value
 
 

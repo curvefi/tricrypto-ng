@@ -213,10 +213,10 @@ def test_transfer_event_fires(loaded_alice, bob, charlie, tricrypto_swap):
     assert len(logs) == 2
     assert logs[0].event_type.name == "Approval"
     assert logs[0].args[0] == 0  # since everything got transferred
-    assert logs[0].topics[0] == loaded_alice
-    assert logs[0].topics[1] == bob
+    assert logs[0].topics[0].lower() == loaded_alice.lower()
+    assert logs[0].topics[1].lower() == bob.lower()
 
     assert logs[1].event_type.name == "Transfer"
     assert logs[1].args[0] == amount
-    assert logs[1].topics[0] == loaded_alice
-    assert logs[1].topics[1] == charlie
+    assert logs[1].topics[0].lower() == loaded_alice.lower()
+    assert logs[1].topics[1].lower() == charlie.lower()

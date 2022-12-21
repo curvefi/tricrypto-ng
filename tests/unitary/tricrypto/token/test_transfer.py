@@ -87,5 +87,5 @@ def test_transfer_event_fires(loaded_alice, bob, tricrypto_swap):
     assert len(logs) == 1
     assert logs[0].event_type.name == "Transfer"
     assert logs[0].args[0] == amount
-    assert logs[0].topics[0] == loaded_alice
-    assert logs[0].topics[1] == bob
+    assert logs[0].topics[0].lower() == loaded_alice.lower()
+    assert logs[0].topics[1].lower() == bob.lower()
