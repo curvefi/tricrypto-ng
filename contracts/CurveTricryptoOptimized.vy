@@ -298,7 +298,7 @@ def __init__(
             VERSION_HASH,
             chain.id,
             self,
-            block.prevhash,
+            salt,
         )
     )
     log Transfer(empty(address), self, 0)
@@ -688,11 +688,9 @@ def xp() -> uint256[N_COINS]:
 
     result[0] *= PRECISIONS[0]
     for i in range(1, N_COINS):
-        p: uint256 = (
-            (packed_prices & PRICE_MASK) * precisions[i]
-        )
+        p: uint256 = (packed_prices & PRICE_MASK) * precisions[i] 
         result[i] = result[i] * p / PRECISION
-        packed_prices = shift(packed_prices, - PRICE_SIZE)
+        packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     return result
 
@@ -762,10 +760,8 @@ def get_xcp(D: uint256) -> uint256:
     # No precisions here because we don't switch to "real" units
 
     for i in range(1, N_COINS):
-        x[i] = (
-            D * 10**18 / (N_COINS * (packed_prices & PRICE_MASK))
-        )
-        packed_prices = shift(packed_prices, - PRICE_SIZE)
+        x[i] = D * 10**18 / (N_COINS * (packed_prices & PRICE_MASK))
+        packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     return Math(math).geometric_mean(x)
 
