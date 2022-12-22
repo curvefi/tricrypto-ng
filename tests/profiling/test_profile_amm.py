@@ -11,8 +11,6 @@ from tests.utils.tokens import mint_for_testing
 # from hypothesis import given, settings
 
 
-
-
 def _choose_indices():
     i = random.randint(0, 2)
     j = random.choice([k for k in range(0, 2) if k not in [i]])
