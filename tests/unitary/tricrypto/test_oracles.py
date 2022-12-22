@@ -25,7 +25,7 @@ def norm(price_oracle, price_scale):
         else:
             ratio = 10**18 - ratio
         norm += ratio**2
-    return sqrt(norm) / 10**18
+    return sqrt(norm)
 
 
 def test_initial(tricrypto_swap_with_deposit):
@@ -198,7 +198,7 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     if i == j:
         return
 
-    amount = 10**5 * 10**18
+    amount = 10**6 * 10**18
     t = 86400
 
     prices1 = [10**18] + INITIAL_PRICES
@@ -231,24 +231,28 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
 
     with boa.env.prank(user):
         tricrypto_swap_with_deposit.exchange(0, 1, 10**18, 0)
-    rebalance_logs = tricrypto_swap_with_deposit.get_logs()[2]
 
     price_scale_2 = [
         tricrypto_swap_with_deposit.price_scale(i) for i in range(2)
     ]
-
-    price_diff = abs(log(price_scale_2[ix - 1] / price_scale_1[ix - 1]))
-    price_oracle = [
-        tricrypto_swap_with_deposit.price_oracle(k) for k in range(2)
-    ]
-    _norm = norm(price_oracle, rebalance_logs.args[0])
-    step = max(
-        tricrypto_swap_with_deposit.adjustment_step() / 10**18,
-        _norm / 10,
-    )
+    price_diff = abs(price_scale_2[ix - 1] - price_scale_1[ix - 1])
 
     # checks if price scale changed is as expected:
-    assert approx(price_diff, step, 0.01)
+    if price_diff > 0:
+
+        price_oracle = [
+            tricrypto_swap_with_deposit.price_oracle(k) for k in range(2)
+        ]
+
+        _norm = norm(price_oracle, price_scale_1)
+        step = max(tricrypto_swap_with_deposit.adjustment_step(), _norm / 10)
+
+        adjustment = int(
+            step * abs(price_oracle[ix - 1] - price_scale_1[ix - 1]) / _norm
+        )
+
+        assert approx(adjustment, price_diff, 0.01)
+
     assert approx(
         tricrypto_swap_with_deposit.virtual_price(),
         tricrypto_swap_with_deposit.get_virtual_price(),

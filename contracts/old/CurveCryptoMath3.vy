@@ -105,9 +105,7 @@ def newton_D(
     """
     # Safety checks
     assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
-    assert (
-        gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1
-    )  # dev: unsafe values gamma
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
 
     # Initial value of invariant D is that for constant-product invariant
     x: uint256[N_COINS] = self.sort(x_unsorted)
@@ -137,7 +135,6 @@ def newton_D(
         else:
             _g1k0 = K0 - _g1k0 + 1
 
-        # D / (A * N**N) * _g1k0**2 / gamma**2
         mul1: uint256 = (
             10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
         )
@@ -175,11 +172,8 @@ def newton_D(
             # Test that we are safe with the next newton_y
             for _x in x:
                 frac: uint256 = _x * 10**18 / D
-                assert (frac > 10**16 - 1) and (
-                    frac < 10**20 + 1
-                )  # dev: unsafe values x[i]
+                # assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
             return D
-
     raise "Did not converge"
 
 
@@ -194,19 +188,12 @@ def newton_y(
     """
     # Safety checks
     assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
-    assert (
-        gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1
-    )  # dev: unsafe values gamma
-    assert (
-        D > 10**17 - 1 and D < 10**15 * 10**18 + 1
-    )  # dev: unsafe values D
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
+    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1  # dev: unsafe values D
     for k in range(3):
         if k != i:
             frac: uint256 = x[k] * 10**18 / D
-            assert (frac > 10**16 - 1) and (
-                frac < 10**20 + 1
-            )  # dev: unsafe values x[i]
-
+            assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
     y: uint256 = D / N_COINS
     K0_i: uint256 = 10**18
     S_i: uint256 = 0
@@ -237,7 +224,6 @@ def newton_y(
         else:
             _g1k0 = K0 - _g1k0 + 1
 
-        # D / (A * N**N) * _g1k0**2 / gamma**2
         mul1: uint256 = (
             10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
         )
@@ -274,11 +260,8 @@ def newton_y(
             diff = y_prev - y
         if diff < max(convergence_limit, y / 10**14):
             frac: uint256 = y * 10**18 / D
-            assert (frac > 10**16 - 1) and (
-                frac < 10**20 + 1
-            )  # dev: unsafe value for y
+            # assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe value for y
             return y
-
     raise "Did not converge"
 
 
@@ -318,7 +301,6 @@ def halfpow(power: uint256, precision: uint256) -> uint256:
             S += term
         if term < precision:
             return result * S / 10**18
-
     raise "Did not converge"
 
 

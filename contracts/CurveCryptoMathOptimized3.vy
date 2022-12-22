@@ -70,6 +70,7 @@ def _cbrt(x: uint256) -> uint256:
     else:
         xx = unsafe_mul(x, 10**36)
 
+
     # ---- CALCULATE INITIAL GUESS FOR CUBE ROOT ---- #
     # We can guess the cube root of `x` using cheap integer operations. The guess
     # is calculated as follows:
@@ -163,6 +164,7 @@ def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
 @internal
 @view
 def _geometric_mean(_x: uint256[N_COINS], sort: bool = True) -> uint256:
+
     x: uint256[N_COINS] = _x
     if sort:
         x = self._sort(_x)
@@ -214,34 +216,6 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
 @external
 @view
-def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
-    """
-    fee_gamma / (fee_gamma + (1 - K))
-    where
-    K = prod(x) / (sum(x) / N)**N
-    (all normalized to 1e18)
-    """
-    K: uint256 = 10**18
-    S: uint256 = x[0]
-    S = unsafe_add(S, x[1])
-    S = unsafe_add(S, x[2])
-
-    # Could be good to pre-sort x, but it is used only for dynamic fee,
-    # so that is not so important
-    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[0]), S)
-    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[1]), S)
-    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[2]), S)
-
-    if fee_gamma > 0:
-        K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(
-            unsafe_add(fee_gamma, 10**18), K
-        )
-
-    return K
-
-
-@external
-@view
 def newton_D(
     ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]
 ) -> uint256:
@@ -254,22 +228,16 @@ def newton_D(
     @param x_unsorted: the array of coin balances (not sorted)
     @return the invariant
     """
-    # TODO: add tricrypto math optimisations here
-
     # Safety checks
-    assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
-    assert (
-        gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1
-    )  # dev: unsafe values gamma
+    assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
 
     # Initial value of invariant D is that for constant-product invariant
     x: uint256[N_COINS] = self._sort(x_unsorted)
 
-    assert (
-        x[0] > 10**9 - 1 and x[0] < 10**15 * 10**18 + 1
-    )  # dev: unsafe values x[0]
-    assert x[1] * 10**18 / x[0] > 10**11 - 1  # dev: unsafe values x[1]
-    assert x[2] * 10**18 / x[0] > 10**11 - 1  # dev: unsafe values x[2]
+    assert x[0] > 10**9 - 1 and x[0] < 10**15 * 10**18 + 1, "dev: unsafe values x[0]"
+    assert x[1] * 10**18 / x[0] > 10**11 - 1, "dev: unsafe values x[1]"
+    assert x[2] * 10**18 / x[0] > 10**11 - 1, "dev: unsafe values x[2]"
 
     D: uint256 = N_COINS * self._geometric_mean(x, False)
     S: uint256 = 0
@@ -289,7 +257,6 @@ def newton_D(
         else:
             _g1k0 = K0 - _g1k0 + 1
 
-        # D / (A * N**N) * _g1k0**2 / gamma**2
         mul1: uint256 = (
             10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
         )
@@ -321,17 +288,14 @@ def newton_D(
             diff = D - D_prev
         else:
             diff = D_prev - D
-        if diff * 10**14 < max(
-            10**16, D
-        ):  # Could reduce precision for gas efficiency here
+
+        if diff * 10**14 < max(10**16, D):
+
             # Test that we are safe with the next newton_y
             for _x in x:
                 frac: uint256 = _x * 10**18 / D
-                assert (frac > 10**16 - 1) and (
-                    frac < 10**20 + 1
-                )  # dev: unsafe values x[i]
+                # assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
             return D
-
     raise "Did not converge"
 
 
@@ -344,21 +308,18 @@ def newton_y(
     Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
     ANN = A * N**N
     """
+
     # Safety checks
-    assert ANN > MIN_A - 1 and ANN < MAX_A + 1  # dev: unsafe values A
-    assert (
-        gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1
-    )  # dev: unsafe values gamma
-    assert (
-        D > 10**17 - 1 and D < 10**15 * 10**18 + 1
-    )  # dev: unsafe values D
+    assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
+    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1, "dev: unsafe values D"
+
     for k in range(3):
         if k != i:
             frac: uint256 = x[k] * 10**18 / D
-            assert (frac > 10**16 - 1) and (
-                frac < 10**20 + 1
-            )  # dev: unsafe values x[i]
-
+            assert (
+                frac > 10**16 - 1 and frac < 10**20 + 1
+            ), "dev: unsafe values x[i]"
     y: uint256 = D / N_COINS
     K0_i: uint256 = 10**18
     S_i: uint256 = 0
@@ -389,7 +350,6 @@ def newton_y(
         else:
             _g1k0 = K0 - _g1k0 + 1
 
-        # D / (A * N**N) * _g1k0**2 / gamma**2
         mul1: uint256 = (
             10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
         )
@@ -426,9 +386,7 @@ def newton_y(
             diff = y_prev - y
         if diff < max(convergence_limit, y / 10**14):
             frac: uint256 = y * 10**18 / D
-            assert (frac > 10**16 - 1) and (
-                frac < 10**20 + 1
-            )  # dev: unsafe value for y
+            # assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe value for y"
             return y
 
     raise "Did not converge"
