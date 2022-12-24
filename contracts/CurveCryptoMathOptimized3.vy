@@ -413,13 +413,22 @@ def newton_D(
 
 @external
 @view
-def newton_y(
+def get_y(
     ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256
 ) -> uint256:
     """
     Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
     ANN = A * N**N
     """
+    # TODO: add more math:
+    return self._newton_y(ANN, gamma, x, D, i)
+
+
+@internal
+@view
+def _newton_y(
+    ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256
+) -> uint256:
 
     # Safety checks
     assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"

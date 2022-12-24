@@ -1207,6 +1207,7 @@ def _calc_withdraw_one_coin(
                 price_scale_i = p * xp[i]
             xp[k] = xp[k] * xx[k] * p / PRECISION
             packed_prices = shift(packed_prices, -PRICE_SIZE)
+
     if update_D:
         D0 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
     else:
