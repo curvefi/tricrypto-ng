@@ -18,8 +18,8 @@ interface Curve:
     def calc_token_fee(
         amounts: uint256[N_COINS], xp: uint256[N_COINS]
     ) -> uint256: view
-    def token() -> address: view
     def future_A_gamma_time() -> uint256: view
+    def totalSupply() -> uint256: view
 
 
 interface Math:
@@ -43,12 +43,14 @@ PRECISIONS: constant(uint256[N_COINS]) = [
     1,  # 2
 ]
 
-math: address
+math: public(address)
+swap: public(address)
 
 
 @external
-def __init__(math: address):
+def __init__(math: address, swap: address):
     self.math = math
+    self.swap = swap
 
 
 @external
@@ -61,15 +63,15 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
 
     price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
     for k in range(N_COINS - 1):
-        price_scale[k] = Curve(msg.sender).price_scale(k)
+        price_scale[k] = Curve(self.swap).price_scale(k)
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     for k in range(N_COINS):
-        xp[k] = Curve(msg.sender).balances(k)
+        xp[k] = Curve(self.swap).balances(k)
 
-    A: uint256 = Curve(msg.sender).A()
-    gamma: uint256 = Curve(msg.sender).gamma()
-    D: uint256 = Curve(msg.sender).D()
-    if Curve(msg.sender).future_A_gamma_time() > 0:
+    A: uint256 = Curve(self.swap).A()
+    gamma: uint256 = Curve(self.swap).gamma()
+    D: uint256 = Curve(self.swap).D()
+    if Curve(self.swap).future_A_gamma_time() > 0:
         _xp: uint256[N_COINS] = xp
         _xp[0] *= precisions[0]
         for k in range(N_COINS - 1):
@@ -89,7 +91,7 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     if j > 0:
         dy = dy * PRECISION / price_scale[j - 1]
     dy /= precisions[j]
-    dy -= Curve(msg.sender).fee_calc(xp) * dy / 10**10
+    dy -= Curve(self.swap).fee_calc(xp) * dy / 10**10
 
     return dy
 
@@ -98,19 +100,19 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
 @external
 def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     precisions: uint256[N_COINS] = PRECISIONS
-    token_supply: uint256 = ERC20(Curve(msg.sender).token()).totalSupply()
+    token_supply: uint256 = Curve(self.swap).totalSupply()
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     for k in range(N_COINS):
-        xp[k] = Curve(msg.sender).balances(k)
+        xp[k] = Curve(self.swap).balances(k)
 
     price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
     for k in range(N_COINS - 1):
-        price_scale[k] = Curve(msg.sender).price_scale(k)
+        price_scale[k] = Curve(self.swap).price_scale(k)
 
-    A: uint256 = Curve(msg.sender).A()
-    gamma: uint256 = Curve(msg.sender).gamma()
-    D0: uint256 = Curve(msg.sender).D()
-    if Curve(msg.sender).future_A_gamma_time() > 0:
+    A: uint256 = Curve(self.swap).A()
+    gamma: uint256 = Curve(self.swap).gamma()
+    D0: uint256 = Curve(self.swap).D()
+    if Curve(self.swap).future_A_gamma_time() > 0:
         _xp: uint256[N_COINS] = xp
         _xp[0] *= precisions[0]
         for k in range(N_COINS - 1):
@@ -139,6 +141,6 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     else:
         d_token = token_supply - d_token
     d_token -= (
-        Curve(msg.sender).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
+        Curve(self.swap).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
     )
     return d_token

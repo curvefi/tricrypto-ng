@@ -17,11 +17,23 @@ SETTINGS = {"max_examples": 100, "deadline": None}
     j=strategy("uint", min_value=0, max_value=3),
 )
 @settings(**SETTINGS)
-def test_exchange_all(tricrypto_swap_with_deposit, coins, user, amount, i, j):
+def test_exchange_all(
+    tricrypto_swap_with_deposit,
+    tricrypto_views,
+    coins,
+    user,
+    amount,
+    i,
+    j,
+    optimized,
+):
 
     if i == j or i > 2 or j > 2:
         with boa.reverts():
-            tricrypto_swap_with_deposit.get_dy(i, j, 10**6)
+            if not optimized:
+                tricrypto_swap_with_deposit.get_dy(i, j, 10**6)
+            else:
+                tricrypto_views.get_dy(i, j, 10**6)
         with boa.reverts(), boa.env.prank(user):
             tricrypto_swap_with_deposit.exchange(i, j, 10**6, 0)
 
@@ -30,7 +42,11 @@ def test_exchange_all(tricrypto_swap_with_deposit, coins, user, amount, i, j):
         amount = amount * 10**18 // prices[i]
         mint_for_testing(coins[i], user, amount)
 
-        calculated = tricrypto_swap_with_deposit.get_dy(i, j, amount)
+        if not optimized:
+            calculated = tricrypto_swap_with_deposit.get_dy(i, j, amount)
+        else:
+            calculated = tricrypto_views.get_dy(i, j, amount)
+
         measured_i = coins[i].balanceOf(user)
         measured_j = coins[j].balanceOf(user)
         d_balance_i = tricrypto_swap_with_deposit.balances(i)
@@ -61,13 +77,23 @@ def test_exchange_all(tricrypto_swap_with_deposit, coins, user, amount, i, j):
 )
 @settings(**SETTINGS)
 def test_exchange_from_eth(
-    tricrypto_swap_with_deposit, coins, user, amount, j
+    tricrypto_swap_with_deposit,
+    tricrypto_views,
+    coins,
+    user,
+    amount,
+    j,
+    optimized,
 ):
 
     prices = [10**18] + INITIAL_PRICES
     amount = amount * 10**18 // prices[2]
 
-    calculated = tricrypto_swap_with_deposit.get_dy(2, j, amount)
+    if not optimized:
+        calculated = tricrypto_swap_with_deposit.get_dy(2, j, amount)
+    else:
+        calculated = tricrypto_views.get_dy(2, j, amount)
+
     measured_i = boa.env.get_balance(user)
     measured_j = coins[j].balanceOf(user)
     d_balance_i = tricrypto_swap_with_deposit.balances(2)
@@ -98,14 +124,24 @@ def test_exchange_from_eth(
 )
 @settings(**SETTINGS)
 def test_exchange_into_eth(
-    tricrypto_swap_with_deposit, coins, user, amount, i
+    tricrypto_swap_with_deposit,
+    tricrypto_views,
+    coins,
+    user,
+    amount,
+    i,
+    optimized,
 ):
 
     prices = [10**18] + INITIAL_PRICES
     amount = amount * 10**18 // prices[i]
     mint_for_testing(coins[i], user, amount)
 
-    calculated = tricrypto_swap_with_deposit.get_dy(i, 2, amount)
+    if not optimized:
+        calculated = tricrypto_swap_with_deposit.get_dy(i, 2, amount)
+    else:
+        calculated = tricrypto_views.get_dy(i, 2, amount)
+
     measured_i = coins[i].balanceOf(user)
     measured_j = boa.env.get_balance(user)
     d_balance_i = tricrypto_swap_with_deposit.balances(i)

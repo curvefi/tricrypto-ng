@@ -19,6 +19,7 @@ class StatefulBase(RuleBasedStateMachine):
         super().__init__()
         self.accounts = self.users
         self.swap = self.tricrypto_swap
+        self.views = self.tricrypto_views
         self.coins = self.pool_coins
         self.token = self.tricrypto_lp_token
         self.swap_admin = self.swap.owner()
@@ -131,9 +132,14 @@ class StatefulBase(RuleBasedStateMachine):
         if exchange_i == exchange_j:
             return False
         try:
-            calc_amount = self.swap.get_dy(
-                exchange_i, exchange_j, exchange_amount_in
-            )
+            if not self.optimized:
+                calc_amount = self.swap.get_dy(
+                    exchange_i, exchange_j, exchange_amount_in
+                )
+            else:
+                calc_amount = self.views.get_dy(
+                    exchange_i, exchange_j, exchange_amount_in
+                )
         except Exception:
             _amounts = [0] * 3
             _amounts[exchange_i] = exchange_amount_in
@@ -164,13 +170,22 @@ class StatefulBase(RuleBasedStateMachine):
 
         # This is to check that we didn't end up in a borked state after
         # an exchange succeeded
-        self.swap.get_dy(
-            exchange_j,
-            exchange_i,
-            10**16
-            * 10 ** self.decimals[exchange_j]
-            // ([10**18] + INITIAL_PRICES)[exchange_j],
-        )
+        if not self.optimized:
+            self.swap.get_dy(
+                exchange_j,
+                exchange_i,
+                10**16
+                * 10 ** self.decimals[exchange_j]
+                // ([10**18] + INITIAL_PRICES)[exchange_j],
+            )
+        else:
+            self.views.get_dy(
+                exchange_j,
+                exchange_i,
+                10**16
+                * 10 ** self.decimals[exchange_j]
+                // ([10**18] + INITIAL_PRICES)[exchange_j],
+            )
 
         d_balance_i -= self.coins[exchange_i].balanceOf(user)
         d_balance_j -= self.coins[exchange_j].balanceOf(user)

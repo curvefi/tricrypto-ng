@@ -85,7 +85,14 @@ class StatefulAdmin(StatefulBase):
             )
 
 
-def test_admin(tricrypto_swap, tricrypto_lp_token, users, pool_coins):
+def test_admin(
+    tricrypto_swap,
+    tricrypto_lp_token,
+    tricrypto_views,
+    users,
+    pool_coins,
+    optimized,
+):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

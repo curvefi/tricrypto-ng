@@ -21,7 +21,7 @@ def optimized(request):
 
 
 @pytest.fixture(scope="module", autouse=True)
-def tricrypto_lp_token(deployer):
+def tricrypto_lp_token_init(deployer):
     with boa.env.prank(deployer):
         return boa.load(
             "contracts/old/CurveTokenV4.vy",
@@ -58,7 +58,7 @@ def tricrypto_math(deployer, optimized):
 
 
 @pytest.fixture(scope="module")
-def tricrypto_views(deployer, tricrypto_math):
+def tricrypto_views_init(deployer, tricrypto_math):
     with boa.env.prank(deployer):
         return boa.load("contracts/old/CurveCryptoViews3.vy", tricrypto_math)
 
@@ -77,14 +77,22 @@ def _compiled_swap(
             "0x0000000000000000000000000000000000000000",
             tricrypto_math.address,
         )
-        source = source.replace(
-            "0x0000000000000000000000000000000000000001",
-            tricrypto_lp_token.address,
-        )
-        source = source.replace(
-            "0x0000000000000000000000000000000000000002",
-            tricrypto_views.address,
-        )
+
+        if not optimized:
+            # optimized tricrypto is an lp token, but unoptimized
+            # needs the lp token contract:
+            source = source.replace(
+                "0x0000000000000000000000000000000000000001",
+                tricrypto_lp_token.address,
+            )
+
+            # in optimized contract, views is not used, but there is
+            # a commented out line where the views addr can be mentioned
+            # since view contract will be deployed anyway:
+            source = source.replace(
+                "0x0000000000000000000000000000000000000002",
+                tricrypto_views.address,
+            )
 
         source = source.replace(
             "0x0000000000000000000000000000000000000010", coins[0].address
@@ -115,6 +123,7 @@ def _crypto_swap(
     fee_receiver,
     tricrypto_pool_init_params,
     deployer,
+    optimized,
 ):
 
     with boa.env.prank(deployer):
@@ -133,8 +142,8 @@ def _crypto_swap(
             tricrypto_pool_init_params["ma_time"],
             INITIAL_PRICES,
         )
-
-        tricrypto_lp_token.set_minter(swap.address)
+        if not optimized:
+            tricrypto_lp_token.set_minter(swap.address)
 
     return swap
 
@@ -144,26 +153,54 @@ def tricrypto_swap(
     owner,
     fee_receiver,
     tricrypto_pool_init_params,
-    tricrypto_lp_token,
+    tricrypto_lp_token_init,
     tricrypto_math,
-    tricrypto_views,
+    tricrypto_views_init,
     coins,
     deployer,
     optimized,
 ):
 
     source = _compiled_swap(
-        coins, tricrypto_math, tricrypto_lp_token, tricrypto_views, optimized
+        coins,
+        tricrypto_math,
+        tricrypto_lp_token_init,
+        tricrypto_views_init,
+        optimized,
     )
 
     return _crypto_swap(
         source,
-        tricrypto_lp_token,
+        tricrypto_lp_token_init,
         owner,
         fee_receiver,
         tricrypto_pool_init_params,
         deployer,
+        optimized,
     )
+
+
+@pytest.fixture(scope="module")
+def tricrypto_views(
+    tricrypto_views_init, deployer, tricrypto_math, tricrypto_swap, optimized
+):
+    if not optimized:
+        return tricrypto_views_init
+    # optimized views is just views with self.swap set up, hence we need to
+    # deploy it AFTER swap is deployed
+    with boa.env.prank(deployer):
+        return boa.load(
+            "contracts/CurveCryptoViews3Optimized.vy",
+            tricrypto_math,
+            tricrypto_swap,
+        )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def tricrypto_lp_token(tricrypto_swap, tricrypto_lp_token_init, optimized):
+    if optimized:
+        return tricrypto_swap  # since optimized contract is also an lp token
+    return tricrypto_lp_token_init
 
 
 def _crypto_swap_with_deposit(coins, user, tricrypto_swap):

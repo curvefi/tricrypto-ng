@@ -7,16 +7,17 @@ pip-tools
 pre-commit
 
 # testing:
+eip712
+eth_account
+ipython
 hypothesis
 pytest
 pytest-xdist
 pytest-check
 pytest-forked
 pytest-logging
-ipython
 pdbpp
-gmpy2
 
 # vyper and dev framework:
-git+https://github.com/vyperlang/titanoboa
+git+https://github.com/bout3fiddy/titanoboa@eb0d849955fbde6b97d5a2841c11ae4fe7d1f853
 vyper==0.3.7
