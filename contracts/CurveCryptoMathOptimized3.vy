@@ -19,6 +19,106 @@ MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 
 @internal
 @pure
+def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
+    """
+    fee_gamma / (fee_gamma + (1 - K))
+    where
+    K = prod(x) / (sum(x) / N)**N
+    (all normalized to 1e18)
+    """
+    K: uint256 = 10**18
+    S: uint256 = x[0]
+    S = unsafe_add(S, x[1])
+    S = unsafe_add(S, x[2])
+
+    # Could be good to pre-sort x, but it is used only for dynamic fee,
+    # so that is not so important
+    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[0]), S)
+    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[1]), S)
+    K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[2]), S)
+
+    if fee_gamma > 0:
+        K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(
+            unsafe_add(fee_gamma, 10**18), K
+        )
+
+    return K
+
+
+@internal
+@pure
+def _exp(_power: int256) -> uint256:
+    """
+    @notice Calculates the e**x with 1e18 precision
+    @param _power The number to calculate the exponential of
+    @return The exponential of the given number
+    """
+
+    # This implementation is borrowed from efforts from transmissions11 and Remco Bloemen:
+    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
+    # Method: wadExp
+
+    if _power <= -42139678854452767551:
+        return 0
+
+    if _power >= 135305999368893231589:
+        raise "exp overflow"
+
+    x: int256 = unsafe_div(unsafe_mul(_power, 2**96), 10**18)
+
+    k: int256 = unsafe_div(
+        unsafe_add(
+            unsafe_div(unsafe_mul(x, 2**96), 54916777467707473351141471128),
+            2**95,
+        ),
+        2**96,
+    )
+    x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
+
+    y: int256 = unsafe_add(x, 1346386616545796478920950773328)
+    y = unsafe_add(
+        unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442
+    )
+    p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
+    p = unsafe_add(
+        unsafe_div(unsafe_mul(p, y), 2**96),
+        28719021644029726153956944680412240,
+    )
+    p = unsafe_add(
+        unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96)
+    )
+
+    q: int256 = x - 2855989394907223263936484059900
+    q = unsafe_add(
+        unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945
+    )
+    q = unsafe_sub(
+        unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380
+    )
+    q = unsafe_add(
+        unsafe_div(unsafe_mul(q, x), 2**96),
+        3604857256930695427073651918091429,
+    )
+    q = unsafe_sub(
+        unsafe_div(unsafe_mul(q, x), 2**96),
+        14423608567350463180887372962807573,
+    )
+    q = unsafe_add(
+        unsafe_div(unsafe_mul(q, x), 2**96),
+        26449188498355588339934803723976023,
+    )
+
+    return shift(
+        unsafe_mul(
+            convert(unsafe_div(p, q), uint256),
+            3822833074963236453042738258902158003155416615667,
+        ),
+        unsafe_sub(k, 195),
+    )
+
+
+@internal
+@pure
 def log2(x: uint256) -> int256:
     """
     @notice Compute the binary logarithm of `x`
@@ -216,6 +316,18 @@ def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
 
 @external
 @view
+def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
+    return self._reduction_coefficient(x, fee_gamma)
+
+
+@external
+@view
+def wad_exp(_power: int256) -> uint256:
+    return self._exp(_power)
+
+
+@external
+@view
 def newton_D(
     ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]
 ) -> uint256:
@@ -294,7 +406,7 @@ def newton_D(
             # Test that we are safe with the next newton_y
             for _x in x:
                 frac: uint256 = _x * 10**18 / D
-                # assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+                assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
             return D
     raise "Did not converge"
 
@@ -317,9 +429,7 @@ def newton_y(
     for k in range(3):
         if k != i:
             frac: uint256 = x[k] * 10**18 / D
-            assert (
-                frac > 10**16 - 1 and frac < 10**20 + 1
-            ), "dev: unsafe values x[i]"
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
     y: uint256 = D / N_COINS
     K0_i: uint256 = 10**18
     S_i: uint256 = 0
@@ -386,7 +496,7 @@ def newton_y(
             diff = y_prev - y
         if diff < max(convergence_limit, y / 10**14):
             frac: uint256 = y * 10**18 / D
-            # assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe value for y"
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe value for y"
             return y
 
     raise "Did not converge"
