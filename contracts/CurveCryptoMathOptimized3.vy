@@ -14,7 +14,31 @@ MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 
 
-# --- Internal maff ---
+# --- AMM Math Utils ---
+
+
+@external
+@view
+def cbrt(x: uint256) -> uint256:
+    return self._cbrt(x)
+
+
+@external
+@view
+def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
+    return self._geometric_mean(unsorted_x, sort)
+
+
+@external
+@view
+def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
+    return self._reduction_coefficient(x, fee_gamma)
+
+
+@external
+@view
+def wad_exp(_power: int256) -> uint256:
+    return self._exp(_power)
 
 
 @internal
@@ -297,117 +321,7 @@ def _geometric_mean(_x: uint256[N_COINS], sort: bool = True) -> uint256:
     raise "Did not converge"
 
 
-# --- External maff functions ---
-
-
-@external
-@view
-def cbrt(x: uint256) -> uint256:
-    return self._cbrt(x)
-
-
-@external
-@view
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
-    return self._geometric_mean(unsorted_x, sort)
-
-
-@external
-@view
-def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
-    return self._reduction_coefficient(x, fee_gamma)
-
-
-@external
-@view
-def wad_exp(_power: int256) -> uint256:
-    return self._exp(_power)
-
-
-@external
-@view
-def newton_D(
-    ANN: uint256,
-    gamma: uint256,
-    x_unsorted: uint256[N_COINS],
-    K0_prev: uint256 = 0
-) -> uint256:
-    """
-    @notice Finding the invariant via newtons method using good initial guesses.
-    @dev ANN is higher by the factor A_MULTIPLIER
-    @dev ANN is already A * N**N
-    @param ANN: the A * N**N value
-    @param gamma: the gamma value
-    @param x_unsorted: the array of coin balances (not sorted)
-    @param K0_prev: apriori for newton's method derived from get_y_int. Defaults
-                    to zero (no apriori)
-    @return the invariant
-    """
-    x: uint256[N_COINS] = self._sort(x_unsorted)
-
-    S: uint256 = 0
-    for x_i in x:
-        S += x_i
-
-    D: uint256 = 0
-    if K0_prev == 0:
-        D = N_COINS * self._geometric_mean(x, False)
-    else:
-        if S > 10**36:
-            D = self._cbrt(x[0]*x[1]/10**36*x[2]/K0_prev*27*10**12)
-        elif S > 10**24:
-            D = self._cbrt(x[0]*x[1]/10**24*x[2]/K0_prev*27*10**6)
-        else:
-            D = self._cbrt(x[0]*x[1]/10**18*x[2]/K0_prev*27)
-
-    for i in range(255):
-        D_prev: uint256 = D
-
-        K0: uint256 = 10**18
-        for _x in x:
-            K0 = K0 * _x * N_COINS / D
-
-        _g1k0: uint256 = gamma + 10**18
-        if _g1k0 > K0:
-            _g1k0 = _g1k0 - K0 + 1
-        else:
-            _g1k0 = K0 - _g1k0 + 1
-
-        # D / (A * N**N) * _g1k0**2 / gamma**2
-        mul1: uint256 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
-
-        # 2*N*K0 / _g1k0
-        mul2: uint256 = (2 * 10**18) * N_COINS * K0 / _g1k0
-
-        neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
-
-        # D -= f / fprime
-        D_plus: uint256 = D * (neg_fprime + S) / neg_fprime
-        D_minus: uint256 = D*D / neg_fprime
-        if 10**18 > K0:
-            D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
-        else:
-            D_minus -= D * (mul1 / neg_fprime) / 10**18 * (K0 - 10**18) / K0
-
-        if D_plus > D_minus:
-            D = D_plus - D_minus
-        else:
-            D = (D_minus - D_plus) / 2
-
-        diff: uint256 = 0
-        if D > D_prev:
-            diff = D - D_prev
-        else:
-            diff = D_prev - D
-
-        if diff * 10**14 < max(10**16, D):  # Could reduce precision for gas efficiency here
-            # Test that we are safe with the next newton_y
-            for _x in x:
-                frac: uint256 = _x * 10**18 / D
-                assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
-            return D
-
-    raise "Did not converge"
+# --- AMM math functions ---
 
 
 @external
@@ -663,5 +577,91 @@ def _newton_y(
             frac: uint256 = y * 10**18 / D
             assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe value for y"
             return y
+
+    raise "Did not converge"
+
+
+@external
+@view
+def newton_D(
+    ANN: uint256,
+    gamma: uint256,
+    x_unsorted: uint256[N_COINS],
+    K0_prev: uint256 = 0
+) -> uint256:
+    """
+    @notice Finding the invariant via newtons method using good initial guesses.
+    @dev ANN is higher by the factor A_MULTIPLIER
+    @dev ANN is already A * N**N
+    @param ANN: the A * N**N value
+    @param gamma: the gamma value
+    @param x_unsorted: the array of coin balances (not sorted)
+    @param K0_prev: apriori for newton's method derived from get_y_int. Defaults
+                    to zero (no apriori)
+    @return the invariant
+    """
+    x: uint256[N_COINS] = self._sort(x_unsorted)
+
+    S: uint256 = 0
+    for x_i in x:
+        S += x_i
+
+    D: uint256 = 0
+    if K0_prev == 0:
+        D = N_COINS * self._geometric_mean(x, False)
+    else:
+        if S > 10**36:
+            D = self._cbrt(x[0]*x[1]/10**36*x[2]/K0_prev*27*10**12)
+        elif S > 10**24:
+            D = self._cbrt(x[0]*x[1]/10**24*x[2]/K0_prev*27*10**6)
+        else:
+            D = self._cbrt(x[0]*x[1]/10**18*x[2]/K0_prev*27)
+
+    for i in range(255):
+        D_prev: uint256 = D
+
+        K0: uint256 = 10**18
+        for _x in x:
+            K0 = K0 * _x * N_COINS / D
+
+        _g1k0: uint256 = gamma + 10**18
+        if _g1k0 > K0:
+            _g1k0 = _g1k0 - K0 + 1
+        else:
+            _g1k0 = K0 - _g1k0 + 1
+
+        # D / (A * N**N) * _g1k0**2 / gamma**2
+        mul1: uint256 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
+
+        # 2*N*K0 / _g1k0
+        mul2: uint256 = (2 * 10**18) * N_COINS * K0 / _g1k0
+
+        neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
+
+        # D -= f / fprime
+        D_plus: uint256 = D * (neg_fprime + S) / neg_fprime
+        D_minus: uint256 = D*D / neg_fprime
+        if 10**18 > K0:
+            D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
+        else:
+            D_minus -= D * (mul1 / neg_fprime) / 10**18 * (K0 - 10**18) / K0
+
+        if D_plus > D_minus:
+            D = D_plus - D_minus
+        else:
+            D = (D_minus - D_plus) / 2
+
+        diff: uint256 = 0
+        if D > D_prev:
+            diff = D - D_prev
+        else:
+            diff = D_prev - D
+
+        if diff * 10**14 < max(10**16, D):  # Could reduce precision for gas efficiency here
+            # Test that we are safe with the next newton_y
+            for _x in x:
+                frac: uint256 = _x * 10**18 / D
+                assert (frac > 10**16 - 1) and (frac < 10**20 + 1), "dev: unsafe values x[i]"
+            return D
 
     raise "Did not converge"

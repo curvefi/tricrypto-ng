@@ -228,9 +228,8 @@ def swap2(swap2_empty, coins, user):
 
 @pytest.fixture(scope="module")
 def swap3(swap3_empty, coins, user):
-    quantities = [
-        10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES
-    ]  # $3M worth
+
+    quantities = [10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES]
 
     for coin, quantity in zip(coins, quantities):
         # mint coins for user:

@@ -36,6 +36,20 @@ def _random_deposit(user, swap, coins):
     boa.env.time_travel(random.randint(12, 600))
 
 
+def _random_deposit_one(user, swap, coins):
+    balances = [swap.balances(i) for i in range(3)]
+    c = random.uniform(0, 0.05)
+    i = random.randint(0, 2)
+    amounts = [0, 0, 0]
+    for j in range(3):
+        if i == j:
+            amounts[i] = int(balances[i] * c)
+
+    mint_for_testing(coins[i], user, amounts[i])
+    swap.add_liquidity(amounts, 0)
+    boa.env.time_travel(random.randint(12, 600))
+
+
 def _random_proportional_withdraw(swap, total_supply):
 
     amount = int(total_supply * random.uniform(0, 0.01))
@@ -58,6 +72,9 @@ def test_profile_swap3(swap3, coins, user):
             # deposit:
             _random_deposit(user, swap3, coins)
 
+            # deposit single token:
+            _random_deposit_one(user, swap3, coins)
+
             # swap:
             _random_exchange(user, swap3, coins)
 
@@ -75,6 +92,9 @@ def test_profile_swap2(swap2, token2, coins, user):
         for k in range(NUM_RUNS):
             # deposit:
             _random_deposit(user, swap2, coins)
+
+            # deposit single token:
+            _random_deposit_one(user, swap2, coins)
 
             # swap:
             _random_exchange(user, swap2, coins)
