@@ -67,6 +67,7 @@ class RampTest(ProfitableState):
             )
             if exchange_amount_in < 1000:
                 return
+
         super()._exchange(
             exchange_amount_in,
             exchange_i,

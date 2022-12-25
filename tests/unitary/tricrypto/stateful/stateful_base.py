@@ -158,12 +158,17 @@ class StatefulBase(RuleBasedStateMachine):
                     exchange_i, exchange_j, exchange_amount_in, 0
                 )
         except Exception:
+
+            _amounts = [0] * 3
+            _amounts[exchange_i] = exchange_amount_in
+
             # Small amounts may fail with rounding errors
             if (
                 calc_amount > 100
                 and exchange_amount_in > 100
                 and calc_amount / self.swap.balances(exchange_j) > 1e-13
                 and exchange_amount_in / self.swap.balances(exchange_i) > 1e-13
+                and self.check_limits(_amounts)
             ):
                 raise
             return False
