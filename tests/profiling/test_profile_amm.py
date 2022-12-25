@@ -3,12 +3,9 @@ import random
 import boa
 import pytest
 
-# from tests.conftest import INITIAL_PRICES
-# from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
-# from boa.test import strategy
-# from hypothesis import given, settings
+NUM_RUNS = 100
 
 
 def _choose_indices():
@@ -57,7 +54,7 @@ def _random_withdraw_one(swap, total_supply):
 def test_profile_swap3(swap3, coins, user):
 
     with boa.env.prank(user):
-        for k in range(100):
+        for k in range(NUM_RUNS):
             # deposit:
             _random_deposit(user, swap3, coins)
 
@@ -75,7 +72,7 @@ def test_profile_swap3(swap3, coins, user):
 def test_profile_swap2(swap2, token2, coins, user):
 
     with boa.env.prank(user):
-        for k in range(100):
+        for k in range(NUM_RUNS):
             # deposit:
             _random_deposit(user, swap2, coins)
 
