@@ -52,13 +52,13 @@ def compile_swap_source_code(
         )
 
         source = source.replace(
-            "1,#0", str(10 ** (18 - coins[0].decimals())) + ","
+            "1,  # 0", str(10 ** (18 - coins[0].decimals())) + ","
         )
         source = source.replace(
-            "1,#1", str(10 ** (18 - coins[1].decimals())) + ","
+            "1,  # 1", str(10 ** (18 - coins[1].decimals())) + ","
         )
         source = source.replace(
-            "1,#2", str(10 ** (18 - coins[2].decimals())) + ","
+            "1,  # 2", str(10 ** (18 - coins[2].decimals())) + ","
         )
         return source
 

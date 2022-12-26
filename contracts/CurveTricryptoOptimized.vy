@@ -116,7 +116,7 @@ event ClaimAdminFee:
     tokens: uint256
 
 
-N_COINS: constant(uint256) = 3  # <- change
+N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # The precision to convert to
 A_MULTIPLIER: constant(uint256) = 10000
 
@@ -1123,12 +1123,11 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
             if ix < N_COINS:
 
                 S: uint256 = 0
+
                 last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
                 packed_prices = self.last_prices_packed
                 for k in range(N_COINS - 1):
-                    last_prices[k] = (
-                        packed_prices & PRICE_MASK
-                    )  # * PRICE_PRECISION_MUL
+                    last_prices[k] = packed_prices & PRICE_MASK
                     packed_prices = shift(packed_prices, -PRICE_SIZE)
 
                 for i in range(N_COINS):

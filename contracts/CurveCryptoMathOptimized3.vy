@@ -601,6 +601,7 @@ def newton_D(
     @return the invariant
     """
     x: uint256[N_COINS] = self._sort(x_unsorted)
+    assert x[0] < max_value(uint256) / (10**18 * N_COINS**N_COINS), "dev: out of limits"
 
     S: uint256 = 0
     for x_i in x:
@@ -618,6 +619,7 @@ def newton_D(
             D = self._cbrt(x[0]*x[1]/10**18*x[2]/K0_prev*27)
 
     for i in range(255):
+
         D_prev: uint256 = D
 
         K0: uint256 = 10**18

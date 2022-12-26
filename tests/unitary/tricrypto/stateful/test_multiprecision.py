@@ -3,15 +3,11 @@ import pytest
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.conftest import (
-    _compiled_swap,
-    _crypto_swap,
-    _crypto_swap_with_deposit,
-)
+from tests.conftest import _compiled_swap, _crypto_swap
 from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
 
 COINS = [("USDC", 6), ("WBTC", 8), ("WETH", 18)]
-INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
+INITIAL_PRICES = [17500 * 10**18, 1200 * 10**18]
 
 MAX_SAMPLES = 100
 MAX_COUNT = 20
@@ -81,11 +77,6 @@ def tricrypto_lp_token(tricrypto_lp_token_init, tricrypto_swap, optimized):
     if optimized:
         return tricrypto_swap
     return tricrypto_lp_token_init
-
-
-@pytest.fixture(scope="module")
-def crypto_swap_with_deposit_mp(pool_coins, user, tricrypto_lp_token):
-    return _crypto_swap_with_deposit(pool_coins, user, tricrypto_lp_token)
 
 
 class MultiPrecision(ProfitableState):
