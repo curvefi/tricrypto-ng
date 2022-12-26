@@ -278,38 +278,15 @@ def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
 
 @internal
 @view
-def _geometric_mean(_x: uint256[N_COINS], sort: bool = True) -> uint256:
+def _geometric_mean(_x: uint256[3], sort: bool = True) -> uint256:
     x: uint256[N_COINS] = _x
     if sort:
         x = self._sort(_x)
 
-    D: uint256 = x[0]
-    diff: uint256 = 0
-    D_prev: uint256 = 0
-    tmp: uint256 = 0
+    prod: uint256 = x[0] * x[1] / 10**18 * x[2] / 10**18
+    assert prod > 0
 
-    for i in range(255):
-        D_prev = D
-
-        tmp = unsafe_div(unsafe_mul(10**18, x[0]), D)
-        tmp = unsafe_div(unsafe_mul(tmp, x[1]), D)
-        tmp = unsafe_div(unsafe_mul(tmp, x[2]), D)
-
-        D = unsafe_div(
-            unsafe_mul(
-                D, unsafe_add(unsafe_mul(unsafe_sub(N_COINS, 1), 10**18), tmp)
-            ),
-            unsafe_mul(N_COINS, 10**18),
-        )
-
-        if D > D_prev:
-            diff = unsafe_sub(D, D_prev)
-        else:
-            diff = unsafe_sub(D_prev, D)
-
-        if diff <= 1 or unsafe_mul(diff, 10**18) < D:
-            return D
-    raise "Did not converge"
+    return self._cbrt(prod)
 
 
 # --- AMM math functions ---

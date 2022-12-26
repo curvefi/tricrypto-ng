@@ -17,7 +17,7 @@ def geometric_mean_int(x: typing.List[int]) -> int:
 
 
 @given(
-    x=strategy("uint256[3]", min_value=10**9, max_value=10**9 * 10**18),
+    x=strategy("uint256[3]", min_value=10**18, max_value=10**9 * 10**18),
 )
 @settings(**SETTINGS)
 def test_geometric_mean(math_optimized, x):
@@ -28,10 +28,11 @@ def test_geometric_mean(math_optimized, x):
 
 
 @given(
-    x=strategy("uint256[3]", min_value=10**9, max_value=10**9 * 10**18),
+    x=strategy("uint256[3]", min_value=10**18, max_value=10**9 * 10**18),
 )
 @settings(**SETTINGS)
 def test_compare_geometric_mean(math_optimized, math_unoptimized, x):
     val_optimized_math = math_optimized.geometric_mean(x)
     val_unoptimized_math = math_unoptimized.geometric_mean(x)
-    assert val_optimized_math == val_unoptimized_math
+    diff = abs(val_optimized_math - val_unoptimized_math)
+    assert diff / val_optimized_math <= max(1e-10, 1 / min(x))
