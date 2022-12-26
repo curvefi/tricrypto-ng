@@ -1,11 +1,14 @@
+import sys
 from math import log
 
 import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
+from rich.console import Console
 
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
 
+console = Console(file=sys.stdout)
 MAX_SAMPLES = 100
 STEP_COUNT = 100
 NO_CHANGE = 2**256 - 1
@@ -71,9 +74,16 @@ class StatefulAdmin(StatefulBase):
     @rule()
     def claim_admin_fees(self):
         balance = self.token.balanceOf(self.swap.admin_fee_receiver())
-        with boa.env.prank(self.swap_admin):
-            self.swap.claim_admin_fees()
+        console.print("admin balance before: ", balance)
+        console.print("xcp_profit: ", self.swap.xcp_profit())
+        console.print("xcp_profit_a: ", self.swap.xcp_profit_a())
+
+        self.swap.claim_admin_fees()
         admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+        console.print("admin balance after: ", admin_balance)
+        console.print("xcp_profit: ", self.swap.xcp_profit())
+        console.print("xcp_profit_a: ", self.swap.xcp_profit_a())
+
         balance = admin_balance - balance
         self.total_supply += balance
 
