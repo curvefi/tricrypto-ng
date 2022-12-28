@@ -908,8 +908,7 @@ def exchange(
 ) -> uint256:
     assert not self.is_killed  # dev: the pool is killed
     assert i != j  # dev: coin index out of range
-    assert i < N_COINS  # dev: coin index out of range
-    assert j < N_COINS  # dev: coin index out of range
+    assert max(i, j) < N_COINS  # dev: coin index out of range
     assert dx > 0  # dev: do not exchange 0 coins
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -917,7 +916,6 @@ def exchange(
     ix: uint256 = j
     p: uint256 = 0
     dy: uint256 = 0
-
 
     _coins: address[N_COINS] = coins
     if i == 2 and use_eth:
