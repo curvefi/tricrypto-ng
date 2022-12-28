@@ -46,6 +46,7 @@ class StatefulSimulation(StatefulBase):
             self.swap.fee_gamma(),
             self.swap.adjustment_step() / 1e18,
             self.swap.ma_time(),
+            exp_ma=self.optimized,
         )
         for i in range(3):
             self.trader.curve.x[i] = self.swap.balances(i)

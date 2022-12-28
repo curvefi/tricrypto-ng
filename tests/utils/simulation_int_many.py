@@ -332,7 +332,7 @@ class Trader:
         if not self.exp_ma:
             return 0.5 ** ((t - self.t) / self.ma_time)
         else:
-            return exp((t - self.t) / self.ma_time)
+            return exp(-1 * (t - self.t) / self.ma_time)
 
     def ma_recorder(self, t, price_vector):
         # XXX what if every block only has p_b being last
