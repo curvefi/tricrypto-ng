@@ -7,7 +7,7 @@ from hypothesis.stateful import rule, run_state_machine_as_test
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
 
 MAX_SAMPLES = 100
-STEP_COUNT = 100
+STEP_COUNT = 200
 NO_CHANGE = 2**256 - 1
 
 
@@ -51,7 +51,9 @@ class StatefulAdmin(StatefulBase):
         user=user,
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
-        admin_balance = self.token.balanceOf(self.swap_admin)
+
+        admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+
         if exchange_i > 0:
             exchange_amount_in_converted = (
                 exchange_amount_in
@@ -65,14 +67,18 @@ class StatefulAdmin(StatefulBase):
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
 
-        admin_balance = self.token.balanceOf(self.swap_admin) - admin_balance
+        admin_balance = (
+            self.token.balanceOf(self.swap.admin_fee_receiver())
+            - admin_balance
+        )
+
         self.total_supply += admin_balance
 
     @rule()
     def claim_admin_fees(self):
         balance = self.token.balanceOf(self.swap.admin_fee_receiver())
-        with boa.env.prank(self.swap_admin):
-            self.swap.claim_admin_fees()
+
+        self.swap.claim_admin_fees()
         admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
         balance = admin_balance - balance
         self.total_supply += balance

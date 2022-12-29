@@ -12,6 +12,10 @@ MAX_SAMPLES = 100
 STEP_COUNT = 200
 
 
+def get_price_scale(swap):
+    return [swap.price_scale(0), swap.price_scale(1)]
+
+
 class StatefulSimulation(StatefulBase):
     exchange_amount_in = strategy(
         "uint256", min_value=10**17, max_value=10**5 * 10**18
@@ -46,6 +50,7 @@ class StatefulSimulation(StatefulBase):
             self.swap.fee_gamma(),
             self.swap.adjustment_step() / 1e18,
             self.swap.ma_time(),
+            exp_ma=self.optimized,
         )
         for i in range(3):
             self.trader.curve.x[i] = self.swap.balances(i)
@@ -68,12 +73,19 @@ class StatefulSimulation(StatefulBase):
             // self.trader.price_oracle[exchange_i]
         )
 
+        price_scale = get_price_scale(self.swap)
+        trader_price_scale = self.trader.curve.p
+
         if super().exchange(exchange_amount_in, exchange_i, exchange_j, user):
             dy = self.trader.buy(exchange_amount_in, exchange_i, exchange_j)
             price = exchange_amount_in * 10**18 // dy
             self.trader.tweak_price(
                 boa.env.vm.state.timestamp, exchange_i, exchange_j, price
             )
+
+            # ensure that if trader tweaks price, so does the amm:
+            if self.trader.curve.p != trader_price_scale:
+                assert get_price_scale(self.swap) != price_scale
 
     @invariant()
     def simulator(self):
@@ -89,6 +101,7 @@ class StatefulSimulation(StatefulBase):
                 log(self.trader.curve.p[i + 1] / self.swap.price_scale(i))
             )
             if not diff <= precision:
+                breakpoint()
                 assert diff <= precision
 
 

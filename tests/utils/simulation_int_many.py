@@ -332,7 +332,7 @@ class Trader:
         if not self.exp_ma:
             return 0.5 ** ((t - self.t) / self.ma_time)
         else:
-            return exp((t - self.t) / self.ma_time)
+            return exp(-1 * (t - self.t) / self.ma_time)
 
     def ma_recorder(self, t, price_vector):
         # XXX what if every block only has p_b being last
@@ -347,9 +347,7 @@ class Trader:
             self.t = t
 
     def tweak_price(self, t, a, b, p):
-
         self.ma_recorder(t, self.last_price)
-
         if b > 0:
             self.last_price[b] = p * self.last_price[a] // 10**18
         else:
@@ -364,26 +362,30 @@ class Trader:
             ** 0.5
         )
         adjustment_step = max(self.adjustment_step, norm // 10)
+        if norm <= adjustment_step:
+            # Already close to the target price
+            return norm
 
-        if norm > adjustment_step:
+        p_new = [10**18]
+        p_new += [
+            p_target + adjustment_step * (p_real - p_target) // norm
+            for p_real, p_target in zip(
+                self.price_oracle[1:], self.curve.p[1:]
+            )
+        ]
 
-            # calculate p_new
-            # p_new[k] = (price_scale[k] * (norm - adjustment_step) + adjustment_step * price_oracle[k]) / norm # noqa: E501
-            p_new = [10**18]
-            p_new += [
-                p_target + adjustment_step * (p_real - p_target) // norm
-                for p_real, p_target in zip(
-                    self.price_oracle[1:], self.curve.p[1:]
-                )
-            ]
+        old_p = self.curve.p[:]
+        old_profit = self.xcp_profit_real
+        old_xcp = self.xcp
 
+        self.curve.p = p_new
+        self.update_xcp(only_real=True)
+
+        if 2 * (self.xcp_profit_real - 10**18) <= self.xcp_profit - 10**18:
             # If real profit is less than half of maximum - revert params back
-            if (
-                2 * (self.xcp_profit_real - 10**18)
-                > self.xcp_profit - 10**18
-            ):
-                self.curve.p = p_new
-                self.update_xcp(only_real=True)
+            self.curve.p = old_p
+            self.xcp_profit_real = old_profit
+            self.xcp = old_xcp
 
         return norm
 

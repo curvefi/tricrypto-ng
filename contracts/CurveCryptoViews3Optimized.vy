@@ -24,15 +24,18 @@ interface Curve:
 
 interface Math:
     def newton_D(
-        ANN: uint256, gamma: uint256, x_unsorted: uint256[N_COINS]
+        ANN: uint256,
+        gamma: uint256,
+        x_unsorted: uint256[N_COINS],
+        K0_prev: uint256
     ) -> uint256: view
-    def newton_y(
+    def get_y(
         ANN: uint256,
         gamma: uint256,
         x: uint256[N_COINS],
         D: uint256,
         i: uint256,
-    ) -> uint256: view
+    ) -> uint256[2]: view
 
 
 N_COINS: constant(uint256) = 3  # <- change
@@ -78,16 +81,16 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
             _xp[k + 1] = (
                 _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
             )
-        D = Math(self.math).newton_D(A, gamma, _xp)
+        D = Math(self.math).newton_D(A, gamma, _xp, 0)
 
     xp[i] += dx
     xp[0] *= precisions[0]
     for k in range(N_COINS - 1):
         xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
 
-    y: uint256 = Math(self.math).newton_y(A, gamma, xp, D, j)
-    dy: uint256 = xp[j] - y - 1
-    xp[j] = y
+    y_out: uint256[2] = Math(self.math).get_y(A, gamma, xp, D, j)
+    dy: uint256 = xp[j] - y_out[0] - 1
+    xp[j] = y_out[0]
     if j > 0:
         dy = dy * PRECISION / price_scale[j - 1]
     dy /= precisions[j]
@@ -119,7 +122,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
             _xp[k + 1] = (
                 _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
             )
-        D0 = Math(self.math).newton_D(A, gamma, _xp)
+        D0 = Math(self.math).newton_D(A, gamma, _xp, 0)
 
     amountsp: uint256[N_COINS] = amounts
     if deposit:
@@ -134,7 +137,8 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         p: uint256 = price_scale[k] * precisions[k + 1]
         xp[k + 1] = xp[k + 1] * p / PRECISION
         amountsp[k + 1] = amountsp[k + 1] * p / PRECISION
-    D: uint256 = Math(self.math).newton_D(A, gamma, xp)
+
+    D: uint256 = Math(self.math).newton_D(A, gamma, xp, 0)
     d_token: uint256 = token_supply * D / D0
     if deposit:
         d_token -= token_supply

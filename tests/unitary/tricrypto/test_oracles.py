@@ -34,10 +34,9 @@ def test_initial(tricrypto_swap_with_deposit):
         assert tricrypto_swap_with_deposit.price_oracle(i) == INITIAL_PRICES[i]
 
 
-# TODO: check if this test gets deprecated
 @given(
     amount=strategy(
-        "uint256", min_value=10**6, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
     ),  # Can be more than we have
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
@@ -56,6 +55,7 @@ def test_last_price_exchange(
     out = coins[j].balanceOf(user)
     with boa.env.prank(user):
         tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
+
     out = coins[j].balanceOf(user) - out
 
     if amount <= 10**5 or out <= 10**5:
@@ -108,7 +108,7 @@ def test_last_price_remove_liq(
 
 @given(
     amount=strategy(
-        "uint256", min_value=10**6, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
     ),  # Can be more than we have
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
@@ -153,7 +153,7 @@ def test_ma(
 # Sanity check for price scale
 @given(
     amount=strategy(
-        "uint256", min_value=10**6, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
     ),  # Can be more than we have
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),

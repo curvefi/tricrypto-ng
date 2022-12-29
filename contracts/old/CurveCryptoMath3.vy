@@ -172,7 +172,7 @@ def newton_D(
             # Test that we are safe with the next newton_y
             for _x in x:
                 frac: uint256 = _x * 10**18 / D
-                # assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
+                assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
             return D
     raise "Did not converge"
 
@@ -260,7 +260,7 @@ def newton_y(
             diff = y_prev - y
         if diff < max(convergence_limit, y / 10**14):
             frac: uint256 = y * 10**18 / D
-            # assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe value for y
+            assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe value for y
             return y
     raise "Did not converge"
 
