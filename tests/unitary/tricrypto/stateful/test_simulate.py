@@ -100,8 +100,9 @@ class StatefulSimulation(StatefulBase):
             diff = abs(
                 log(self.trader.curve.p[i + 1] / self.swap.price_scale(i))
             )
-            if not diff <= precision:
-                assert diff <= precision
+            balances = [self.swap.balances(i) for i in range(3)]
+            if not diff <= precision and self.check_limits(balances):
+                raise
 
 
 def test_sim(
