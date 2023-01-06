@@ -294,7 +294,7 @@ def __init__(
         )
     )
 
-    # fire empty transfer for indexers
+    # fire empty transfer from 0x0 to self for indexers to catch
     log Transfer(empty(address), self, 0)
 
 
@@ -520,7 +520,8 @@ def burnFrom(_to: address, _value: uint256) -> bool:
     log Transfer(_to, empty(address), _value)
     return True
 
-# ---------------------------- AMM Functions ---------------------------------
+
+# ---------------------- AMM Internal Functions -------------------------------
 
 
 @internal
@@ -528,63 +529,6 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 def _packed_view(k: uint256, p: uint256) -> uint256:
     assert k < N_COINS - 1
     return shift(p, -PRICE_SIZE * convert(k, int256)) & PRICE_MASK
-
-
-@external
-@view
-@nonreentrant("lock")
-def price_oracle(k: uint256) -> uint256:
-    price_oracle: uint256 = self._packed_view(k, self.price_oracle_packed)
-    last_prices_timestamp: uint256 = self.last_prices_timestamp
-
-    if last_prices_timestamp < block.timestamp:
-        last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
-        ma_time: uint256 = self.ma_time
-        alpha: uint256 = Math(math).wad_exp(
-            -convert(
-                (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
-                int256,
-            )
-        )
-        return (
-            last_prices * (10**18 - alpha) + price_oracle * alpha
-        ) / 10**18
-
-    return price_oracle
-
-
-@external
-@view
-def price_scale(k: uint256) -> uint256:
-    return self._packed_view(k, self.price_scale_packed)
-
-
-@external
-@view
-@nonreentrant("lock")
-def lp_price() -> uint256:
-    price_oracle: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-    packed_prices: uint256 = self.price_oracle_packed
-    for k in range(N_COINS - 1):
-        price_oracle[k] = packed_prices & PRICE_MASK
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
-    return (
-        3 * self.virtual_price *
-        Math(math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
-    )
-
-
-@external
-@view
-def last_prices(k: uint256) -> uint256:
-    return self._packed_view(k, self.last_prices_packed)
-
-
-@external
-@view
-def coins(i: uint256) -> address:
-    _coins: address[N_COINS] = coins
-    return _coins[i]
 
 
 @internal
@@ -629,35 +573,11 @@ def _A_gamma() -> uint256[2]:
     return [A1, gamma1]
 
 
-@view
-@external
-def A() -> uint256:
-    return self._A_gamma()[0]
-
-
-@view
-@external
-def gamma() -> uint256:
-    return self._A_gamma()[1]
-
-
 @internal
 @view
 def _fee(xp: uint256[N_COINS]) -> uint256:
     f: uint256 = Math(math).reduction_coefficient(xp, self.fee_gamma)
     return (self.mid_fee * f + self.out_fee * (10**18 - f)) / 10**18
-
-
-@external
-@view
-def fee() -> uint256:
-    return self._fee(self.xp())
-
-
-@external
-@view
-def fee_calc(xp: uint256[N_COINS]) -> uint256:
-    return self._fee(xp)
 
 
 @internal
@@ -673,13 +593,6 @@ def get_xcp(D: uint256) -> uint256:
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     return Math(math).geometric_mean(x)
-
-
-@external
-@view
-@nonreentrant("lock")
-def get_virtual_price() -> uint256:
-    return 10**18 * self.get_xcp(self.D) / self.totalSupply
 
 
 @internal
@@ -915,12 +828,20 @@ def tweak_price(
     self.virtual_price = virtual_price
 
 
-@payable
-@external
-@nonreentrant("lock")
-def exchange(
-    i: uint256, j: uint256, dx: uint256, min_dy: uint256, use_eth: bool = False
+@internal
+def _exchange(
+    sender: address, 
+    mvalue: uint256, 
+    i: uint256, 
+    j: uint256, 
+    dx: uint256, 
+    min_dy: uint256,
+    use_eth: bool, 
+    receiver: address, 
+    callbacker: address, 
+    callback_sig: bytes32
 ) -> uint256:
+
     assert not self.is_killed  # dev: the pool is killed
     assert i != j  # dev: coin index out of range
     assert i < N_COINS  # dev: coin index out of range
@@ -934,13 +855,6 @@ def exchange(
     dy: uint256 = 0
 
     _coins: address[N_COINS] = coins
-    if i == 2 and use_eth:
-        assert msg.value == dx  # dev: incorrect eth amount
-        WETH(coins[2]).deposit(value=msg.value)
-    else:
-        assert msg.value == 0  # dev: nonzero eth amount
-        # assert might be needed for some tokens - removed one to save bytespace
-        ERC20(_coins[i]).transferFrom(msg.sender, self, dx)
 
     y: uint256 = xp[j]
     x0: uint256 = xp[i]
@@ -960,7 +874,8 @@ def exchange(
 
     prec_i: uint256 = precisions[i]
 
-    # Update invariant if parameter are undergoing ramps:
+    # ----------- Update invariant if parameter are undergoing ramps ---------
+    
     t: uint256 = self.future_A_gamma_time
     if t > 0:
         x0 *= prec_i
@@ -973,11 +888,14 @@ def exchange(
         if block.timestamp >= t:
             self.future_A_gamma_time = 1
 
+    # ----------------------- Calculate dy and fees --------------------------
+
     prec_j: uint256 = precisions[j]
     y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
     dy = xp[j] - y_out[0]
 
-    # Not defining new "y" here to have less variables / make subsequent calls cheaper
+    # Not defining new "y" here to have less variables / make subsequent calls 
+    # cheaper
     xp[j] -= dy
     dy -= 1
 
@@ -992,6 +910,17 @@ def exchange(
     y -= dy
 
     self.balances[j] = y
+
+    # ---------------------- Do Transfers in and out -------------------------
+
+    if i == 2 and use_eth:
+        assert mvalue == dx  # dev: incorrect eth amount
+        WETH(coins[2]).deposit(value=mvalue)
+    else:
+        assert mvalue == 0  # dev: nonzero eth amount
+        # assert might be needed for some tokens - removed one to save bytespace
+        ERC20(_coins[i]).transferFrom(sender, self, dx)
+
     # assert might be needed for some tokens - removed one to save bytespace
     if j == 2 and use_eth:
         WETH(coins[2]).withdraw(dy)
@@ -1004,7 +933,8 @@ def exchange(
         y = y * price_scale[j - 1] / PRECISION
     xp[j] = y
 
-    # Calculate price
+    # --------------------- Calculate and adjust prices ----------------------
+
     if dx > 10**5 and dy > 10**5:
         _dx: uint256 = dx * prec_i
         _dy: uint256 = dy * prec_j
@@ -1026,8 +956,10 @@ def exchange(
             p = _dy * 10**18 / _dx
             ix = i
 
-    # tweak price with good initial guess:
+    # tweak price with good initial guess
     self.tweak_price(A_gamma, xp, ix, p, 0, y_out[1])
+
+    # ------------------------------------------------------------------------
 
     log TokenExchange(msg.sender, i, dx, j, dy, fee)
 
@@ -1052,10 +984,166 @@ def _calc_token_fee(amounts: uint256[N_COINS], xp: uint256[N_COINS]) -> uint256:
     return fee * Sdiff / S + NOISE_FEE
 
 
-@external
+@internal
 @view
-def calc_token_fee(amounts: uint256[N_COINS], xp: uint256[N_COINS]) -> uint256:
-    return self._calc_token_fee(amounts, xp)
+def _calc_withdraw_one_coin(
+    A_gamma: uint256[2],
+    token_amount: uint256,
+    i: uint256,
+    update_D: bool,
+    calc_price: bool,
+) -> (uint256, uint256, uint256, uint256[N_COINS], uint256, uint256):
+    token_supply: uint256 = self.totalSupply
+    assert token_amount <= token_supply  # dev: token amount more than supply
+    assert i < N_COINS  # dev: coin out of range
+
+    xx: uint256[N_COINS] = self.balances
+    xp: uint256[N_COINS] = PRECISIONS
+    D0: uint256 = 0
+
+    price_scale_i: uint256 = PRECISION * PRECISIONS[0]
+    packed_prices: uint256 = self.price_scale_packed
+    xp[0] *= xx[0]
+    for k in range(1, N_COINS):
+        p: uint256 = (packed_prices & PRICE_MASK)
+        if i == k:
+            price_scale_i = p * xp[i]
+        xp[k] = xp[k] * xx[k] * p / PRECISION
+        packed_prices = shift(packed_prices, -PRICE_SIZE)
+
+    if update_D:
+        D0 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+    else:
+        D0 = self.D
+
+    D: uint256 = D0
+
+    # -------------------------------- Fee Calc ------------------------------
+    # Charge the fee on D, not on y, e.g. reducing invariant LESS than charging the user
+    fee: uint256 = self._fee(xp)
+    dD: uint256 = token_amount * D / token_supply
+
+    # approx fee (assuming balanced state) in ith token is:
+    D_fee: uint256 = fee * dD / (2 * 10**10) + 1
+    approx_fee: uint256 = N_COINS * D_fee * xx[i] / D
+
+    # D = D - D_fee
+    D -= (dD - D_fee)
+
+    # ------------------------------------------------------------------------
+
+    # calculate y_out with (D - D_fee)
+    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
+    dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
+    xp[i] = y_out[0]
+
+    # --------------------------------- Price calc ---------------------------
+    p: uint256 = 0
+    if calc_price and dy > 10**5 and token_amount > 10**5:
+
+        # p_i = dD / D0 * sum'(p_k * x_k) / (dy - dD / D0 * y0)
+        S: uint256 = 0
+        precisions: uint256[N_COINS] = PRECISIONS
+        last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
+
+        packed_prices = self.last_prices_packed
+        for k in range(N_COINS - 1):
+            last_prices[k] = packed_prices & PRICE_MASK
+            packed_prices = shift(packed_prices, -PRICE_SIZE)
+
+        for k in range(N_COINS):
+            if k != i:
+                if k == 0:
+                    S += xx[0] * PRECISIONS[0]
+                else:
+                    S += xx[k] * last_prices[k - 1] * precisions[k] / PRECISION
+
+        S = S * dD / D0
+        p = (
+            S
+            * PRECISION
+            / (dy * precisions[i] - dD * xx[i] * precisions[i] / D0)
+        )
+
+    return dy, p, D, xp, y_out[1], approx_fee
+
+
+# ---------------------- AMM External Functions ------------------------------
+
+
+@payable
+@external
+@nonreentrant("lock")
+def exchange(
+    i: uint256, 
+    j: uint256, 
+    dx: uint256, 
+    min_dy: uint256,
+    use_eth: bool = False, 
+    receiver: address = msg.sender
+) -> uint256:
+    """
+    Exchange using WETH by default
+    """
+    return self._exchange(
+        msg.sender, 
+        msg.value, 
+        i, 
+        j, 
+        dx, 
+        min_dy, 
+        use_eth, 
+        receiver, 
+        empty(address), 
+        empty(bytes32)
+    )
+
+
+@payable
+@external
+@nonreentrant('lock')
+def exchange_underlying(
+    i: uint256, 
+    j: uint256, 
+    dx: uint256, 
+    min_dy: uint256,
+    receiver: address = msg.sender
+) -> uint256:
+    """
+    Exchange using ETH
+    """
+    return self._exchange(
+        msg.sender, 
+        msg.value, 
+        i, 
+        j, 
+        dx, 
+        min_dy, 
+        True, 
+        receiver, 
+        empty(address), 
+        empty(bytes32)
+    )
+
+
+@payable
+@external
+@nonreentrant('lock')
+def exchange_extended(
+    i: uint256, 
+    j: uint256, 
+    dx: uint256, 
+    min_dy: uint256, 
+    use_eth: bool, 
+    sender: address, 
+    receiver: address, 
+    cb: bytes32
+) -> uint256:
+
+    assert cb != empty(bytes32)  # dev: No callback specified
+    return self._exchange(
+        sender, msg.value, i, j, dx, min_dy, use_eth, receiver, msg.sender, cb
+    )
 
 
 @external
@@ -1209,90 +1297,6 @@ def remove_liquidity(_amount: uint256, min_amounts: uint256[N_COINS]):
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
 
 
-@internal
-@view
-def _calc_withdraw_one_coin(
-    A_gamma: uint256[2],
-    token_amount: uint256,
-    i: uint256,
-    update_D: bool,
-    calc_price: bool,
-) -> (uint256, uint256, uint256, uint256[N_COINS], uint256, uint256):
-    token_supply: uint256 = self.totalSupply
-    assert token_amount <= token_supply  # dev: token amount more than supply
-    assert i < N_COINS  # dev: coin out of range
-
-    xx: uint256[N_COINS] = self.balances
-    xp: uint256[N_COINS] = PRECISIONS
-    D0: uint256 = 0
-
-    price_scale_i: uint256 = PRECISION * PRECISIONS[0]
-    packed_prices: uint256 = self.price_scale_packed
-    xp[0] *= xx[0]
-    for k in range(1, N_COINS):
-        p: uint256 = (packed_prices & PRICE_MASK)
-        if i == k:
-            price_scale_i = p * xp[i]
-        xp[k] = xp[k] * xx[k] * p / PRECISION
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
-
-    if update_D:
-        D0 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
-    else:
-        D0 = self.D
-
-    D: uint256 = D0
-
-    # -------------------------------- Fee Calc ------------------------------
-    # Charge the fee on D, not on y, e.g. reducing invariant LESS than charging the user
-    fee: uint256 = self._fee(xp)
-    dD: uint256 = token_amount * D / token_supply
-
-    # approx fee (assuming balanced state) in ith token is:
-    D_fee: uint256 = fee * dD / (2 * 10**10) + 1
-    approx_fee: uint256 = N_COINS * D_fee * xx[i] / D
-
-    # D = D - D_fee
-    D -= (dD - D_fee)
-
-    # ------------------------------------------------------------------------
-
-    # calculate y_out with (D - D_fee)
-    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
-    dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
-    xp[i] = y_out[0]
-
-    # --------------------------------- Price calc ---------------------------
-    p: uint256 = 0
-    if calc_price and dy > 10**5 and token_amount > 10**5:
-
-        # p_i = dD / D0 * sum'(p_k * x_k) / (dy - dD / D0 * y0)
-        S: uint256 = 0
-        precisions: uint256[N_COINS] = PRECISIONS
-        last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-
-        packed_prices = self.last_prices_packed
-        for k in range(N_COINS - 1):
-            last_prices[k] = packed_prices & PRICE_MASK
-            packed_prices = shift(packed_prices, -PRICE_SIZE)
-
-        for k in range(N_COINS):
-            if k != i:
-                if k == 0:
-                    S += xx[0] * PRECISIONS[0]
-                else:
-                    S += xx[k] * last_prices[k - 1] * precisions[k] / PRECISION
-
-        S = S * dD / D0
-        p = (
-            S
-            * PRECISION
-            / (dy * precisions[i] - dD * xx[i] * precisions[i] / D0)
-        )
-
-    return dy, p, D, xp, y_out[1], approx_fee
-
-
 @view
 @external
 def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
@@ -1354,7 +1358,117 @@ def claim_admin_fees():
     self._claim_admin_fees()
 
 
-# Admin parameters
+# ------------------------- AMM View Functions -------------------------------
+
+
+@external
+@view
+@nonreentrant("lock")
+def get_virtual_price() -> uint256:
+    return 10**18 * self.get_xcp(self.D) / self.totalSupply
+
+
+@external
+@view
+@nonreentrant("lock")
+def lp_price() -> uint256:
+    price_oracle: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
+    packed_prices: uint256 = self.price_oracle_packed
+    for k in range(N_COINS - 1):
+        price_oracle[k] = packed_prices & PRICE_MASK
+        packed_prices = shift(packed_prices, -PRICE_SIZE)
+    return (
+        3 * self.virtual_price *
+        Math(math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
+    )
+
+
+@external
+@view
+@nonreentrant("lock")
+def price_oracle(k: uint256) -> uint256:
+    price_oracle: uint256 = self._packed_view(k, self.price_oracle_packed)
+    last_prices_timestamp: uint256 = self.last_prices_timestamp
+
+    if last_prices_timestamp < block.timestamp:
+        last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
+        ma_time: uint256 = self.ma_time
+        alpha: uint256 = Math(math).wad_exp(
+            -convert(
+                (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
+                int256,
+            )
+        )
+        return (
+            last_prices * (10**18 - alpha) + price_oracle * alpha
+        ) / 10**18
+
+    return price_oracle
+
+
+@external
+@view
+def calc_token_fee(
+    amounts: uint256[N_COINS], xp: uint256[N_COINS]
+) -> uint256:
+    return self._calc_token_fee(amounts, xp)
+
+
+@external
+@view
+def price_scale(k: uint256) -> uint256:
+    return self._packed_view(k, self.price_scale_packed)
+
+
+@view
+@external
+def A() -> uint256:
+    return self._A_gamma()[0]
+
+
+@view
+@external
+def gamma() -> uint256:
+    return self._A_gamma()[1]
+
+
+@external
+@view
+def fee() -> uint256:
+    return self._fee(self.xp())
+
+
+@external
+@view
+def fee_calc(xp: uint256[N_COINS]) -> uint256:
+    return self._fee(xp)
+
+
+@external
+@view
+def last_prices(k: uint256) -> uint256:
+    return self._packed_view(k, self.last_prices_packed)
+
+
+@external
+@view
+def coins(i: uint256) -> address:
+    _coins: address[N_COINS] = coins
+    return _coins[i]
+
+
+@view
+@external
+def DOMAIN_SEPARATOR() -> bytes32:
+    """
+    @notice EIP712 domain separator.
+    """
+    return self._domain_separator()
+
+
+# ------------------------- AMM Admin Functions ------------------------------
+
+
 @external
 def ramp_A_gamma(
     future_A: uint256, future_gamma: uint256, future_time: uint256
@@ -1577,12 +1691,3 @@ def unkill_me():
 def set_admin_fee_receiver(_admin_fee_receiver: address):
     assert msg.sender == self.owner  # dev: only owner
     self.admin_fee_receiver = _admin_fee_receiver
-
-
-@view
-@external
-def DOMAIN_SEPARATOR() -> bytes32:
-    """
-    @notice EIP712 domain separator.
-    """
-    return self._domain_separator()
