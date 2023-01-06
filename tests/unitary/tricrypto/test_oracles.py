@@ -30,8 +30,13 @@ def norm(price_oracle, price_scale):
 
 def test_initial(tricrypto_swap_with_deposit):
     for i in range(2):
-        assert tricrypto_swap_with_deposit.price_scale(i) == INITIAL_PRICES[i]
-        assert tricrypto_swap_with_deposit.price_oracle(i) == INITIAL_PRICES[i]
+        assert (
+            tricrypto_swap_with_deposit.price_scale(i) == INITIAL_PRICES[i + 1]
+        )
+        assert (
+            tricrypto_swap_with_deposit.price_oracle(i)
+            == INITIAL_PRICES[i + 1]
+        )
 
 
 @given(
@@ -48,7 +53,7 @@ def test_last_price_exchange(
     if i == j:
         return
 
-    prices = [10**18] + INITIAL_PRICES
+    prices = INITIAL_PRICES
     amount = amount * 10**18 // prices[i]
     mint_for_testing(coins[i], user, amount)
 
@@ -93,7 +98,7 @@ def test_last_price_remove_liq(
     tricrypto_swap_with_deposit, tricrypto_lp_token, user, token_frac, i
 ):
 
-    prices = [10**18] + INITIAL_PRICES
+    prices = INITIAL_PRICES
     token_amount = token_frac * tricrypto_lp_token.totalSupply() // 10**18
 
     with boa.env.prank(user):
@@ -121,7 +126,7 @@ def test_ma(
     if i == j:
         return
 
-    prices1 = [10**18] + INITIAL_PRICES
+    prices1 = INITIAL_PRICES
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
     ma_time = tricrypto_swap_with_deposit.ma_time()
@@ -139,7 +144,7 @@ def test_ma(
 
     prices3 = [tricrypto_swap_with_deposit.price_oracle(k) for k in [0, 1]]
 
-    for p1, p2, p3 in zip(INITIAL_PRICES, prices2, prices3):
+    for p1, p2, p3 in zip(prices1[1:], prices2, prices3):
 
         if optimized:
             alpha = exp(-1 * t / ma_time)
@@ -166,7 +171,7 @@ def test_price_scale_range(
     if i == j:
         return
 
-    prices1 = [10**18] + INITIAL_PRICES
+    prices1 = INITIAL_PRICES
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
 
@@ -181,7 +186,7 @@ def test_price_scale_range(
 
     prices3 = [tricrypto_swap_with_deposit.price_scale(k) for k in [0, 1]]
 
-    for p1, p2, p3 in zip(INITIAL_PRICES, prices2, prices3):
+    for p1, p2, p3 in zip(prices1[1:], prices2, prices3):
         if p1 > p2:
             assert p3 <= p1 and p3 >= p2
         else:
@@ -201,7 +206,7 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     amount = 10**6 * 10**18
     t = 86400
 
-    prices1 = [10**18] + INITIAL_PRICES
+    prices1 = INITIAL_PRICES
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
 
@@ -258,3 +263,7 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
         tricrypto_swap_with_deposit.get_virtual_price(),
         1e-10,
     )
+
+
+def test_last_prices():
+    pass

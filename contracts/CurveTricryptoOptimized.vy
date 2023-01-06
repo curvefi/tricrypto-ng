@@ -54,6 +54,7 @@ event TokenExchange:
     tokens_sold: uint256
     bought_id: uint256
     tokens_bought: uint256
+    fee: uint256
 
 event AddLiquidity:
     provider: indexed(address)
@@ -71,6 +72,7 @@ event RemoveLiquidityOne:
     token_amount: uint256
     coin_index: uint256
     coin_amount: uint256
+    approx_fee: uint256
 
 event CommitNewAdmin:
     deadline: indexed(uint256)
@@ -114,6 +116,9 @@ event StopRampA:
 event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
+
+event AdjustPrices:
+    price_scale: uint256[N_COINS-1]
 
 
 N_COINS: constant(uint256) = 3
@@ -257,7 +262,7 @@ def __init__(
     self.adjustment_step = adjustment_step
     self.admin_fee = admin_fee
 
-    self.not_adjusted = 1
+    self.not_adjusted = 1  # anything less than 2 is False
 
     # Packing prices
     packed_prices: uint256 = 0
@@ -288,6 +293,8 @@ def __init__(
             salt,
         )
     )
+
+    # fire empty transfer for indexers
     log Transfer(empty(address), self, 0)
 
 
@@ -729,7 +736,7 @@ def tweak_price(
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     p_new: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
 
-    # ----------------------- Update MA if needed ----------------------------
+    # ------------- Get internal oracle and last prices ----------------------
 
     packed_prices: uint256 = self.price_oracle_packed
     for k in range(N_COINS - 1):
@@ -741,6 +748,8 @@ def tweak_price(
     for k in range(N_COINS - 1):
         last_prices[k] = packed_prices & PRICE_MASK
         packed_prices = shift(packed_prices, -PRICE_SIZE)
+
+    # ----------------------- Update MA if needed ----------------------------
 
     if last_prices_timestamp < block.timestamp:
         # update moving average:
@@ -787,7 +796,7 @@ def tweak_price(
                 last_prices[k] = last_prices[k] * 10**18 / p_i
     else:
 
-        # calculate real prices
+        # ------------------------ Calculate real prices ---------------------
         __xp: uint256[N_COINS] = _xp
         dx_price: uint256 = __xp[0] / 10**6
         __xp[0] += dx_price
@@ -808,7 +817,7 @@ def tweak_price(
     old_xcp_profit: uint256 = self.xcp_profit
     old_virtual_price: uint256 = self.virtual_price
 
-    # Update profit numbers without price adjustment first
+    # ------- Update profit numbers without price adjustment first -----------
     xp[0] = D_unadjusted / N_COINS
     for k in range(N_COINS - 1):
         xp[k + 1] = D_unadjusted * 10**18 / (N_COINS * price_scale[k])
@@ -836,7 +845,7 @@ def tweak_price(
         > xcp_profit + 2 * self.allowed_extra_profit
     ):
         needs_adjustment = 3
-        self.not_adjusted = 3  # 3 means True
+        self.not_adjusted = 3  # 3 means True (saves gas over bools)
 
     if needs_adjustment == 3:
 
@@ -866,11 +875,13 @@ def tweak_price(
             for k in range(N_COINS - 1):
                 xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
 
+            # check: K0_prev be used here?
             D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
             xp[0] = D / N_COINS
             for k in range(N_COINS - 1):
                 xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
 
+            # reuse old_virtual_price
             old_virtual_price = (
                 10**18 * Math(math).geometric_mean(xp) / total_supply
             )
@@ -886,13 +897,17 @@ def tweak_price(
                     p: uint256 = p_new[N_COINS - 2 - k]
                     assert p < PRICE_MASK
                     packed_prices = p | packed_prices
+
                 self.price_scale_packed = packed_prices
                 self.D = D
                 self.virtual_price = old_virtual_price
+
+                log AdjustPrices(p_new)
+
                 return
 
             else:
-                self.not_adjusted = 1
+                self.not_adjusted = 1  # anything less than 2 is (False).
 
     # If we are here, the price_scale adjustment did not happen
     # Still need to update the profit counter and D
@@ -970,7 +985,9 @@ def exchange(
         dy = dy * PRECISION / price_scale[j - 1]
     dy /= prec_j
 
-    dy -= self._fee(xp) * dy / 10**10
+    fee: uint256 = self._fee(xp) * dy / 10**10
+
+    dy -= fee
     assert dy >= min_dy, "Slippage"
     y -= dy
 
@@ -1012,7 +1029,7 @@ def exchange(
     # tweak price with good initial guess:
     self.tweak_price(A_gamma, xp, ix, p, 0, y_out[1])
 
-    log TokenExchange(msg.sender, i, dx, j, dy)
+    log TokenExchange(msg.sender, i, dx, j, dy, fee)
 
     return dy
 
@@ -1070,9 +1087,7 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
     xp[0] *= PRECISIONS[0]
     xp_old[0] *= PRECISIONS[0]
     for i in range(1, N_COINS):
-        price_scale: uint256 = (packed_prices & PRICE_MASK) * precisions[
-            i
-        ]  # * PRICE_PRECISION_MUL
+        price_scale: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
         xp[i] = xp[i] * price_scale / PRECISION
         xp_old[i] = xp_old[i] * price_scale / PRECISION
         packed_prices = shift(packed_prices, -PRICE_SIZE)
@@ -1106,9 +1121,11 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
     assert d_token > 0  # dev: nothing minted
 
     if old_D > 0:
+
         d_token_fee = (
             self._calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
         )
+
         d_token -= d_token_fee
         token_supply += d_token
         self.mint(msg.sender, d_token)
@@ -1200,7 +1217,7 @@ def _calc_withdraw_one_coin(
     i: uint256,
     update_D: bool,
     calc_price: bool,
-) -> (uint256, uint256, uint256, uint256[N_COINS], uint256):
+) -> (uint256, uint256, uint256, uint256[N_COINS], uint256, uint256):
     token_supply: uint256 = self.totalSupply
     assert token_amount <= token_supply  # dev: token amount more than supply
     assert i < N_COINS  # dev: coin out of range
@@ -1226,31 +1243,46 @@ def _calc_withdraw_one_coin(
 
     D: uint256 = D0
 
+    # -------------------------------- Fee Calc ------------------------------
     # Charge the fee on D, not on y, e.g. reducing invariant LESS than charging the user
     fee: uint256 = self._fee(xp)
     dD: uint256 = token_amount * D / token_supply
-    D -= (dD - (fee * dD / (2 * 10**10) + 1))
+
+    # approx fee (assuming balanced state) in ith token is:
+    D_fee: uint256 = fee * dD / (2 * 10**10) + 1
+    approx_fee: uint256 = N_COINS * D_fee * xx[i] / D
+
+    # D = D - D_fee
+    D -= (dD - D_fee)
+
+    # ------------------------------------------------------------------------
+
+    # calculate y_out with (D - D_fee)
     y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
     dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
     xp[i] = y_out[0]
 
-    # Price calc
+    # --------------------------------- Price calc ---------------------------
     p: uint256 = 0
     if calc_price and dy > 10**5 and token_amount > 10**5:
+
         # p_i = dD / D0 * sum'(p_k * x_k) / (dy - dD / D0 * y0)
         S: uint256 = 0
         precisions: uint256[N_COINS] = PRECISIONS
         last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
+
         packed_prices = self.last_prices_packed
         for k in range(N_COINS - 1):
             last_prices[k] = packed_prices & PRICE_MASK
             packed_prices = shift(packed_prices, -PRICE_SIZE)
+
         for k in range(N_COINS):
             if k != i:
                 if k == 0:
                     S += xx[0] * PRECISIONS[0]
                 else:
                     S += xx[k] * last_prices[k - 1] * precisions[k] / PRECISION
+
         S = S * dD / D0
         p = (
             S
@@ -1258,12 +1290,19 @@ def _calc_withdraw_one_coin(
             / (dy * precisions[i] - dD * xx[i] * precisions[i] / D0)
         )
 
-    return dy, p, D, xp, y_out[1]
+    return dy, p, D, xp, y_out[1], approx_fee
 
 
 @view
 @external
 def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
+    """
+    @notice Calculates output tokens with fee
+    @param token_amount LP Token amount to burn
+    @param i token in which liquidity is withdrawn
+    @returns Num received ith tokens
+    """
+
     return self._calc_withdraw_one_coin(
         self._A_gamma(), token_amount, i, True, False
     )[0]
@@ -1283,12 +1322,13 @@ def remove_liquidity_one_coin(
     p: uint256 = 0
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     K0_prev: uint256 = 0
+    approx_fee: uint256 = 0
 
     # ---------------------------------------------------------
     # TODO: Check the if statement in this section
 
     future_A_gamma_time: uint256 = self.future_A_gamma_time
-    dy, p, D, xp, K0_prev = self._calc_withdraw_one_coin(
+    dy, p, D, xp, K0_prev, approx_fee = self._calc_withdraw_one_coin(
         A_gamma, token_amount, i, (future_A_gamma_time > 0), True
     )
     assert dy >= min_amount, "Slippage"
@@ -1296,7 +1336,6 @@ def remove_liquidity_one_coin(
     if block.timestamp >= future_A_gamma_time and future_A_gamma_time > 1:
         self.future_A_gamma_time = 1  # consumes 20k gas!
     # ---------------------------------------------------------
-
 
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
@@ -1306,7 +1345,7 @@ def remove_liquidity_one_coin(
 
     self.tweak_price(A_gamma, xp, i, p, D, K0_prev)
 
-    log RemoveLiquidityOne(msg.sender, token_amount, i, dy)
+    log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
 
 
 @external

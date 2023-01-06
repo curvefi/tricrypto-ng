@@ -5,6 +5,7 @@ from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
 from tests.conftest import INITIAL_PRICES
+from tests.utils.checks import check_limits
 from tests.utils.tokens import mint_for_testing
 
 
@@ -25,7 +26,7 @@ class StatefulBase(RuleBasedStateMachine):
         self.swap_admin = self.swap.owner()
 
         self.decimals = [int(c.decimals()) for c in self.coins]
-        self.initial_prices = [10**18] + INITIAL_PRICES
+        self.initial_prices = INITIAL_PRICES
         self.initial_deposit = [
             10**4 * 10 ** (18 + d) // p
             for p, d in zip(self.initial_prices, self.decimals)
@@ -76,41 +77,10 @@ class StatefulBase(RuleBasedStateMachine):
         ]
 
     def check_limits(self, amounts, D=True, y=True):
-        """
-        Should be good if within limits, but if outside - can be either
-        """
         _D = self.swap.D()
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
         xp_0 = [self.swap.balances(i) for i in range(3)]
-        xp = xp_0
-        xp_0 = [
-            x * p // 10**d for x, p, d in zip(xp_0, prices, self.decimals)
-        ]
-        xp = [
-            (x + a) * p // 10**d
-            for a, x, p, d in zip(amounts, xp, prices, self.decimals)
-        ]
-
-        if D:
-            for _xp in [xp_0, xp]:
-                if (
-                    (min(_xp) * 10**18 // max(_xp) < 10**11)
-                    or (max(_xp) < 10**9 * 10**18)
-                    or (max(_xp) > 10**15 * 10**18)
-                ):
-                    return False
-
-        if y:
-            for _xp in [xp_0, xp]:
-                if (
-                    (_D < 10**17)
-                    or (_D > 10**15 * 10**18)
-                    or (min(_xp) * 10**18 // _D < 10**16)
-                    or (max(_xp) * 10**18 // _D > 10**20)
-                ):
-                    return False
-
-        return True
+        return check_limits(_D, prices, xp_0, self.decimals, amounts, D, y)
 
     @rule(
         exchange_amount_in=exchange_amount_in,

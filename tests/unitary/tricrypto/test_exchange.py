@@ -39,8 +39,7 @@ def test_exchange_all(
             tricrypto_swap_with_deposit.exchange(i, j, 10**6, 0)
 
     else:
-        prices = [10**18] + INITIAL_PRICES
-        amount = amount * 10**18 // prices[i]
+        amount = amount * 10**18 // INITIAL_PRICES[i]
         mint_for_testing(coins[i], user, amount)
 
         if not optimized:
@@ -87,8 +86,7 @@ def test_exchange_from_eth(
     optimized,
 ):
 
-    prices = [10**18] + INITIAL_PRICES
-    amount = amount * 10**18 // prices[2]
+    amount = amount * 10**18 // INITIAL_PRICES[2]
 
     if not optimized:
         calculated = tricrypto_swap_with_deposit.get_dy(2, j, amount)
@@ -134,8 +132,7 @@ def test_exchange_into_eth(
     optimized,
 ):
 
-    prices = [10**18] + INITIAL_PRICES
-    amount = amount * 10**18 // prices[i]
+    amount = amount * 10**18 // INITIAL_PRICES[i]
     mint_for_testing(coins[i], user, amount)
 
     if not optimized:

@@ -1,5 +1,6 @@
 import boa
 
+INITIAL_PRICES = [10**18, 47500 * 10**18, 1500 * 10**18]
 PARAMS = {
     "A": 135 * 3**3 * 10000,
     "gamma": int(7e-5 * 1e18),
@@ -10,17 +11,13 @@ PARAMS = {
     "adjustment_step": int(0.0015 * 1e18),
     "admin_fee": 5 * 10**9,
     "ma_time": 600,
+    "initial_prices": INITIAL_PRICES[1:],
 }
-INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
 
 
 def compile_swap_source_code(
-    coins, tricrypto_math, tricrypto_lp_token, tricrypto_views, optimized
+    coins, tricrypto_math, tricrypto_lp_token, tricrypto_views, optimized, path
 ):
-
-    path = "contracts/old/CurveCryptoSwap.vy"
-    if optimized:
-        path = "contracts/CurveTricryptoOptimized.vy"
 
     with open(path, "r") as f:
 
@@ -63,15 +60,16 @@ def compile_swap_source_code(
         return source
 
 
-def deploy(optimized: bool = True, params: dict = PARAMS):
+def deploy(
+    coins,
+    swap_contract="contracts/CurveTricryptoOptimized.vy",
+    optimized: bool = True,
+    params: dict = PARAMS,
+):
 
     deployer = boa.env.generate_address()
 
     with boa.env.prank(deployer):
-        eth = boa.load("contracts/mocks/WETH.vy")
-        usd = boa.load("contracts/mocks/ERC20Mock.vy", "USD", "USD", 18)
-        btc = boa.load("contracts/mocks/ERC20Mock.vy", "BTC", "BTC", 18)
-        coins = [usd, btc, eth]
 
         token = None
         if not optimized:
@@ -91,21 +89,23 @@ def deploy(optimized: bool = True, params: dict = PARAMS):
             views = boa.load("contracts/old/CurveCryptoViews3.vy", math)
 
         # tricrypto
-        source = compile_swap_source_code(coins, math, token, views, optimized)
+        source = compile_swap_source_code(
+            coins, math, token, views, optimized, swap_contract
+        )
         swap = boa.loads(
             source,
             boa.env.generate_address(),
             boa.env.generate_address(),
-            PARAMS["A"],
-            PARAMS["gamma"],
-            PARAMS["mid_fee"],
-            PARAMS["out_fee"],
-            PARAMS["allowed_extra_profit"],
-            PARAMS["fee_gamma"],
-            PARAMS["adjustment_step"],
-            PARAMS["admin_fee"],
-            PARAMS["ma_time"],
-            INITIAL_PRICES,
+            params["A"],
+            params["gamma"],
+            params["mid_fee"],
+            params["out_fee"],
+            params["allowed_extra_profit"],
+            params["fee_gamma"],
+            params["adjustment_step"],
+            params["admin_fee"],
+            params["ma_time"],
+            params["initial_prices"],
         )
         if not optimized:
             token.set_minter(swap.address)
@@ -120,7 +120,19 @@ def deploy(optimized: bool = True, params: dict = PARAMS):
 
 def main():
 
-    swap, token, math, views, _ = deploy(optimized=False)
+    with boa.env.prank(boa.env.generate_address()):
+        eth = boa.load("contracts/mocks/WETH.vy")
+        usd = boa.load("contracts/mocks/ERC20Mock.vy", "USD", "USD", 18)
+        btc = boa.load("contracts/mocks/ERC20Mock.vy", "BTC", "BTC", 18)
+    coins = [usd, btc, eth]
+
+    params = PARAMS
+    swap, token, math, views, _ = deploy(
+        coins=coins,
+        swap_contract="contracts/old/CurveCryptoSwap.vy",
+        optimized=False,
+        params=params,
+    )
 
     # print bytecode size
     print("OG Tricrypto Contract sizes:")
@@ -131,9 +143,13 @@ def main():
     total_size_og = sum(len(i.bytecode) for i in [swap, token, math])
     print(f"Total: {total_size_og}")
 
-    params = PARAMS
     params["ma_time"] = 866  # 600 / ln(2)
-    swap, token, math, views, _ = deploy(optimized=True, params=params)
+    swap, token, math, views, _ = deploy(
+        coins=coins,
+        swap_contract="contracts/CurveTricryptoOptimized.vy",
+        optimized=True,
+        params=params,
+    )
 
     # print bytecode size
     print("Optimized Contract sizes:")

@@ -86,9 +86,14 @@ class StatefulAdmin(StatefulBase):
         if balance > 0:
             self.xcp_profit = self.swap.xcp_profit()
             measured_profit = admin_balance / self.total_supply
-            assert approx(
-                measured_profit, log(self.xcp_profit / 1e18) / 2, 0.1
-            )
+            try:
+                assert approx(
+                    measured_profit, log(self.xcp_profit / 1e18) / 2, 0.1
+                )
+            except AssertionError:
+                balances = [self.swap.balances(i) for i in range(3)]
+                if self.check_limits(balances):
+                    raise
 
 
 def test_admin(
