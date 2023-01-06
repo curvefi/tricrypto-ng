@@ -117,6 +117,9 @@ event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
 
+event AdjustPrices:
+    price_scale: uint256[N_COINS-1]
+
 
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # The precision to convert to
@@ -872,6 +875,7 @@ def tweak_price(
             for k in range(N_COINS - 1):
                 xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
 
+            # check: K0_prev be used here?
             D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
             xp[0] = D / N_COINS
             for k in range(N_COINS - 1):
@@ -893,9 +897,13 @@ def tweak_price(
                     p: uint256 = p_new[N_COINS - 2 - k]
                     assert p < PRICE_MASK
                     packed_prices = p | packed_prices
+
                 self.price_scale_packed = packed_prices
                 self.D = D
                 self.virtual_price = old_virtual_price
+
+                log AdjustPrices(p_new)
+
                 return
 
             else:
