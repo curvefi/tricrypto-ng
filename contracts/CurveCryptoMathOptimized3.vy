@@ -500,38 +500,52 @@ def _newton_y(
     for j in range(N_COINS - 1):
         K0_i = K0_i * x_sorted[j] * N_COINS / D  # Large _x first
 
+    # initialise variables:
+    diff: uint256 = 0
+    y_prev: uint256 = 0
+    K0: uint256 = 0
+    S: uint256 = 0
+    _g1k0: uint256 = 0
+    mul1: uint256 = 0
+    mul2: uint256 = 0
+    yfprime: uint256 = 0
+    _dyfprime: uint256 = 0
+    fprime: uint256 = 0
+    y_minus: uint256 = 0
+    y_plus: uint256 = 0
+
     for j in range(255):
-        y_prev: uint256 = y
 
-        K0: uint256 = K0_i * y * N_COINS / D
-        S: uint256 = S_i + y
+        y_prev = y
 
-        _g1k0: uint256 = gamma + 10**18
+        K0 = K0_i * y * N_COINS / D
+        S = S_i + y
+
+        _g1k0 = gamma + 10**18
         if _g1k0 > K0:
             _g1k0 = _g1k0 - K0 + 1
         else:
             _g1k0 = K0 - _g1k0 + 1
 
-        mul1: uint256 = (
-            10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
-        )
+        mul1 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
 
         # 2*K0 / _g1k0
-        mul2: uint256 = 10**18 + (2 * 10**18) * K0 / _g1k0
+        mul2 = 10**18 + (2 * 10**18) * K0 / _g1k0
 
-        yfprime: uint256 = 10**18 * y + S * mul2 + mul1
-        _dyfprime: uint256 = D * mul2
+        yfprime = 10**18 * y + S * mul2 + mul1
+        _dyfprime = D * mul2
         if yfprime < _dyfprime:
             y = y_prev / 2
             continue
         else:
             yfprime -= _dyfprime
-        fprime: uint256 = yfprime / y
+
+        fprime = yfprime / y
 
         # y -= f / f_prime;  y = (y * fprime - f) / fprime
         # y = (yfprime + 10**18 * D - 10**18 * S) // fprime + mul1 // fprime * (10**18 - K0) // K0
-        y_minus: uint256 = mul1 / fprime
-        y_plus: uint256 = (
+        y_minus = mul1 / fprime
+        y_plus = (
             yfprime + 10**18 * D
         ) / fprime + y_minus * 10**18 / K0
         y_minus += 10**18 * S / fprime
@@ -541,17 +555,18 @@ def _newton_y(
         else:
             y = y_plus - y_minus
 
-        diff: uint256 = 0
         if y > y_prev:
             diff = y - y_prev
         else:
             diff = y_prev - y
+
         if diff < max(convergence_limit, y / 10**14):
             frac: uint256 = y * 10**18 / D
             assert (
                 frac > 10**16 - 1 and frac < 10**20 + 1
             ), "dev: unsafe value for y"
             return y
+
     raise "Did not converge"
 
 
@@ -629,12 +644,23 @@ def newton_D(
                     27,
                 )
             )
+
+    # initialise variables:
+    diff: uint256 = 0
+    K0: uint256 = 0
+    _g1k0: uint256 = 0
+    mul1: uint256 = 0
+    mul2: uint256 = 0
+    neg_fprime: uint256 = 0
+    D_plus: uint256 = 0
+    D_minus: uint256 = 0
+
     for i in range(255):
         D_prev: uint256 = D
 
         # 10**18 * x[0] * N_COINS / D * x[1] * N_COINS / D * x[2] * N_COINS / D
         # one safediv so D = 0 is handled.
-        K0: uint256 = unsafe_div(
+        K0 = unsafe_div(
             unsafe_mul(
                 unsafe_mul(
                     unsafe_div(
@@ -654,7 +680,7 @@ def newton_D(
             D,
         )
 
-        _g1k0: uint256 = gamma + 10**18
+        _g1k0 = gamma + 10**18
         if _g1k0 > K0:
             _g1k0 = _g1k0 - K0 + 1
         else:
@@ -663,7 +689,7 @@ def newton_D(
 
         # D / (A * N**N) * _g1k0**2 / gamma**2
         # 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
-        mul1: uint256 = unsafe_div(
+        mul1 = unsafe_div(
             unsafe_mul(
                 unsafe_mul(
                     unsafe_div(
@@ -681,12 +707,12 @@ def newton_D(
 
         # 2*N*K0 / _g1k0
         # (2 * 10**18) * N_COINS * K0 / _g1k0
-        mul2: uint256 = unsafe_div(
+        mul2 = unsafe_div(
             unsafe_mul(unsafe_mul(2 * 10**18, N_COINS), K0), _g1k0
         )
 
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
-        neg_fprime: uint256 = unsafe_sub(
+        neg_fprime = unsafe_sub(
             unsafe_add(
                 unsafe_add(S, unsafe_div(unsafe_mul(S, mul2), 10**18)),
                 unsafe_div(unsafe_mul(mul1, N_COINS), K0),
@@ -696,11 +722,11 @@ def newton_D(
 
         # D -= f / fprime
         # D * (neg_fprime + S) / neg_fprime
-        D_plus: uint256 = unsafe_div(
+        D_plus = unsafe_div(
             unsafe_mul(D, unsafe_add(neg_fprime, S)), neg_fprime
         )
         # D*D / neg_fprime
-        D_minus: uint256 = unsafe_div(unsafe_mul(D, D), neg_fprime)
+        D_minus = unsafe_div(unsafe_mul(D, D), neg_fprime)
         if 10**18 > K0:
             # D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
             D_minus += unsafe_div(
@@ -729,18 +755,18 @@ def newton_D(
         else:
             D = unsafe_div(unsafe_sub(D_minus, D_plus), 2)
 
-        diff: uint256 = 0
         if D > D_prev:
             diff = unsafe_sub(D, D_prev)
         else:
             diff = unsafe_sub(D_prev, D)
 
-        if unsafe_mul(diff, 10**14) < max(
-            10**16, D
-        ):  # Could reduce precision for gas efficiency here
+        # Could reduce precision for gas efficiency here:
+        if unsafe_mul(diff, 10**14) < max(10**16, D):
+
             # Test that we are safe with the next newton_y
             for _x in x:
                 frac: uint256 = unsafe_div(unsafe_mul(_x, 10**18), D)
                 assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
             return D
+
     raise "Did not converge"

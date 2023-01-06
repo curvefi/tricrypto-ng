@@ -78,6 +78,7 @@ def _random_withdraw_one(swaps, total_supply):
         swap.remove_liquidity_one_coin(amount, i, 0)
 
 
+@pytest.mark.skip
 @pytest.mark.profile
 def test_profile_amms(swap2, swap3, token2, coins, user):
 

@@ -8,7 +8,7 @@ pytest_plugins = [
     "tests.fixtures.tokens",
     "tests.fixtures.functions",
 ]
-INITIAL_PRICES = [47500 * 10**18, 1500 * 10**18]
+INITIAL_PRICES = [10**18, 47500 * 10**18, 1500 * 10**18]
 
 
 def pytest_addoption(parser):
@@ -46,6 +46,7 @@ def tricrypto_pool_init_params(optimized):
         "adjustment_step": int(0.0015 * 1e18),
         "admin_fee": 0,
         "ma_time": ma_time,
+        "initial_prices": INITIAL_PRICES[1:],
     }
 
 
@@ -140,7 +141,7 @@ def _crypto_swap(
             tricrypto_pool_init_params["adjustment_step"],
             tricrypto_pool_init_params["admin_fee"],
             tricrypto_pool_init_params["ma_time"],
-            INITIAL_PRICES,
+            tricrypto_pool_init_params["initial_prices"],
         )
         if not optimized:
             tricrypto_lp_token.set_minter(swap.address)
@@ -186,6 +187,7 @@ def tricrypto_views(
 ):
     if not optimized:
         return tricrypto_views_init
+
     # optimized views is just views with self.swap set up, hence we need to
     # deploy it AFTER swap is deployed
     with boa.env.prank(deployer):
@@ -203,11 +205,21 @@ def tricrypto_lp_token(tricrypto_swap, tricrypto_lp_token_init, optimized):
     return tricrypto_lp_token_init
 
 
-def _crypto_swap_with_deposit(coins, user, tricrypto_swap):
+def _get_deposit_amounts(amount_per_token_usd, initial_prices, coins):
+
+    precisions = [10 ** coin.decimals() for coin in coins]
+
+    deposit_amounts = [
+        amount_per_token_usd * precision * 10**18 // price
+        for price, precision in zip(initial_prices, precisions)
+    ]
+    return deposit_amounts
+
+
+def _crypto_swap_with_deposit(coins, user, tricrypto_swap, initial_prices):
+
     # add 1M of each token to the pool
-    quantities = [
-        10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES
-    ]  # $3M worth
+    quantities = _get_deposit_amounts(10**6, initial_prices, coins)
 
     for coin, quantity in zip(coins, quantities):
         # mint coins for user:
@@ -227,4 +239,6 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap):
 
 @pytest.fixture(scope="module")
 def tricrypto_swap_with_deposit(tricrypto_swap, coins, user):
-    yield _crypto_swap_with_deposit(coins, user, tricrypto_swap)
+    yield _crypto_swap_with_deposit(
+        coins, user, tricrypto_swap, INITIAL_PRICES
+    )

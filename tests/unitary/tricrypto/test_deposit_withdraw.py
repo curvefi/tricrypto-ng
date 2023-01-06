@@ -13,9 +13,7 @@ def test_1st_deposit_and_last_withdraw(
     tricrypto_swap, coins, tricrypto_lp_token, user
 ):
 
-    quantities = [
-        10**36 // p for p in [10**18] + INITIAL_PRICES
-    ]  # $3 worth
+    quantities = [10**36 // p for p in INITIAL_PRICES]  # $3 worth
 
     for coin, q in zip(coins, quantities):
         mint_for_testing(coin, user, q)
@@ -57,9 +55,7 @@ def test_second_deposit(
     optimized,
 ):
 
-    amounts = [
-        v * 10**18 // p for v, p in zip(values, [10**18] + INITIAL_PRICES)
-    ]
+    amounts = [v * 10**18 // p for v, p in zip(values, INITIAL_PRICES)]
 
     # get simmed D value here:
     xp = [10**6 * 10**18] * 3  # initial D
@@ -134,7 +130,7 @@ def test_second_deposit_one(
 ):
 
     amounts = [0] * 3
-    amounts[i] = value * 10**18 // ([10**18] + INITIAL_PRICES)[i]
+    amounts[i] = value * 10**18 // (INITIAL_PRICES)[i]
     mint_for_testing(coins[i], user, amounts[i])
 
     calculated = tricrypto_views.calc_token_amount(amounts, True)
@@ -269,7 +265,7 @@ def test_immediate_withdraw_one(
             # Check if it could fall into unsafe region here
             frac = (
                 (d_balances[i] - calculated)
-                * ([10**18] + INITIAL_PRICES)[i]
+                * (INITIAL_PRICES)[i]
                 // tricrypto_swap_with_deposit.D()
             )
 

@@ -19,5 +19,5 @@ pytest-logging
 pdbpp
 
 # vyper and dev framework:
-git+https://github.com/bout3fiddy/titanoboa@eb0d849955fbde6b97d5a2841c11ae4fe7d1f853
+git+https://github.com/vyperlang/titanoboa
 vyper==0.3.7

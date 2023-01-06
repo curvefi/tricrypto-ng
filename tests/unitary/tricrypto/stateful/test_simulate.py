@@ -95,13 +95,12 @@ class StatefulSimulation(StatefulBase):
                 / (self.trader.xcp_profit - 10**18)
                 < 0.05
             )
+        precision = 0.001
         for i in range(2):
-            precision = 0.001
             diff = abs(
                 log(self.trader.curve.p[i + 1] / self.swap.price_scale(i))
             )
             if not diff <= precision:
-                breakpoint()
                 assert diff <= precision
 
 
