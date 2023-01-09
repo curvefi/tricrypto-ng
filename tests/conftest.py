@@ -11,31 +11,10 @@ pytest_plugins = [
 INITIAL_PRICES = [10**18, 47500 * 10**18, 1500 * 10**18]
 
 
-def pytest_addoption(parser):
-    parser.addoption("--optimized", action="store", default="True")
-
-
-@pytest.fixture(scope="session")
-def optimized(request):
-    return request.config.getoption("--optimized") == "True"
-
-
-@pytest.fixture(scope="module", autouse=True)
-def tricrypto_lp_token_init(deployer):
-    with boa.env.prank(deployer):
-        return boa.load(
-            "contracts/old/CurveTokenV4.vy",
-            "Curve USD-BTC-ETH",
-            "crvUSDBTCETH",
-        )
-
-
 @pytest.fixture(scope="module")
-def tricrypto_pool_init_params(optimized):
-    ma_time = 600  # 10 minutes
-    if optimized:
-        ma_time = 866  # 600 / ln(2)
+def tricrypto_pool_init_params():
 
+    ma_time = 866  # 600 / ln(2)
     return {
         "A": 135 * 3**3 * 10000,
         "gamma": int(7e-5 * 1e18),
@@ -51,17 +30,9 @@ def tricrypto_pool_init_params(optimized):
 
 
 @pytest.fixture(scope="module")
-def tricrypto_math(deployer, optimized):
-    if optimized:
-        with boa.env.prank(deployer):
-            return boa.load("contracts/CurveCryptoMathOptimized3.vy")
-    return boa.load("contracts/old/CurveCryptoMath3.vy")
-
-
-@pytest.fixture(scope="module")
-def tricrypto_views_init(deployer, tricrypto_math):
+def tricrypto_math(deployer):
     with boa.env.prank(deployer):
-        return boa.load("contracts/old/CurveCryptoViews3.vy", tricrypto_math)
+        return boa.load("contracts/CurveCryptoMathOptimized3.vy")
 
 
 def _compiled_swap(
