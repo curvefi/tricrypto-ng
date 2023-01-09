@@ -56,6 +56,29 @@ def __init__(math: address, swap: address):
     self.swap = swap
 
 
+@internal
+@view
+def _calc_D_ramp(
+    A: uint256,
+    gamma: uint256,
+    xp: uint256[N_COINS],
+    precisions: uint256[N_COINS],
+    price_scale: uint256[N_COINS - 1]
+) -> uint256:
+
+    D: uint256 = Curve(self.swap).D()
+    if Curve(self.swap).future_A_gamma_time() > 0:
+        _xp: uint256[N_COINS] = xp
+        _xp[0] *= precisions[0]
+        for k in range(N_COINS - 1):
+            _xp[k + 1] = (
+                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
+            )
+        D = Math(self.math).newton_D(A, gamma, _xp, 0)
+
+    return D
+
+
 @external
 @view
 def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
@@ -73,15 +96,7 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
 
     A: uint256 = Curve(self.swap).A()
     gamma: uint256 = Curve(self.swap).gamma()
-    D: uint256 = Curve(self.swap).D()
-    if Curve(self.swap).future_A_gamma_time() > 0:
-        _xp: uint256[N_COINS] = xp
-        _xp[0] *= precisions[0]
-        for k in range(N_COINS - 1):
-            _xp[k + 1] = (
-                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
-            )
-        D = Math(self.math).newton_D(A, gamma, _xp, 0)
+    D: uint256 = self._calc_D_ramp(A, gamma, xp, precisions, price_scale)
 
     xp[i] += dx
     xp[0] *= precisions[0]
@@ -114,15 +129,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
 
     A: uint256 = Curve(self.swap).A()
     gamma: uint256 = Curve(self.swap).gamma()
-    D0: uint256 = Curve(self.swap).D()
-    if Curve(self.swap).future_A_gamma_time() > 0:
-        _xp: uint256[N_COINS] = xp
-        _xp[0] *= precisions[0]
-        for k in range(N_COINS - 1):
-            _xp[k + 1] = (
-                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
-            )
-        D0 = Math(self.math).newton_D(A, gamma, _xp, 0)
+    D0: uint256 = self._calc_D_ramp(A, gamma, xp, precisions, price_scale)
 
     amountsp: uint256[N_COINS] = amounts
     if deposit:
@@ -131,6 +138,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     else:
         for k in range(N_COINS):
             xp[k] -= amounts[k]
+
     xp[0] *= precisions[0]
     amountsp[0] *= precisions[0]
     for k in range(N_COINS - 1):
@@ -140,11 +148,14 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
 
     D: uint256 = Math(self.math).newton_D(A, gamma, xp, 0)
     d_token: uint256 = token_supply * D / D0
+
     if deposit:
         d_token -= token_supply
     else:
         d_token = token_supply - d_token
+
     d_token -= (
         Curve(self.swap).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
     )
+
     return d_token

@@ -605,7 +605,10 @@ def _claim_admin_fees():
     # Gulp here
     _coins: address[N_COINS] = coins
     for i in range(N_COINS):
-        self.balances[i] = ERC20(_coins[i]).balanceOf(self)
+        if i == 2:
+            self.balances[i] = self.balance  # since i == 2 is eth
+        else:
+            self.balances[i] = ERC20(_coins[i]).balanceOf(self)
 
     vprice: uint256 = self.virtual_price
 
@@ -830,15 +833,15 @@ def tweak_price(
 
 @internal
 def _exchange(
-    sender: address, 
-    mvalue: uint256, 
-    i: uint256, 
-    j: uint256, 
-    dx: uint256, 
+    sender: address,
+    mvalue: uint256,
+    i: uint256,
+    j: uint256,
+    dx: uint256,
     min_dy: uint256,
-    use_eth: bool, 
-    receiver: address, 
-    callbacker: address, 
+    use_eth: bool,
+    receiver: address,
+    callbacker: address,
     callback_sig: bytes32
 ) -> uint256:
 
@@ -875,7 +878,7 @@ def _exchange(
     prec_i: uint256 = precisions[i]
 
     # ----------- Update invariant if parameter are undergoing ramps ---------
-    
+
     t: uint256 = self.future_A_gamma_time
     if t > 0:
         x0 *= prec_i
@@ -894,7 +897,7 @@ def _exchange(
     y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
     dy = xp[j] - y_out[0]
 
-    # Not defining new "y" here to have less variables / make subsequent calls 
+    # Not defining new "y" here to have less variables / make subsequent calls
     # cheaper
     xp[j] -= dy
     dy -= 1
@@ -913,27 +916,55 @@ def _exchange(
 
     # ---------------------- Do Transfers in and out -------------------------
 
+    # TRANSFER IN <-------
     if i == 2 and use_eth:
         assert mvalue == dx  # dev: incorrect eth amount
-        WETH(coins[2]).deposit(value=mvalue)
     else:
         assert mvalue == 0  # dev: nonzero eth amount
-        # assert might be needed for some tokens - removed one to save bytespace
-        ERC20(_coins[i]).transferFrom(sender, self, dx)
 
-    # assert might be needed for some tokens - removed one to save bytespace
+        # regardless of i, check if caller is invoking a callback:
+        if callback_sig == empty(bytes32):
+
+            assert ERC20(_coins[i]).transferFrom(
+                sender, self, dx, default_return_value=True
+            )
+
+        else:
+
+            # First call callback logic and then check if pool gets dx
+            # amounts of _coins[i], revert otherwise:
+            b: uint256 = ERC20(_coins[i]).balanceOf(self)
+            raw_call(
+                callbacker,
+                concat(
+                    slice(callback_sig, 0, 4),
+                    _abi_encode(sender, receiver, _coins[i], dx, dy)
+                )
+            )
+            assert ERC20(_coins[i]).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+
+        # if weth was transferred in previous step and `not use_eth`,
+        # withdraw weth to eth:
+        if i == 2:
+            WETH(coins[2]).withdraw(dx)
+
+    # -------> TRANSFER OUT
     if j == 2 and use_eth:
-        WETH(coins[2]).withdraw(dy)
-        raw_call(msg.sender, b"", value=dy)
-    else:
-        ERC20(_coins[j]).transfer(msg.sender, dy)
+        raw_call(receiver, b"", value=dy)
 
+    else:
+        if j == 2:
+            WETH(_coins[j]).deposit(value=dy)
+
+        assert ERC20(_coins[j]).transfer(receiver, dy, default_return_value=True)
+
+    # --------------------- Calculate and adjust prices ----------------------
+
+    # update xp
     y *= prec_j
     if j > 0:
         y = y * price_scale[j - 1] / PRECISION
     xp[j] = y
-
-    # --------------------- Calculate and adjust prices ----------------------
 
     if dx > 10**5 and dy > 10**5:
         _dx: uint256 = dx * prec_i
@@ -961,7 +992,7 @@ def _exchange(
 
     # ------------------------------------------------------------------------
 
-    log TokenExchange(msg.sender, i, dx, j, dy, fee)
+    log TokenExchange(sender, i, dx, j, dy, fee)
 
     return dy
 
@@ -1019,7 +1050,8 @@ def _calc_withdraw_one_coin(
     D: uint256 = D0
 
     # -------------------------------- Fee Calc ------------------------------
-    # Charge the fee on D, not on y, e.g. reducing invariant LESS than charging the user
+    # Charge the fee on D, not on y, e.g. reducing invariant LESS than
+    # charging the user
     fee: uint256 = self._fee(xp)
     dD: uint256 = token_amount * D / token_supply
 
@@ -1075,26 +1107,26 @@ def _calc_withdraw_one_coin(
 @external
 @nonreentrant("lock")
 def exchange(
-    i: uint256, 
-    j: uint256, 
-    dx: uint256, 
+    i: uint256,
+    j: uint256,
+    dx: uint256,
     min_dy: uint256,
-    use_eth: bool = False, 
+    use_eth: bool = False,
     receiver: address = msg.sender
 ) -> uint256:
     """
     Exchange using WETH by default
     """
     return self._exchange(
-        msg.sender, 
-        msg.value, 
-        i, 
-        j, 
-        dx, 
-        min_dy, 
-        use_eth, 
-        receiver, 
-        empty(address), 
+        msg.sender,
+        msg.value,
+        i,
+        j,
+        dx,
+        min_dy,
+        use_eth,
+        receiver,
+        empty(address),
         empty(bytes32)
     )
 
@@ -1103,9 +1135,9 @@ def exchange(
 @external
 @nonreentrant('lock')
 def exchange_underlying(
-    i: uint256, 
-    j: uint256, 
-    dx: uint256, 
+    i: uint256,
+    j: uint256,
+    dx: uint256,
     min_dy: uint256,
     receiver: address = msg.sender
 ) -> uint256:
@@ -1113,15 +1145,15 @@ def exchange_underlying(
     Exchange using ETH
     """
     return self._exchange(
-        msg.sender, 
-        msg.value, 
-        i, 
-        j, 
-        dx, 
-        min_dy, 
-        True, 
-        receiver, 
-        empty(address), 
+        msg.sender,
+        msg.value,
+        i,
+        j,
+        dx,
+        min_dy,
+        True,
+        receiver,
+        empty(address),
         empty(bytes32)
     )
 
@@ -1130,13 +1162,13 @@ def exchange_underlying(
 @external
 @nonreentrant('lock')
 def exchange_extended(
-    i: uint256, 
-    j: uint256, 
-    dx: uint256, 
-    min_dy: uint256, 
-    use_eth: bool, 
-    sender: address, 
-    receiver: address, 
+    i: uint256,
+    j: uint256,
+    dx: uint256,
+    min_dy: uint256,
+    use_eth: bool,
+    sender: address,
+    receiver: address,
     cb: bytes32
 ) -> uint256:
 
@@ -1146,15 +1178,19 @@ def exchange_extended(
     )
 
 
+@payable
 @external
 @nonreentrant("lock")
-def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
+def add_liquidity(
+    amounts: uint256[N_COINS],
+    min_mint_amount: uint256,
+    use_eth: bool = False,
+    receiver: address = msg.sender
+) -> uint256:
     assert not self.is_killed  # dev: the pool is killed
 
     A_gamma: uint256[2] = self._A_gamma()
-
     _coins: address[N_COINS] = coins
-
     xp: uint256[N_COINS] = self.balances
     amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
     xx: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -1162,6 +1198,8 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
     d_token_fee: uint256 = 0
     old_D: uint256 = 0
     ix: uint256 = INF_COINS
+
+    # --------------------- Get prices, balances -----------------------------
 
     xp_old: uint256[N_COINS] = xp
     for i in range(N_COINS):
@@ -1180,16 +1218,31 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
         xp_old[i] = xp_old[i] * price_scale / PRECISION
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
+    # --------------------- Transfers ----------------------------------------
+
+    if not use_eth:
+        assert msg.value == 0  # dev: nonzero eth amount
+
     for i in range(N_COINS):
+
+        coin: address =_coins[i]
+        if use_eth and i == 2:  # ETH is at 2nd index
+            assert msg.value == amounts[i]  # dev: incorrect eth amount
+
         if amounts[i] > 0:
-            # assert might be needed for some tokens - removed one to save bytespace
-            ERC20(_coins[i]).transferFrom(msg.sender, self, amounts[i])
+            assert ERC20(_coins[i]).transferFrom(
+                msg.sender, self, amounts[i], default_return_value=True
+            )
+
             amountsp[i] = xp[i] - xp_old[i]
             if ix == INF_COINS:
                 ix = i
             else:
                 ix = INF_COINS - 1
+
     assert ix != INF_COINS  # dev: no coins to add
+
+    # -------------------- Calculate LP tokens to mint -----------------------
 
     t: uint256 = self.future_A_gamma_time
     if t > 0:
@@ -1216,7 +1269,7 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
 
         d_token -= d_token_fee
         token_supply += d_token
-        self.mint(msg.sender, d_token)
+        self.mint(receiver, d_token)
 
         # Calculate price
         # p_i * (dx_i - dtoken / token_supply * xx_i) = sum{k!=i}(p_k * (dtoken / token_supply * xx_k - dx_k))
@@ -1262,61 +1315,73 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
         self.D = D
         self.virtual_price = 10**18
         self.xcp_profit = 10**18
-        self.mint(msg.sender, d_token)
+        self.mint(receiver, d_token)
 
     assert d_token >= min_mint_amount, "Slippage"
 
-    log AddLiquidity(msg.sender, amounts, d_token_fee, token_supply)
+    log AddLiquidity(receiver, amounts, d_token_fee, token_supply)
+
+    return d_token
 
 
 @external
 @nonreentrant("lock")
-def remove_liquidity(_amount: uint256, min_amounts: uint256[N_COINS]):
+def remove_liquidity(
+    _amount: uint256,
+    min_amounts: uint256[N_COINS],
+    use_eth: bool = False,
+    receiver: address = msg.sender
+):
     """
-    This withdrawal method is very safe, does no complex math
+    @notice Safe withdrawal method is very safe, does no complex math since
+            tokens are withdrawn in balanced proportions. No fees are charged.
     """
     _coins: address[N_COINS] = coins
     total_supply: uint256 = self.totalSupply
     self.burnFrom(msg.sender, _amount)
     balances: uint256[N_COINS] = self.balances
-    amount: uint256 = (
-        _amount - 1
-    )  # Make rounding errors favoring other LPs a tiny bit
+
+    # Make rounding errors favoring other LPs a tiny bit
+    amount: uint256 = _amount - 1
 
     for i in range(N_COINS):
         d_balance: uint256 = balances[i] * amount / total_supply
         assert d_balance >= min_amounts[i]
         self.balances[i] = balances[i] - d_balance
         balances[i] = d_balance  # now it's the amounts going out
-        # assert might be needed for some tokens - removed one to save bytespace
-        ERC20(_coins[i]).transfer(msg.sender, d_balance)
 
+        # ----- Transfers -----
+        if use_eth and i == 2:
+            raw_call(receiver, b"", value=d_balance)
+        else:
+            if i == 2:
+                WETH(_coins[i]).deposit(value=d_balance)
+
+            assert ERC20(_coins[i]).transfer(
+                receiver, d_balance, default_return_value=True
+            )
+
+    # reduce D proportional to the amount of tokens leaving
+    # since withdrawals are balanced, this is a simple subtraction
     D: uint256 = self.D
     self.D = D - D * amount / total_supply
 
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
 
 
-@view
-@external
-def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
-    """
-    @notice Calculates output tokens with fee
-    @param token_amount LP Token amount to burn
-    @param i token in which liquidity is withdrawn
-    @returns Num received ith tokens
-    """
-
-    return self._calc_withdraw_one_coin(
-        self._A_gamma(), token_amount, i, True, False
-    )[0]
-
-
 @external
 @nonreentrant("lock")
 def remove_liquidity_one_coin(
-    token_amount: uint256, i: uint256, min_amount: uint256
-):
+    token_amount: uint256,
+    i: uint256,
+    min_amount: uint256,
+    use_eth: bool = False,
+    receiver: address = msg.sender
+) -> uint256:
+    """
+    @notice Withdraw liquidity in a single token. Involves fees.
+    """
+
     assert not self.is_killed  # dev: the pool is killed
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -1329,7 +1394,6 @@ def remove_liquidity_one_coin(
     approx_fee: uint256 = 0
 
     # ---------------------------------------------------------
-    # TODO: Check the if statement in this section
 
     future_A_gamma_time: uint256 = self.future_A_gamma_time
     dy, p, D, xp, K0_prev, approx_fee = self._calc_withdraw_one_coin(
@@ -1339,17 +1403,27 @@ def remove_liquidity_one_coin(
 
     if block.timestamp >= future_A_gamma_time and future_A_gamma_time > 1:
         self.future_A_gamma_time = 1  # consumes 20k gas!
+
     # ---------------------------------------------------------
 
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
-    _coins: address[N_COINS] = coins
-    # assert might be needed for some tokens - removed one to save bytespace
-    ERC20(_coins[i]).transfer(msg.sender, dy)
+    _coin: address = coins[i]
+
+    if use_eth and i == 2: # ETH withdrawal
+        raw_call(receiver, b"", value=dy)
+    else:
+        if i == 2:
+            WETH(_coin).deposit(value=dy)
+        assert ERC20(_coin).transfer(
+            receiver, dy, default_return_value=True
+        )
 
     self.tweak_price(A_gamma, xp, i, p, D, K0_prev)
 
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
+
+    return dy
 
 
 @external
@@ -1408,10 +1482,8 @@ def price_oracle(k: uint256) -> uint256:
 
 @external
 @view
-def calc_token_fee(
-    amounts: uint256[N_COINS], xp: uint256[N_COINS]
-) -> uint256:
-    return self._calc_token_fee(amounts, xp)
+def last_prices(k: uint256) -> uint256:
+    return self._packed_view(k, self.last_prices_packed)
 
 
 @external
@@ -1422,14 +1494,25 @@ def price_scale(k: uint256) -> uint256:
 
 @view
 @external
-def A() -> uint256:
-    return self._A_gamma()[0]
+def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
+    """
+    @notice Calculates output tokens with fee
+    @param token_amount LP Token amount to burn
+    @param i token in which liquidity is withdrawn
+    @returns Num received ith tokens
+    """
+
+    return self._calc_withdraw_one_coin(
+        self._A_gamma(), token_amount, i, True, False
+    )[0]
 
 
-@view
 @external
-def gamma() -> uint256:
-    return self._A_gamma()[1]
+@view
+def calc_token_fee(
+    amounts: uint256[N_COINS], xp: uint256[N_COINS]
+) -> uint256:
+    return self._calc_token_fee(amounts, xp)
 
 
 @external
@@ -1446,12 +1529,6 @@ def fee_calc(xp: uint256[N_COINS]) -> uint256:
 
 @external
 @view
-def last_prices(k: uint256) -> uint256:
-    return self._packed_view(k, self.last_prices_packed)
-
-
-@external
-@view
 def coins(i: uint256) -> address:
     _coins: address[N_COINS] = coins
     return _coins[i]
@@ -1464,6 +1541,18 @@ def DOMAIN_SEPARATOR() -> bytes32:
     @notice EIP712 domain separator.
     """
     return self._domain_separator()
+
+
+@view
+@external
+def A() -> uint256:
+    return self._A_gamma()[0]
+
+
+@view
+@external
+def gamma() -> uint256:
+    return self._A_gamma()[1]
 
 
 # ------------------------- AMM Admin Functions ------------------------------
