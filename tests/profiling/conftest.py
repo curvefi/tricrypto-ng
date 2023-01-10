@@ -1,7 +1,7 @@
 import boa
 import pytest
 
-from tests.conftest import INITIAL_PRICES
+from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
 

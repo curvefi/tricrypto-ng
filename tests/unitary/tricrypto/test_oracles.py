@@ -6,7 +6,7 @@ import boa
 from boa.test import strategy
 from hypothesis import given, settings
 
-from tests.conftest import INITIAL_PRICES
+from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 1000, "deadline": None}

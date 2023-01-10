@@ -1,7 +1,6 @@
 # @version 0.3.7
-
 # (c) Curve.Fi, 2021
-# Pool for USDT/BTC/ETH or similar
+# Pool for 3 coin unpegged assets (ETH, BTC, USD)
 
 from vyper.interfaces import ERC20
 
@@ -122,13 +121,13 @@ WETH20: immutable(address)
 
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # The precision to convert to
+PRECISIONS: immutable(uint256)  # precisions of coins (18 - coin.decimals())
 A_MULTIPLIER: constant(uint256) = 10000
 
 # These addresses are replaced by the deployer
-math: public(address)
-coins: public(address[N_COINS])
+math: public(immutable(address))
+coins: public(immutable(address[N_COINS]))
 factory: public(address)
-precisions: uint256[N_COINS]
 
 price_scale_packed: uint256  # Internal price scale
 price_oracle_packed: uint256  # Price target given by MA
@@ -137,15 +136,17 @@ last_prices_packed: uint256
 last_prices_timestamp: public(uint256)
 
 initial_A_gamma: public(uint256)
-future_A_gamma: public(uint256)
 initial_A_gamma_time: public(uint256)
+
+future_A_gamma: public(uint256)
 future_A_gamma_time: public(uint256)
 
+balances: public(uint256[N_COINS])
+D: public(uint256)
+
+# params that affect how price_scale get adjusted:
 allowed_extra_profit: public(uint256)  # 2 * 10**12 - recommended value
 future_allowed_extra_profit: public(uint256)
-
-fee_gamma: public(uint256)
-future_fee_gamma: public(uint256)
 
 adjustment_step: public(uint256)
 future_adjustment_step: public(uint256)
@@ -153,30 +154,25 @@ future_adjustment_step: public(uint256)
 ma_time: public(uint256)
 future_ma_time: public(uint256)
 
-mid_fee: public(uint256)
-out_fee: public(uint256)
-admin_fee: public(uint256)
-future_mid_fee: public(uint256)
-future_out_fee: public(uint256)
-future_admin_fee: public(uint256)
+xcp_profit: public(uint256)
+xcp_profit_a: public(uint256)  # Full profit at last claim of admin fees
+virtual_price: public(uint256)  # Cached (fast to read) virtual price also used internally
+not_adjusted: uint256  # was bool, but uints are much cheaper to deal with
 
-balances: public(uint256[N_COINS])
-D: public(uint256)
+# fee params that determine dynamic fees
+fee_params: uint256  # mid_fee, out_fee, fee_gamma
+future_fee_params: uint256  # mid_fee, out_fee, fee_gamma
+
+# admin params
+admin_fee: public(uint256)
+future_admin_fee: public(uint256)
 
 owner: public(address)
 future_owner: public(address)
 
-xcp_profit: public(uint256)
-xcp_profit_a: public(uint256)  # Full profit at last claim of admin fees
-virtual_price: public(uint256)  # Cached (fast to read) virtual price also used internally
-not_adjusted: uint256
-
-is_killed: public(bool)
-kill_deadline: public(uint256)
 transfer_ownership_deadline: public(uint256)
 admin_actions_deadline: public(uint256)
 
-KILL_DEADLINE_DT: constant(uint256) = 2 * 30 * 86400
 ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
 MIN_RAMP_TIME: constant(uint256) = 86400
 
@@ -196,8 +192,8 @@ PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 INF_COINS: constant(uint256) = 15
 
 # erc20 implementation vars
-name: public(constant(String[64])) = "Curve.fi USDT-BTC-ETH"
-symbol: public(constant(String[32])) = "crv3crypto2"
+name: public(immutable(String[64]))
+symbol: public(immutable(String[32]))
 decimals: public(constant(uint8)) = 18
 version: public(constant(String[8])) = "1"
 
@@ -213,19 +209,55 @@ EIP2612_TYPEHASH: constant(bytes32) = keccak256(
     "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
 )
 VERSION_HASH: constant(bytes32) = keccak256(version)
-NAME_HASH: constant(bytes32) = keccak256(name)
+NAME_HASH: immutable(bytes32)
 CACHED_CHAIN_ID: immutable(uint256)
 salt: public(immutable(bytes32))
 CACHED_DOMAIN_SEPARATOR: immutable(bytes32)
 
 
 @external
-def __init__(_weth: address, _math: address):
-    WETH20 = _weth
-    self.mid_fee = 22022022
+def __init__(
+    _name: String[64],
+    _symbol: String[32],
+    _coins: address[N_COINS],
+    _math: address,
+    _weth: address,
+    packed_precisions: uint256,
+    packed_A_gamma: uint256,
+    packed_fee_params: uint256,
+    allowed_extra_profit: uint256,
+    adjustment_step: uint256,
+    admin_fee: uint256,
+    ma_time: uint256,
+    packed_prices: uint256,
+):
 
-    self.math = _math
+    self.factory = msg.sender
 
+    name = _name
+    symbol = _symbol
+    coins = _coins
+    math = _math
+    PRECISIONS = packed_precisions
+
+    self.initial_A_gamma = packed_A_gamma
+    self.future_A_gamma = packed_A_gamma
+
+    self.allowed_extra_profit = allowed_extra_profit
+    self.adjustment_step = adjustment_step
+    self.fee_params = packed_fee_params
+    self.admin_fee = admin_fee
+
+    self.not_adjusted = 1  # < 2 is False, > 2 is True
+
+    self.price_scale_packed = packed_prices
+    self.price_oracle_packed = packed_prices
+    self.last_prices_packed = packed_prices
+    self.last_prices_timestamp = block.timestamp
+    self.ma_time = ma_time
+    self.xcp_profit_a = 10**18
+
+    NAME_HASH = keccak256(name)
     salt = block.prevhash
     CACHED_CHAIN_ID = chain.id
     CACHED_DOMAIN_SEPARATOR = keccak256(
@@ -238,6 +270,10 @@ def __init__(_weth: address, _math: address):
             salt,
         )
     )
+    WETH20 = _weth
+
+    # fire empty transfer from 0x0 to self for indexers to catch
+    log Transfer(empty(address), self, 0)
 
 
 @payable
@@ -413,7 +449,7 @@ def permit(
     )
     assert ecrecover(digest, _v, _r, _s) == _owner, "dev: invalid signature"
 
-    self.nonces[_owner] = nonce + 1
+    self.nonces[_owner] = unsafe_add(nonce, 1)  # we can unsafely add by 1 here
     self._approve(_owner, _spender, _value)
     return True
 
@@ -468,6 +504,21 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 
 @internal
 @view
+def _unpack(_packed: uint256) -> uint256[3]:
+    """
+    @notice Unpacks a uint256 into 3 uint256 with max value of 10**18
+    @param val The uint256 to unpack
+    @return The unpacked uint256[3]
+    """
+    return [
+        shift(_packed, -128) & 18446744073709551615,
+        shift(_packed, -64) & 18446744073709551615,
+        _packed & 18446744073709551615,
+    ]
+
+
+@internal
+@view
 def _packed_view(k: uint256, p: uint256) -> uint256:
     assert k < N_COINS - 1
     return shift(p, -PRICE_SIZE * convert(k, int256)) & PRICE_MASK
@@ -478,10 +529,11 @@ def _packed_view(k: uint256, p: uint256) -> uint256:
 def xp() -> uint256[N_COINS]:
     result: uint256[N_COINS] = self.balances
     packed_prices: uint256 = self.price_scale_packed
+    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
 
-    result[0] *= self.precisions[0]
+    result[0] *= precisions[0]
     for i in range(1, N_COINS):
-        p: uint256 = (packed_prices & PRICE_MASK) * self.precisions[i]
+        p: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
         result[i] = result[i] * p / PRECISION
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
@@ -516,8 +568,9 @@ def _A_gamma() -> uint256[2]:
 @internal
 @view
 def _fee(xp: uint256[N_COINS]) -> uint256:
-    f: uint256 = Math(self.math).reduction_coefficient(xp, self.fee_gamma)
-    return (self.mid_fee * f + self.out_fee * (10**18 - f)) / 10**18
+    fee_params: uint256[3] = self._unpack(self.fee_params)
+    f: uint256 = Math(math).reduction_coefficient(xp, fee_params[2])
+    return (fee_params[0] * f + fee_params[1] * (10**18 - f)) / 10**18
 
 
 @internal
@@ -532,7 +585,7 @@ def get_xcp(D: uint256) -> uint256:
         x[i] = D * 10**18 / (N_COINS * (packed_prices & PRICE_MASK))
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
-    return Math(self.math).geometric_mean(x)
+    return Math(math).geometric_mean(x)
 
 
 @internal
@@ -544,10 +597,10 @@ def _claim_admin_fees():
 
     # Gulp here
     for i in range(N_COINS):
-        if self.coins[i] == WETH20:
+        if coins[i] == WETH20:
             self.balances[i] = self.balance
         else:
-            self.balances[i] = ERC20(self.coins[i]).balanceOf(self)
+            self.balances[i] = ERC20(coins[i]).balanceOf(self)
 
     vprice: uint256 = self.virtual_price
 
@@ -567,7 +620,7 @@ def _claim_admin_fees():
     total_supply: uint256 = self.totalSupply
 
     # Recalculate D b/c we gulped
-    D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
+    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
     self.D = D
 
     self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
@@ -609,7 +662,7 @@ def tweak_price(
     if last_prices_timestamp < block.timestamp:
         # update moving average:
         ma_time: uint256 = self.ma_time
-        alpha: uint256 = Math(self.math).wad_exp(
+        alpha: uint256 = Math(math).wad_exp(
             -convert(
                 (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
                 int256,
@@ -633,7 +686,7 @@ def tweak_price(
 
     D_unadjusted: uint256 = new_D  # Withdrawal methods know new D already
     if new_D == 0:
-        D_unadjusted = Math(self.math).newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
+        D_unadjusted = Math(math).newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
 
     packed_prices = self.price_scale_packed
     for k in range(N_COINS - 1):
@@ -657,7 +710,7 @@ def tweak_price(
         __xp[0] += dx_price
         y_out: uint256[2] = empty(uint256[2])
         for k in range(N_COINS - 1):
-            y_out = Math(self.math).get_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k + 1)
+            y_out = Math(math).get_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k + 1)
             last_prices[k] = price_scale[k] * dx_price / (_xp[k + 1] - y_out[0])
 
     packed_prices = 0
@@ -681,7 +734,7 @@ def tweak_price(
     virtual_price: uint256 = 10**18
 
     if old_virtual_price > 0:
-        xcp: uint256 = Math(self.math).geometric_mean(xp)
+        xcp: uint256 = Math(math).geometric_mean(xp)
         virtual_price = 10**18 * xcp / total_supply
         xcp_profit = old_xcp_profit * virtual_price / old_virtual_price
 
@@ -735,14 +788,14 @@ def tweak_price(
                 xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
 
             # check: K0_prev be used here?
-            D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
+            D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
             xp[0] = D / N_COINS
             for k in range(N_COINS - 1):
                 xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
 
             # reuse old_virtual_price
             old_virtual_price = (
-                10**18 * Math(self.math).geometric_mean(xp) / total_supply
+                10**18 * Math(math).geometric_mean(xp) / total_supply
             )
 
             # --------- Proceed if we've got enough profit -------------------
@@ -789,7 +842,6 @@ def _exchange(
     callback_sig: bytes32
 ) -> uint256:
 
-    assert not self.is_killed  # dev: the pool is killed
     assert i != j  # dev: coin index out of range
     assert i < N_COINS  # dev: coin index out of range
     assert j < N_COINS  # dev: coin index out of range
@@ -797,6 +849,7 @@ def _exchange(
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
+    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
     ix: uint256 = j
     p: uint256 = 0
     dy: uint256 = 0
@@ -812,11 +865,11 @@ def _exchange(
         price_scale[k] = packed_prices & PRICE_MASK
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
-    xp[0] *= self.precisions[0]
+    xp[0] *= precisions[0]
     for k in range(1, N_COINS):
-        xp[k] = xp[k] * price_scale[k - 1] * self.precisions[k] / PRECISION
+        xp[k] = xp[k] * price_scale[k - 1] * precisions[k] / PRECISION
 
-    prec_i: uint256 = self.precisions[i]
+    prec_i: uint256 = precisions[i]
 
     # ----------- Update invariant if A, gamma are undergoing ramps ---------
 
@@ -827,15 +880,15 @@ def _exchange(
             x0 = x0 * price_scale[i - 1] / PRECISION
         x1: uint256 = xp[i]  # Back up old value in xp
         xp[i] = x0
-        self.D = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+        self.D = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
         xp[i] = x1  # And restore
         if block.timestamp >= t:
             self.future_A_gamma_time = 1
 
     # ----------------------- Calculate dy and fees --------------------------
 
-    prec_j: uint256 = self.precisions[j]
-    y_out: uint256[2] = Math(self.math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
+    prec_j: uint256 = precisions[j]
+    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
     dy = xp[j] - y_out[0]
 
     # Not defining new "y" here to have less variables / make subsequent calls
@@ -858,7 +911,7 @@ def _exchange(
     # ---------------------- Do Transfers in and out -------------------------
 
     # TRANSFER IN <-------
-    if use_eth and self.coins[i] == WETH20:
+    if use_eth and coins[i] == WETH20:
         assert mvalue == dx  # dev: incorrect eth amount
     else:
         assert mvalue == 0  # dev: nonzero eth amount
@@ -866,37 +919,35 @@ def _exchange(
         # regardless of i, check if caller is invoking a callback:
         if callback_sig == empty(bytes32):
 
-            assert ERC20(self.coins[i]).transferFrom(
-                sender, self, dx, default_return_value=True
-            )
+            assert ERC20(coins[i]).transferFrom(sender, self, dx, default_return_value=True)
 
         else:
 
             # First call callback logic and then check if pool gets dx
             # amounts of _coins[i], revert otherwise:
-            b: uint256 = ERC20(self.coins[i]).balanceOf(self)
+            b: uint256 = ERC20(coins[i]).balanceOf(self)
             raw_call(
                 callbacker,
                 concat(
                     slice(callback_sig, 0, 4),
-                    _abi_encode(sender, receiver, self.coins[i], dx, dy)
+                    _abi_encode(sender, receiver, coins[i], dx, dy)
                 )
             )
-            assert ERC20(self.coins[i]).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+            assert ERC20(coins[i]).balanceOf(self) - b == dx  # dev: callback didn't give us coins
 
         # if weth was transferred in previous step and `not use_eth`,
         # withdraw weth to eth:
-        if self.coins[i] == WETH20:
+        if coins[i] == WETH20:
             WETH(WETH20).withdraw(dx)
 
     # -------> TRANSFER OUT
     if j == 2 and use_eth:
         raw_call(receiver, b"", value=dy)
     else:
-        if self.coins[j] == WETH20:
+        if coins[j] == WETH20:
             WETH(WETH20).deposit(value=dy)
 
-        assert ERC20(self.coins[j]).transfer(receiver, dy, default_return_value=True)
+        assert ERC20(coins[j]).transfer(receiver, dy, default_return_value=True)
 
     # --------------------- Calculate and adjust prices ----------------------
 
@@ -974,10 +1025,11 @@ def _calc_withdraw_one_coin(
     assert i < N_COINS  # dev: coin out of range
 
     xx: uint256[N_COINS] = self.balances
-    xp: uint256[N_COINS] = self.precisions
+    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
+    xp: uint256[N_COINS] = precisions
     D0: uint256 = 0
 
-    price_scale_i: uint256 = PRECISION * self.precisions[0]
+    price_scale_i: uint256 = PRECISION * precisions[0]
     packed_prices: uint256 = self.price_scale_packed
     xp[0] *= xx[0]
     for k in range(1, N_COINS):
@@ -988,7 +1040,7 @@ def _calc_withdraw_one_coin(
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if update_D:
-        D0 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+        D0 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
     else:
         D0 = self.D
 
@@ -1010,7 +1062,7 @@ def _calc_withdraw_one_coin(
     # ------------------------------------------------------------------------
 
     # calculate y_out with (D - D_fee)
-    y_out: uint256[2] = Math(self.math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
+    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
     dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
     xp[i] = y_out[0]
 
@@ -1030,15 +1082,15 @@ def _calc_withdraw_one_coin(
         for k in range(N_COINS):
             if k != i:
                 if k == 0:
-                    S += xx[0] * self.precisions[0]
+                    S += xx[0] * precisions[0]
                 else:
-                    S += xx[k] * last_prices[k - 1] * self.precisions[k] / PRECISION
+                    S += xx[k] * last_prices[k - 1] * precisions[k] / PRECISION
 
         S = S * dD / D0
         p = (
             S
             * PRECISION
-            / (dy * self.precisions[i] - dD * xx[i] * self.precisions[i] / D0)
+            / (dy * precisions[i] - dD * xx[i] * precisions[i] / D0)
         )
 
     return dy, p, D, xp, y_out[1], approx_fee
@@ -1131,7 +1183,6 @@ def add_liquidity(
     use_eth: bool = False,
     receiver: address = msg.sender
 ) -> uint256:
-    assert not self.is_killed  # dev: the pool is killed
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
@@ -1152,10 +1203,11 @@ def add_liquidity(
     xx = xp
 
     packed_prices: uint256 = self.price_scale_packed
-    xp[0] *= self.precisions[0]
-    xp_old[0] *= self.precisions[0]
+    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
+    xp[0] *= precisions[0]
+    xp_old[0] *= precisions[0]
     for i in range(1, N_COINS):
-        price_scale: uint256 = (packed_prices & PRICE_MASK) * self.precisions[i]
+        price_scale: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
         xp[i] = xp[i] * price_scale / PRECISION
         xp_old[i] = xp_old[i] * price_scale / PRECISION
         packed_prices = shift(packed_prices, -PRICE_SIZE)
@@ -1167,15 +1219,16 @@ def add_liquidity(
 
     for i in range(N_COINS):
 
-        if use_eth and self.coins[i] == WETH20:
+        if use_eth and coins[i] == WETH20:
             assert msg.value == amounts[i]  # dev: incorrect eth amount
 
         if amounts[i] > 0:
-            assert ERC20(self.coins[i]).transferFrom(
+
+            assert ERC20(coins[i]).transferFrom(
                 msg.sender, self, amounts[i], default_return_value=True
             )
-
             amountsp[i] = xp[i] - xp_old[i]
+
             if ix == INF_COINS:
                 ix = i
             else:
@@ -1187,13 +1240,13 @@ def add_liquidity(
 
     t: uint256 = self.future_A_gamma_time
     if t > 0:
-        old_D = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
+        old_D = Math(math).newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
         if block.timestamp >= t:
             self.future_A_gamma_time = 1
     else:
         old_D = self.D
 
-    D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
 
     token_supply: uint256 = self.totalSupply
     if old_D > 0:
@@ -1232,12 +1285,12 @@ def add_liquidity(
                 for i in range(N_COINS):
                     if i != ix:
                         if i == 0:
-                            S += xx[0] * self.precisions[0]
+                            S += xx[0] * precisions[0]
                         else:
                             S += (
                                 xx[i]
                                 * last_prices[i - 1]
-                                * self.precisions[i]
+                                * precisions[i]
                                 / PRECISION
                             )
                 S = S * d_token / token_supply
@@ -1245,8 +1298,8 @@ def add_liquidity(
                     S
                     * PRECISION
                     / (
-                        amounts[ix] * self.precisions[ix]
-                        - d_token * xx[ix] * self.precisions[ix] / token_supply
+                        amounts[ix] * precisions[ix]
+                        - d_token * xx[ix] * precisions[ix] / token_supply
                     )
                 )
 
@@ -1299,7 +1352,7 @@ def remove_liquidity(
             if i == 2:
                 WETH(WETH20).deposit(value=d_balance)
 
-            assert ERC20(self.coins[i]).transfer(
+            assert ERC20(coins[i]).transfer(
                 receiver, d_balance, default_return_value=True
             )
 
@@ -1323,8 +1376,6 @@ def remove_liquidity_one_coin(
     """
     @notice Withdraw liquidity in a single token. Involves fees.
     """
-
-    assert not self.is_killed  # dev: the pool is killed
 
     A_gamma: uint256[2] = self._A_gamma()
 
@@ -1356,7 +1407,7 @@ def remove_liquidity_one_coin(
     else:
         if i == 2:
             WETH(WETH20).deposit(value=dy)
-        assert ERC20(self.coins[i]).transfer(
+        assert ERC20(coins[i]).transfer(
             receiver, dy, default_return_value=True
         )
 
@@ -1396,7 +1447,7 @@ def lp_price() -> uint256:
 
     return (
         3 * self.virtual_price *
-        Math(self.math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
+        Math(math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
     )
 
 
@@ -1410,7 +1461,7 @@ def price_oracle(k: uint256) -> uint256:
     if last_prices_timestamp < block.timestamp:
         last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
         ma_time: uint256 = self.ma_time
-        alpha: uint256 = Math(self.math).wad_exp(
+        alpha: uint256 = Math(math).wad_exp(
             -convert(
                 (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
                 int256,
@@ -1549,10 +1600,8 @@ def stop_ramp_A_gamma():
 
 @external
 def commit_new_parameters(
-    _new_mid_fee: uint256,
-    _new_out_fee: uint256,
+    _new_packed_fee_params: uint256,
     _new_admin_fee: uint256,
-    _new_fee_gamma: uint256,
     _new_allowed_extra_profit: uint256,
     _new_adjustment_step: uint256,
     _new_ma_time: uint256,
@@ -1560,32 +1609,32 @@ def commit_new_parameters(
     assert msg.sender == self.owner  # dev: only owner
     assert self.admin_actions_deadline == 0  # dev: active action
 
-    new_mid_fee: uint256 = _new_mid_fee
-    new_out_fee: uint256 = _new_out_fee
     new_admin_fee: uint256 = _new_admin_fee
-    new_fee_gamma: uint256 = _new_fee_gamma
+    fee_params: uint256[3] = self._unpack(_new_packed_fee_params)
     new_allowed_extra_profit: uint256 = _new_allowed_extra_profit
     new_adjustment_step: uint256 = _new_adjustment_step
     new_ma_time: uint256 = _new_ma_time
 
     # ----------------------------- Set fee params ---------------------------
 
-    if new_out_fee < MAX_FEE + 1:
-        assert new_out_fee > MIN_FEE - 1  # dev: fee is out of range
-    else:
-        new_out_fee = self.out_fee
+    current_fee_params: uint256[3] = self._unpack(self.fee_params)
 
-    if new_mid_fee > MAX_FEE:
-        new_mid_fee = self.mid_fee
-    assert new_mid_fee <= new_out_fee  # dev: mid-fee is too high
+    if fee_params[1] < MAX_FEE + 1:
+        assert fee_params[1] > MIN_FEE - 1  # dev: fee is out of range
+    else:
+        fee_params[1] = current_fee_params[1]
+
+    if fee_params[0] > MAX_FEE:
+        fee_params[0] = current_fee_params[0]
+    assert fee_params[0] <= fee_params[1]  # dev: mid-fee is too high
+
+    if fee_params[2] < 10**18:
+        assert fee_params[2] > 0  # dev: fee_gamma out of range [1 .. 10**18]
+    else:
+        fee_params[2] = current_fee_params[2]
 
     if new_admin_fee > MAX_ADMIN_FEE:
         new_admin_fee = self.admin_fee
-
-    if new_fee_gamma < 10**18:
-        assert new_fee_gamma > 0  # dev: fee_gamma out of range [1 .. 10**18]
-    else:
-        new_fee_gamma = self.fee_gamma
 
     # ----------------- Set liquidity rebalancing parameters -----------------
 
@@ -1603,9 +1652,9 @@ def commit_new_parameters(
     self.admin_actions_deadline = _deadline
 
     self.future_admin_fee = new_admin_fee
-    self.future_mid_fee = new_mid_fee
-    self.future_out_fee = new_out_fee
-    self.future_fee_gamma = new_fee_gamma
+
+    self.future_fee_params = _new_packed_fee_params
+
     self.future_allowed_extra_profit = new_allowed_extra_profit
     self.future_adjustment_step = new_adjustment_step
     self.future_ma_time = new_ma_time
@@ -1613,9 +1662,9 @@ def commit_new_parameters(
     log CommitNewParameters(
         _deadline,
         new_admin_fee,
-        new_mid_fee,
-        new_out_fee,
-        new_fee_gamma,
+        fee_params[0],
+        fee_params[1],
+        fee_params[2],
         new_allowed_extra_profit,
         new_adjustment_step,
         new_ma_time,
@@ -1636,12 +1685,9 @@ def apply_new_parameters():
         self._claim_admin_fees()
         self.admin_fee = admin_fee
 
-    mid_fee: uint256 = self.future_mid_fee
-    self.mid_fee = mid_fee
-    out_fee: uint256 = self.future_out_fee
-    self.out_fee = out_fee
-    fee_gamma: uint256 = self.future_fee_gamma
-    self.fee_gamma = fee_gamma
+    fee: uint256 = self.future_fee_params
+    self.fee_params = fee
+
     allowed_extra_profit: uint256 = self.future_allowed_extra_profit
     self.allowed_extra_profit = allowed_extra_profit
     adjustment_step: uint256 = self.future_adjustment_step
@@ -1649,11 +1695,13 @@ def apply_new_parameters():
     ma_time: uint256 = self.future_ma_time
     self.ma_time = ma_time
 
+    fee_params: uint256[3] = self._unpack(fee)
+
     log NewParameters(
         admin_fee,
-        mid_fee,
-        out_fee,
-        fee_gamma,
+        fee_params[0],
+        fee_params[1],
+        fee_params[2],
         allowed_extra_profit,
         adjustment_step,
         ma_time,
@@ -1664,75 +1712,3 @@ def apply_new_parameters():
 def revert_new_parameters():
     assert msg.sender == self.owner  # dev: only owner
     self.admin_actions_deadline = 0
-
-
-@external
-def kill_me():
-    assert msg.sender == self.owner  # dev: only owner
-    assert self.kill_deadline > block.timestamp  # dev: deadline has passed
-    self.is_killed = True
-
-
-@external
-def unkill_me():
-    assert msg.sender == self.owner  # dev: only owner
-    self.is_killed = False
-
-
-# ------------------------------ Initialize pool -----------------------------
-
-@external
-def initialize(
-    A: uint256,
-    gamma: uint256,
-    mid_fee: uint256,
-    out_fee: uint256,
-    allowed_extra_profit: uint256,
-    fee_gamma: uint256,
-    adjustment_step: uint256,
-    admin_fee: uint256,
-    ma_time: uint256,
-    initial_prices: uint256[N_COINS-1],
-    _coins: address[N_COINS],
-    _precisions: uint256[N_COINS],
-):
-    assert self.mid_fee == 0  # dev: check that we call it from factory
-
-    self.factory = msg.sender
-    self.coins = _coins
-    self.precisions = _precisions
-
-    # Pack A and gamma:
-    # shifted A + gamma
-    A_gamma: uint256 = shift(A, 128)
-    A_gamma = A_gamma | gamma
-    self.initial_A_gamma = A_gamma
-    self.future_A_gamma = A_gamma
-
-    self.mid_fee = mid_fee
-    self.out_fee = out_fee
-    self.allowed_extra_profit = allowed_extra_profit
-    self.fee_gamma = fee_gamma
-    self.adjustment_step = adjustment_step
-    self.admin_fee = admin_fee
-
-    self.not_adjusted = 1  # anything less than 2 is False
-
-    # Packing prices
-    packed_prices: uint256 = 0
-    for k in range(N_COINS - 1):
-        packed_prices = shift(packed_prices, PRICE_SIZE)
-        p: uint256 = initial_prices[N_COINS - 2 - k]
-        assert p < PRICE_MASK
-        packed_prices = p | packed_prices
-
-    self.price_scale_packed = packed_prices
-    self.price_oracle_packed = packed_prices
-    self.last_prices_packed = packed_prices
-    self.last_prices_timestamp = block.timestamp
-    self.ma_time = ma_time
-    self.xcp_profit_a = 10**18
-    self.kill_deadline = block.timestamp + KILL_DEADLINE_DT
-
-    # fire empty transfer from 0x0 to self for indexers to catch
-    log Transfer(empty(address), self, 0)

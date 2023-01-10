@@ -9,20 +9,6 @@
 
 interface TricryptoPool:
     def balances(i: uint256) -> uint256: view
-    def initialize(
-        A: uint256,
-        gamma: uint256,
-        mid_fee: uint256,
-        out_fee: uint256,
-        allowed_extra_profit: uint256,
-        fee_gamma: uint256,
-        adjustment_step: uint256,
-        admin_fee: uint256,
-        ma_half_time: uint256,
-        initial_price: uint256,
-        _coins: address[N_COINS],
-        _precisions: uint256[N_COINS],
-    ): nonpayable
 
 interface ERC20:
     def decimals() -> uint256: view
@@ -41,8 +27,8 @@ event TricryptoPoolDeployed:
     fee_gamma: uint256
     adjustment_step: uint256
     admin_fee: uint256
-    ma_half_time: uint256
-    initial_price: uint256
+    ma_exp_time: uint256
+    initial_prices: uint256[N_COINS-1]
     deployer: address
 
 event LiquidityGaugeDeployed:
@@ -60,6 +46,14 @@ event UpdatePoolImplementation:
 event UpdateGaugeImplementation:
     _old_gauge_implementation: address
     _new_gauge_implementation: address
+
+event UpdateViewsImplementation:
+    _old_views_implementation: address
+    _new_Views_implementation: address
+
+event UpdateMathImplementation:
+    _old_math_implementation: address
+    _new_math_implementation: address
 
 event TransferOwnership:
     _old_owner: address
@@ -87,9 +81,10 @@ MAX_GAMMA: constant(uint256) = 2 * 10 ** 16
 MIN_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER / 10
 MAX_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER * 100000
 
+PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
+PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
 WETH: immutable(address)
-
 
 admin: public(address)
 future_admin: public(address)
@@ -99,8 +94,8 @@ fee_receiver: public(address)
 
 pool_implementation: public(address)
 gauge_implementation: public(address)
-
-views: public(address)
+views_implementation: public(address)
+math_implementation: public(address)
 
 # mapping of coins -> pools for trading
 # a mapping key is generated for each pair of addresses via
@@ -116,26 +111,23 @@ pool_list: public(address[4294967296])   # master list of pools
 @external
 def __init__(
     _fee_receiver: address,
-    _pool_implementation: address,
-    _gauge_implementation: address,
-    _math: address,
-    _views: address,
-    _weth: address
+    _admin: address,
+    _weth: address,
 ):
-    self.fee_receiver = _fee_receiver
-
-    self.pool_implementation = _pool_implementation
-    self.gauge_implementation = _gauge_implementation
-
-    self.views = _views
-
-    self.admin = msg.sender
     WETH = _weth
 
+    self.fee_receiver = _fee_receiver
+    self.admin = _admin
+
     log UpdateFeeReceiver(empty(address), _fee_receiver)
-    log UpdatePoolImplementation(empty(address), _pool_implementation)
-    log UpdateGaugeImplementation(empty(address), _gauge_implementation)
-    log TransferOwnership(empty(address), msg.sender)
+    log TransferOwnership(empty(address), _admin)
+
+
+@internal
+@view
+def _pack_integers(x: uint256[3]) -> uint256:
+    return shift(x[0], 128) | shift(x[1], 64) | x[2]
+
 
 
 # <--- Pool Deployers --->
@@ -154,7 +146,7 @@ def deploy_pool(
     adjustment_step: uint256,
     admin_fee: uint256,
     ma_exp_time: uint256,
-    initial_price: uint256
+    initial_prices: uint256[N_COINS-1],
 ) -> address:
     """
     @notice Deploy a new pool
@@ -163,6 +155,8 @@ def deploy_pool(
     Other parameters need some description
     @return Address of the deployed pool
     """
+    assert self.pool_implementation != empty(address), "Pool implementation not set"
+
     # Validate parameters
     assert A > MIN_A-1
     assert A < MAX_A+1
@@ -180,11 +174,14 @@ def deploy_pool(
     assert adjustment_step > 0
     assert ma_exp_time < 872542  # 7 * 24 * 60 * 60 / ln(2)
     assert ma_exp_time > 0
-    assert initial_price > 10**6
-    assert initial_price < 10**30
+    assert min(initial_prices[0], initial_prices[1]) > 10**6
+    assert max(initial_prices[0], initial_prices[1]) < 10**30
     assert _coins[0] != _coins[1], "Duplicate coins"
     assert _coins[1] != _coins[2], "Duplicate coins"
     assert _coins[0] != _coins[2], "Duplicate coins"
+
+    name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
+    symbol: String[32] = concat(_symbol, "-f")
 
     decimals: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -194,28 +191,45 @@ def deploy_pool(
         decimals[i] = d
         precisions[i] = 18 - d
 
+    # pack precisions
+    packed_precisions: uint256 = self._pack_integers(precisions)
 
-    name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
-    symbol: String[32] = concat(_symbol, "-f")
+    # pack fees
+    packed_fee_params: uint256 = self._pack_integers(
+        [mid_fee, out_fee, fee_gamma]
+    )
+
+    # pack A_gamma
+    packed_A_gamma: uint256 = shift(A, 128)
+    packed_A_gamma = packed_A_gamma | gamma
+
+    # pack initial prices
+    packed_prices: uint256 = 0
+    for k in range(N_COINS - 1):
+        packed_prices = shift(packed_prices, PRICE_SIZE)
+        p: uint256 = initial_prices[N_COINS - 2 - k]
+        assert p < PRICE_MASK
+        packed_prices = p | packed_prices
 
     # pool is an ERC20 implementation
-    pool: address = create_forwarder_to(self.pool_implementation)
-
-    TricryptoPool(pool).initialize(
-        A,
-        gamma,
-        mid_fee,
-        out_fee,
+    pool: address = create_from_blueprint(
+        self.pool_implementation,
+        _name,
+        _symbol,
+        _coins,
+        self.math_implementation,
+        WETH,
+        packed_precisions,
+        packed_A_gamma,
+        packed_fee_params,
         allowed_extra_profit,
-        fee_gamma,
         adjustment_step,
         admin_fee,
         ma_exp_time,
-        initial_price,
-        _coins,
-        precisions
+        packed_prices,
     )
 
+    # populate pool data
     length: uint256 = self.pool_count
     self.pool_list[length] = pool
     self.pool_count = length + 1
@@ -229,9 +243,8 @@ def deploy_pool(
             if coin_a == coin_b:
                 continue
 
-            key: uint256 = bitwise_xor(
-                convert(coin_a, uint256),
-                convert(coin_b, uint256)
+            key: uint256 = (
+                convert(coin_a, uint256) ^ convert(coin_b, uint256)
             )
 
             length = self.market_counts[key]
@@ -249,7 +262,7 @@ def deploy_pool(
         adjustment_step,
         admin_fee,
         ma_exp_time,
-        initial_price,
+        initial_prices,
         msg.sender
     )
 
@@ -265,8 +278,12 @@ def deploy_gauge(_pool: address) -> address:
     """
     assert self.pool_data[_pool].coins[0] != empty(address), "Unknown pool"
     assert self.pool_data[_pool].liquidity_gauge == empty(address), "Gauge already deployed"
+    assert self.gauge_implementation != empty(address), "Gauge implementation not set"
 
-    gauge: address = create_forwarder_to(self.gauge_implementation)
+    gauge: address = create_from_blueprint(
+        self.gauge_implementation, _pool
+    )
+
     token: address = self.pool_data[_pool].token
     LiquidityGauge(gauge).initialize(token)
     self.pool_data[_pool].liquidity_gauge = gauge
@@ -314,6 +331,32 @@ def set_gauge_implementation(_gauge_implementation: address):
 
     log UpdateGaugeImplementation(self.gauge_implementation, _gauge_implementation)
     self.gauge_implementation = _gauge_implementation
+
+
+@external
+def set_views_implementation(_views_implementation: address):
+    """
+    @notice Set views implementation
+    @dev Set to empty(address) to prevent deployment of new pools
+    @param _views_contract Address of the new views contract
+    """
+    assert msg.sender == self.admin  # dev: admin only
+
+    log UpdateViewsImplementation(self.views_implementation, _views_implementation)
+    self.views_implementation = _views_implementation
+
+
+@external
+def set_math_implementation(_math_implementation: address):
+    """
+    @notice Set views implementation
+    @dev Set to empty(address) to prevent deployment of new pools
+    @param _views_contract Address of the new views contract
+    """
+    assert msg.sender == self.admin  # dev: admin only
+
+    log UpdateMathImplementation(self.math_implementation, _math_implementation)
+    self.math_implementation = _math_implementation
 
 
 @external

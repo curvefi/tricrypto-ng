@@ -4,7 +4,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
-from tests.conftest import INITIAL_PRICES
+from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.checks import check_limits
 from tests.utils.tokens import mint_for_testing
 

@@ -2,7 +2,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.conftest import INITIAL_PRICES
+from tests.fixtures.pool import INITIAL_PRICES
 from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
 from tests.utils.tokens import mint_for_testing
 
