@@ -47,10 +47,6 @@ event UpdateGaugeImplementation:
     _old_gauge_implementation: address
     _new_gauge_implementation: address
 
-event UpdateViewsImplementation:
-    _old_views_implementation: address
-    _new_Views_implementation: address
-
 event UpdateMathImplementation:
     _old_math_implementation: address
     _new_math_implementation: address
@@ -94,7 +90,6 @@ fee_receiver: public(address)
 
 pool_implementation: public(address)
 gauge_implementation: public(address)
-views_implementation: public(address)
 math_implementation: public(address)
 
 # mapping of coins -> pools for trading
@@ -227,6 +222,7 @@ def deploy_pool(
         admin_fee,
         ma_exp_time,
         packed_prices,
+        code_offset=3
     )
 
     # populate pool data
@@ -281,7 +277,7 @@ def deploy_gauge(_pool: address) -> address:
     assert self.gauge_implementation != empty(address), "Gauge implementation not set"
 
     gauge: address = create_from_blueprint(
-        self.gauge_implementation, _pool
+        self.gauge_implementation, _pool, code_offset=3
     )
 
     token: address = self.pool_data[_pool].token
@@ -334,24 +330,10 @@ def set_gauge_implementation(_gauge_implementation: address):
 
 
 @external
-def set_views_implementation(_views_implementation: address):
-    """
-    @notice Set views implementation
-    @dev Set to empty(address) to prevent deployment of new pools
-    @param _views_contract Address of the new views contract
-    """
-    assert msg.sender == self.admin  # dev: admin only
-
-    log UpdateViewsImplementation(self.views_implementation, _views_implementation)
-    self.views_implementation = _views_implementation
-
-
-@external
 def set_math_implementation(_math_implementation: address):
     """
-    @notice Set views implementation
-    @dev Set to empty(address) to prevent deployment of new pools
-    @param _views_contract Address of the new views contract
+    @notice Set math implementation
+    @param _math_implementation Address of the new views contract
     """
     assert msg.sender == self.admin  # dev: admin only
 
@@ -487,4 +469,5 @@ def get_eth_index(_pool: address) -> uint256:
     for i in range(2):
         if self.pool_data[_pool].coins[i] == WETH:
             return i
-    return max_value(uint256)
+    a: uint256 = max_value(uint256)
+    return a

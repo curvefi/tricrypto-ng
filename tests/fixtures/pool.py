@@ -27,16 +27,16 @@ def params():
 @pytest.fixture(scope="module")
 def swap(
     tricrypto_factory,
+    amm_interface,
     coins,
     params,
     deployer,
 ):
-
     with boa.env.prank(deployer):
         swap = tricrypto_factory.deploy_pool(
             "Curve.fi USDC-BTC-ETH",
-            "crv3crypto2",
-            coins,
+            "USDCBTCETH",
+            [coin.address for coin in coins],
             params["A"],
             params["gamma"],
             params["mid_fee"],
@@ -49,9 +49,7 @@ def swap(
             params["initial_prices"],
         )
 
-    breakpoint()
-
-    return swap
+    return amm_interface.at(swap)
 
 
 def _get_deposit_amounts(amount_per_token_usd, initial_prices, coins):
@@ -89,3 +87,13 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap, initial_prices):
 @pytest.fixture(scope="module")
 def swap_with_deposit(swap, coins, user):
     yield _crypto_swap_with_deposit(coins, user, swap, INITIAL_PRICES)
+
+
+@pytest.fixture(scope="module")
+def views(deployer, math_contract, swap):
+    with boa.env.prank(deployer):
+        return boa.load(
+            "contracts/CurveCryptoViews3Optimized.vy",
+            math_contract,
+            swap,
+        )

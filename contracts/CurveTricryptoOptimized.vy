@@ -121,11 +121,10 @@ WETH20: immutable(address)
 
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # The precision to convert to
-PRECISIONS: immutable(uint256)  # precisions of coins (18 - coin.decimals())
 A_MULTIPLIER: constant(uint256) = 10000
+packed_precisions: uint256
 
-# These addresses are replaced by the deployer
-math: public(immutable(address))
+math: public(address)
 coins: public(immutable(address[N_COINS]))
 factory: public(address)
 
@@ -237,8 +236,11 @@ def __init__(
     name = _name
     symbol = _symbol
     coins = _coins
-    math = _math
-    PRECISIONS = packed_precisions
+
+    # precisions of coins (18 - coin.decimals())
+    self.packed_precisions = packed_precisions
+
+    self.math = _math
 
     self.initial_A_gamma = packed_A_gamma
     self.future_A_gamma = packed_A_gamma
@@ -367,7 +369,7 @@ def increaseAllowance(_spender: address, _add_value: uint256) -> bool:
     """
     @notice Increase the allowance granted to `_spender`.
     @dev This function will never overflow, and instead will bound
-         allowance to MAX_UINT256. This has the potential to grant an
+         allowance to max_value(uint256). This has the potential to grant an
          infinite approval.
     @param _spender The account to increase the allowance of.
     @param _add_value The amount to increase the allowance by.
@@ -529,7 +531,7 @@ def _packed_view(k: uint256, p: uint256) -> uint256:
 def xp() -> uint256[N_COINS]:
     result: uint256[N_COINS] = self.balances
     packed_prices: uint256 = self.price_scale_packed
-    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
 
     result[0] *= precisions[0]
     for i in range(1, N_COINS):
@@ -569,7 +571,7 @@ def _A_gamma() -> uint256[2]:
 @view
 def _fee(xp: uint256[N_COINS]) -> uint256:
     fee_params: uint256[3] = self._unpack(self.fee_params)
-    f: uint256 = Math(math).reduction_coefficient(xp, fee_params[2])
+    f: uint256 = Math(self.math).reduction_coefficient(xp, fee_params[2])
     return (fee_params[0] * f + fee_params[1] * (10**18 - f)) / 10**18
 
 
@@ -585,7 +587,7 @@ def get_xcp(D: uint256) -> uint256:
         x[i] = D * 10**18 / (N_COINS * (packed_prices & PRICE_MASK))
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
-    return Math(math).geometric_mean(x)
+    return Math(self.math).geometric_mean(x)
 
 
 @internal
@@ -620,7 +622,7 @@ def _claim_admin_fees():
     total_supply: uint256 = self.totalSupply
 
     # Recalculate D b/c we gulped
-    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
+    D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
     self.D = D
 
     self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
@@ -662,7 +664,7 @@ def tweak_price(
     if last_prices_timestamp < block.timestamp:
         # update moving average:
         ma_time: uint256 = self.ma_time
-        alpha: uint256 = Math(math).wad_exp(
+        alpha: uint256 = Math(self.math).wad_exp(
             -convert(
                 (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
                 int256,
@@ -686,7 +688,7 @@ def tweak_price(
 
     D_unadjusted: uint256 = new_D  # Withdrawal methods know new D already
     if new_D == 0:
-        D_unadjusted = Math(math).newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
+        D_unadjusted = Math(self.math).newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
 
     packed_prices = self.price_scale_packed
     for k in range(N_COINS - 1):
@@ -710,7 +712,7 @@ def tweak_price(
         __xp[0] += dx_price
         y_out: uint256[2] = empty(uint256[2])
         for k in range(N_COINS - 1):
-            y_out = Math(math).get_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k + 1)
+            y_out = Math(self.math).get_y(A_gamma[0], A_gamma[1], __xp, D_unadjusted, k + 1)
             last_prices[k] = price_scale[k] * dx_price / (_xp[k + 1] - y_out[0])
 
     packed_prices = 0
@@ -734,7 +736,7 @@ def tweak_price(
     virtual_price: uint256 = 10**18
 
     if old_virtual_price > 0:
-        xcp: uint256 = Math(math).geometric_mean(xp)
+        xcp: uint256 = Math(self.math).geometric_mean(xp)
         virtual_price = 10**18 * xcp / total_supply
         xcp_profit = old_xcp_profit * virtual_price / old_virtual_price
 
@@ -788,14 +790,14 @@ def tweak_price(
                 xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
 
             # check: K0_prev be used here?
-            D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
+            D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
             xp[0] = D / N_COINS
             for k in range(N_COINS - 1):
                 xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
 
             # reuse old_virtual_price
             old_virtual_price = (
-                10**18 * Math(math).geometric_mean(xp) / total_supply
+                10**18 * Math(self.math).geometric_mean(xp) / total_supply
             )
 
             # --------- Proceed if we've got enough profit -------------------
@@ -849,7 +851,7 @@ def _exchange(
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
-    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
     ix: uint256 = j
     p: uint256 = 0
     dy: uint256 = 0
@@ -880,7 +882,7 @@ def _exchange(
             x0 = x0 * price_scale[i - 1] / PRECISION
         x1: uint256 = xp[i]  # Back up old value in xp
         xp[i] = x0
-        self.D = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+        self.D = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
         xp[i] = x1  # And restore
         if block.timestamp >= t:
             self.future_A_gamma_time = 1
@@ -888,7 +890,7 @@ def _exchange(
     # ----------------------- Calculate dy and fees --------------------------
 
     prec_j: uint256 = precisions[j]
-    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
+    y_out: uint256[2] = Math(self.math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
     dy = xp[j] - y_out[0]
 
     # Not defining new "y" here to have less variables / make subsequent calls
@@ -1025,7 +1027,7 @@ def _calc_withdraw_one_coin(
     assert i < N_COINS  # dev: coin out of range
 
     xx: uint256[N_COINS] = self.balances
-    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
     xp: uint256[N_COINS] = precisions
     D0: uint256 = 0
 
@@ -1040,7 +1042,7 @@ def _calc_withdraw_one_coin(
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if update_D:
-        D0 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+        D0 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
     else:
         D0 = self.D
 
@@ -1062,7 +1064,7 @@ def _calc_withdraw_one_coin(
     # ------------------------------------------------------------------------
 
     # calculate y_out with (D - D_fee)
-    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
+    y_out: uint256[2] = Math(self.math).get_y(A_gamma[0], A_gamma[1], xp, D, i)
     dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
     xp[i] = y_out[0]
 
@@ -1203,7 +1205,7 @@ def add_liquidity(
     xx = xp
 
     packed_prices: uint256 = self.price_scale_packed
-    precisions: uint256[N_COINS] = self._unpack(PRECISIONS)
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
     xp[0] *= precisions[0]
     xp_old[0] *= precisions[0]
     for i in range(1, N_COINS):
@@ -1240,13 +1242,13 @@ def add_liquidity(
 
     t: uint256 = self.future_A_gamma_time
     if t > 0:
-        old_D = Math(math).newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
+        old_D = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
         if block.timestamp >= t:
             self.future_A_gamma_time = 1
     else:
         old_D = self.D
 
-    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+    D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
 
     token_supply: uint256 = self.totalSupply
     if old_D > 0:
@@ -1447,7 +1449,7 @@ def lp_price() -> uint256:
 
     return (
         3 * self.virtual_price *
-        Math(math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
+        Math(self.math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
     )
 
 
@@ -1461,7 +1463,7 @@ def price_oracle(k: uint256) -> uint256:
     if last_prices_timestamp < block.timestamp:
         last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
         ma_time: uint256 = self.ma_time
-        alpha: uint256 = Math(math).wad_exp(
+        alpha: uint256 = Math(self.math).wad_exp(
             -convert(
                 (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
                 int256,

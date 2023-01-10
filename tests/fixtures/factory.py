@@ -20,43 +20,34 @@ def gauge_implementation(deployer, gauge_interface):
 
 
 @pytest.fixture(scope="module")
-def views_contract(deployer, tricrypto_math, tricrypto_swap):
-    with boa.env.prank(deployer):
-        return boa.load(
-            "contracts/CurveCryptoViews3Optimized.vy",
-            tricrypto_math,
-            tricrypto_swap,
-        )
-
-
-@pytest.fixture(scope="module")
-def pool_interface():
+def amm_interface():
     return boa.load_partial("contracts/CurveTricryptoOptimized.vy")
 
 
 @pytest.fixture(scope="module")
-def pool_implementation(deployer, pool_interface):
+def amm_implementation(deployer, amm_interface):
     with boa.env.prank(deployer):
-        return pool_interface.deploy_as_blueprint()
+        return amm_interface.deploy_as_blueprint()
 
 
 @pytest.fixture(scope="module")
 def tricrypto_factory(
     deployer,
     fee_receiver,
-    pool_implementation,
+    owner,
+    amm_implementation,
     gauge_implementation,
-    views_contract,
     math_contract,
     weth,
 ):
     with boa.env.prank(deployer):
         factory = boa.load(
-            "contracts/CurveTricryptoFactory.vy", fee_receiver, weth
+            "contracts/CurveTricryptoFactory.vy", fee_receiver, owner, weth
         )
-        factory.set_pool_implementation(pool_implementation)
+
+    with boa.env.prank(owner):
+        factory.set_pool_implementation(amm_implementation)
         factory.set_gauge_implementation(gauge_implementation)
-        factory.set_views_implementation(views_contract)
         factory.set_math_implementation(math_contract)
 
     return factory
