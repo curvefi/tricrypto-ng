@@ -12,13 +12,6 @@ from hexbytes import HexBytes
 
 
 @pytest.fixture(scope="module")
-def skip_unoptimized(optimized):
-    if not optimized:
-        pytest.skip()
-    yield
-
-
-@pytest.fixture(scope="module")
 def sign_permit():
     def _sign_permit(swap, owner, spender, value, deadline):
 
