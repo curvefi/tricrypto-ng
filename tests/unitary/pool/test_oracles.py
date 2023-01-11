@@ -226,7 +226,7 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
         assert approx(adjustment, price_diff, 0.01)
 
     assert approx(
-        swap_with_deposit.virtual_price(),
+        swap_with_deposit._storage.virtual_price.get(),
         swap_with_deposit.get_virtual_price(),
         1e-10,
     )

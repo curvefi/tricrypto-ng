@@ -94,7 +94,8 @@ class StatefulGas(StatefulBase):
                 raise
             return
 
-        d_balance = self.coins[exchange_i].balanceOf(user)
+        d_balance = self.get_coin_balance(self.coins[exchange_i], user)
+
         try:
             with boa.env.prank(user):
                 self.swap.remove_liquidity_one_coin(
@@ -110,7 +111,9 @@ class StatefulGas(StatefulBase):
                 raise
             return
 
-        d_balance = self.coins[exchange_i].balanceOf(user) - d_balance
+        d_balance = (
+            self.get_coin_balance(self.coins[exchange_i], user) - d_balance
+        )
         d_token = d_token - self.token.balanceOf(user)
 
         if update_D:
@@ -126,14 +129,7 @@ class StatefulGas(StatefulBase):
             self.virtual_price = 10**18
 
 
-def test_gas(
-    tricrypto_swap,
-    tricrypto_lp_token,
-    tricrypto_views,
-    users,
-    pool_coins,
-    optimized,
-):
+def test_gas(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

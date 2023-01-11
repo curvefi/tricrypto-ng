@@ -220,7 +220,6 @@ class Trader:
         fee_gamma=None,
         adjustment_step=0.003,
         ma_time=600,  # 10 minutes
-        exp_ma=False,
         log=True,
     ):
         # allowed_extra_profit is actually not used
@@ -242,7 +241,6 @@ class Trader:
         self.fee_gamma = fee_gamma or gamma
         self.total_vol = 0.0
         self.ma_time = ma_time
-        self.exp_ma = exp_ma
         self.ext_fee = 0  # 0.03e-2
         self.slippage = 0
         self.slippage_count = 0
@@ -334,10 +332,7 @@ class Trader:
             return False
 
     def _ma_multiplier(self, t):
-        if not self.exp_ma:
-            return 0.5 ** ((t - self.t) / self.ma_time)
-        else:
-            return exp(-1 * (t - self.t) / self.ma_time)
+        return exp(-1 * (t - self.t) / self.ma_time)
 
     def ma_recorder(self, t, price_vector):
         # XXX what if every block only has p_b being last

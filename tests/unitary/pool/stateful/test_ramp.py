@@ -27,11 +27,12 @@ class RampTest(ProfitableState):
 
     def setup(self, user_id=0):
         super().setup(user_id)
-        new_A = self.swap.A() * 2
-        new_gamma = self.swap.gamma() * 2
+        A_gamma = self.swap.A_gamma()
+        new_A = A_gamma[0] * 2
+        new_gamma = A_gamma[1] * 2
 
         block_time = boa.env.vm.state.timestamp
-        with boa.env.prank(self.swap.owner()):
+        with boa.env.prank(self.tricrypto_factory.admin()):
             self.swap.ramp_A_gamma(new_A, new_gamma, block_time + 14 * 86400)
 
     @rule(deposit_amounts=deposit_amounts, user=user)
@@ -101,14 +102,7 @@ class RampTest(ProfitableState):
         pass
 
 
-def test_ramp(
-    tricrypto_swap,
-    tricrypto_lp_token,
-    tricrypto_views,
-    users,
-    pool_coins,
-    optimized,
-):
+def test_ramp(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

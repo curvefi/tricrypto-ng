@@ -72,6 +72,11 @@ class StatefulBase(RuleBasedStateMachine):
             "fee": self.swap.fee(),
         }
 
+    def get_coin_balance(self, user, coin):
+        if coin.symbol() == "WETH":
+            return boa.env.get_balance(user)
+        return coin.balanceOf(user)
+
     def convert_amounts(self, amounts):
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
         return [
