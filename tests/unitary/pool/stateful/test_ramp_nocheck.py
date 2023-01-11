@@ -7,7 +7,7 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 
-from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
+from tests.unitary.pool.stateful.test_stateful import ProfitableState
 
 MAX_SAMPLES = 100
 MAX_COUNT = 100
@@ -39,7 +39,7 @@ class RampTest(ProfitableState):
 
     @initialize(future_A=future_A, future_gamma=future_gamma)
     def initialize(self, future_A, future_gamma):
-        with boa.env.prank(self.swap.owner()):
+        with boa.env.prank(self.tricrypto_factory.admin()):
             self.swap.ramp_A_gamma(
                 future_A,
                 future_gamma,
@@ -70,14 +70,7 @@ class RampTest(ProfitableState):
         pass
 
 
-def test_ramp(
-    tricrypto_swap,
-    tricrypto_lp_token,
-    tricrypto_views,
-    users,
-    pool_coins,
-    optimized,
-):
+def test_ramp(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

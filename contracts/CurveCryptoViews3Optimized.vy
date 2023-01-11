@@ -2,16 +2,17 @@
 
 # (c) Curve.Fi, 2021
 
-# This contract contains view-only external methods which can be gas-inefficient
-# when called from smart contracts but ok to use from frontend
-# Called only from Curve contract as it uses msg.sender as the contract address
+# This contract contains view-only external methods which can be
+# gas-inefficient when called from smart contracts.
+
 from vyper.interfaces import ERC20
 
 
 interface Curve:
-    def A() -> uint256: view
-    def gamma() -> uint256: view
+    def A_gamma() -> uint256[2]: view
     def price_scale(i: uint256) -> uint256: view
+    def price_oracle(i: uint256) -> uint256: view
+    def get_virtual_price() -> uint256: view
     def balances(i: uint256) -> uint256: view
     def D() -> uint256: view
     def fee_calc(xp: uint256[N_COINS]) -> uint256: view
@@ -20,6 +21,7 @@ interface Curve:
     ) -> uint256: view
     def future_A_gamma_time() -> uint256: view
     def totalSupply() -> uint256: view
+    def precisions() -> uint256[N_COINS]: view
 
 
 interface Math:
@@ -36,93 +38,104 @@ interface Math:
         D: uint256,
         i: uint256,
     ) -> uint256[2]: view
+    def cbrt(x: uint256) -> uint256: view
 
 
-N_COINS: constant(uint256) = 3  # <- change
-PRECISION: constant(uint256) = 10**18  # The precision to convert to
-PRECISIONS: constant(uint256[N_COINS]) = [
-    1,  # 0
-    1,  # 1
-    1,  # 2
-]
+N_COINS: constant(uint256) = 3
+PRECISION: constant(uint256) = 10**18
 
-math: public(address)
-swap: public(address)
+math: public(immutable(address))
 
 
 @external
-def __init__(math: address, swap: address):
-    self.math = math
-    self.swap = swap
+def __init__(_math: address):
+    math = _math
 
 
 @external
 @view
-def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+@nonreentrant("lock")
+def lp_price(swap: address) -> uint256:
+
+    price_oracle: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
+    for k in range(N_COINS - 1):
+        price_oracle[k] = Curve(swap).price_oracle(k)
+
+    virtual_price: uint256 = Curve(swap).get_virtual_price()
+
+    return (
+        3 * virtual_price *
+        Math(math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
+    )
+
+
+@external
+@view
+def get_dy(
+    i: uint256, j: uint256, dx: uint256, swap: address
+) -> uint256:
+
     assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
     assert dx > 0, "do not exchange 0 coins"
 
-    precisions: uint256[N_COINS] = PRECISIONS
+    precisions: uint256[N_COINS] = Curve(swap).precisions()
 
     price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
     for k in range(N_COINS - 1):
-        price_scale[k] = Curve(self.swap).price_scale(k)
+        price_scale[k] = Curve(swap).price_scale(k)
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     for k in range(N_COINS):
-        xp[k] = Curve(self.swap).balances(k)
+        xp[k] = Curve(swap).balances(k)
 
-    A: uint256 = Curve(self.swap).A()
-    gamma: uint256 = Curve(self.swap).gamma()
-    D: uint256 = Curve(self.swap).D()
-    if Curve(self.swap).future_A_gamma_time() > 0:
-        _xp: uint256[N_COINS] = xp
-        _xp[0] *= precisions[0]
-        for k in range(N_COINS - 1):
-            _xp[k + 1] = (
-                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
-            )
-        D = Math(self.math).newton_D(A, gamma, _xp, 0)
+    A_gamma: uint256[2] = Curve(swap).A_gamma()
+    D: uint256 = self._calc_D_ramp(
+        A_gamma[0], A_gamma[1], xp, precisions, price_scale, swap
+    )
 
     xp[i] += dx
     xp[0] *= precisions[0]
     for k in range(N_COINS - 1):
         xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
 
-    y_out: uint256[2] = Math(self.math).get_y(A, gamma, xp, D, j)
+    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, j)
     dy: uint256 = xp[j] - y_out[0] - 1
     xp[j] = y_out[0]
     if j > 0:
         dy = dy * PRECISION / price_scale[j - 1]
     dy /= precisions[j]
-    dy -= Curve(self.swap).fee_calc(xp) * dy / 10**10
+    dy -= Curve(swap).fee_calc(xp) * dy / 10**10
 
     return dy
 
 
 @view
 @external
-def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
-    precisions: uint256[N_COINS] = PRECISIONS
-    token_supply: uint256 = Curve(self.swap).totalSupply()
+def get_dx(
+    i: uint256, j: uint256, dy: uint256, swap: address
+) -> uint256:
+    # TODO: implement get_dx
+    return 0
+
+
+@view
+@external
+def calc_token_amount(
+    amounts: uint256[N_COINS], deposit: bool, swap: address
+) -> uint256:
+    precisions: uint256[N_COINS] = Curve(swap).precisions()
+    token_supply: uint256 = Curve(swap).totalSupply()
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     for k in range(N_COINS):
-        xp[k] = Curve(self.swap).balances(k)
+        xp[k] = Curve(swap).balances(k)
 
     price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
     for k in range(N_COINS - 1):
-        price_scale[k] = Curve(self.swap).price_scale(k)
+        price_scale[k] = Curve(swap).price_scale(k)
 
-    A: uint256 = Curve(self.swap).A()
-    gamma: uint256 = Curve(self.swap).gamma()
-    D0: uint256 = Curve(self.swap).D()
-    if Curve(self.swap).future_A_gamma_time() > 0:
-        _xp: uint256[N_COINS] = xp
-        _xp[0] *= precisions[0]
-        for k in range(N_COINS - 1):
-            _xp[k + 1] = (
-                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
-            )
-        D0 = Math(self.math).newton_D(A, gamma, _xp, 0)
+    A_gamma: uint256[2] = Curve(swap).A_gamma()
+    D0: uint256 = self._calc_D_ramp(
+        A_gamma[0], A_gamma[1], xp, precisions, price_scale, swap
+    )
 
     amountsp: uint256[N_COINS] = amounts
     if deposit:
@@ -131,6 +144,7 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     else:
         for k in range(N_COINS):
             xp[k] -= amounts[k]
+
     xp[0] *= precisions[0]
     amountsp[0] *= precisions[0]
     for k in range(N_COINS - 1):
@@ -138,13 +152,40 @@ def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
         xp[k + 1] = xp[k + 1] * p / PRECISION
         amountsp[k + 1] = amountsp[k + 1] * p / PRECISION
 
-    D: uint256 = Math(self.math).newton_D(A, gamma, xp, 0)
+    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
     d_token: uint256 = token_supply * D / D0
+
     if deposit:
         d_token -= token_supply
     else:
         d_token = token_supply - d_token
+
     d_token -= (
-        Curve(self.swap).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
+        Curve(swap).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
     )
+
     return d_token
+
+
+@internal
+@view
+def _calc_D_ramp(
+    A: uint256,
+    gamma: uint256,
+    xp: uint256[N_COINS],
+    precisions: uint256[N_COINS],
+    price_scale: uint256[N_COINS - 1],
+    swap: address
+) -> uint256:
+
+    D: uint256 = Curve(swap).D()
+    if Curve(swap).future_A_gamma_time() > 0:
+        _xp: uint256[N_COINS] = xp
+        _xp[0] *= precisions[0]
+        for k in range(N_COINS - 1):
+            _xp[k + 1] = (
+                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
+            )
+        D = Math(math).newton_D(A, gamma, _xp, 0)
+
+    return D

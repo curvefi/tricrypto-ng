@@ -9,24 +9,22 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 # https://github.com/curvefi/curve-stablecoin/blob/5b6708138d82419917328e8042f3857eac034796/tests/stablecoin/test_approve.py  # noqa: E501
 
 
-def test_permit_success(
-    eth_acc, bob, tricrypto_swap, sign_permit, skip_unoptimized
-):
+def test_permit_success(eth_acc, bob, swap, sign_permit):
 
     value = 2**256 - 1
     deadline = boa.env.vm.state.timestamp + 600
 
     sig = sign_permit(
-        swap=tricrypto_swap,
+        swap=swap,
         owner=eth_acc,
         spender=bob,
         value=value,
         deadline=deadline,
     )
 
-    assert tricrypto_swap.allowance(eth_acc.address, bob) == 0
+    assert swap.allowance(eth_acc.address, bob) == 0
     with boa.env.prank(bob):
-        assert tricrypto_swap.permit(
+        assert swap.permit(
             eth_acc.address,
             bob,
             value,
@@ -36,22 +34,20 @@ def test_permit_success(
             HexBytes(sig.s),
         )
 
-    logs = tricrypto_swap.get_logs()
+    logs = swap.get_logs()
 
-    assert tricrypto_swap.allowance(eth_acc.address, bob) == value
+    assert swap.allowance(eth_acc.address, bob) == value
     assert len(logs) == 1
-    assert tricrypto_swap.nonces(eth_acc.address) == 1
+    assert swap.nonces(eth_acc.address) == 1
     assert logs[0].event_type.name == "Approval"
     assert logs[0].topics[0].lower() == eth_acc.address.lower()
     assert logs[0].topics[1].lower() == bob.lower()
     assert logs[0].args[0] == value
 
 
-def test_permit_reverts_owner_is_invalid(
-    bob, tricrypto_swap, skip_unoptimized
-):
+def test_permit_reverts_owner_is_invalid(bob, swap):
     with boa.reverts("dev: invalid owner"), boa.env.prank(bob):
-        tricrypto_swap.permit(
+        swap.permit(
             ZERO_ADDRESS,
             bob,
             2**256 - 1,
@@ -62,11 +58,9 @@ def test_permit_reverts_owner_is_invalid(
         )
 
 
-def test_permit_reverts_deadline_is_invalid(
-    bob, tricrypto_swap, skip_unoptimized
-):
+def test_permit_reverts_deadline_is_invalid(bob, swap):
     with boa.reverts("dev: permit expired"), boa.env.prank(bob):
-        tricrypto_swap.permit(
+        swap.permit(
             bob,
             bob,
             2**256 - 1,
@@ -77,11 +71,9 @@ def test_permit_reverts_deadline_is_invalid(
         )
 
 
-def test_permit_reverts_signature_is_invalid(
-    bob, tricrypto_swap, skip_unoptimized
-):
+def test_permit_reverts_signature_is_invalid(bob, swap):
     with boa.reverts("dev: invalid signature"), boa.env.prank(bob):
-        tricrypto_swap.permit(
+        swap.permit(
             bob,
             bob,
             2**256 - 1,
@@ -92,9 +84,9 @@ def test_permit_reverts_signature_is_invalid(
         )
 
 
-def test_domain_separator_updates_when_chain_id_updates(tricrypto_swap):
+def test_domain_separator_updates_when_chain_id_updates(swap):
 
-    domain_separator = tricrypto_swap.DOMAIN_SEPARATOR()
+    domain_separator = swap.DOMAIN_SEPARATOR()
     with boa.env.anchor():
         boa.env.vm.patch.chain_id = 42
-        assert domain_separator != tricrypto_swap.DOMAIN_SEPARATOR()
+        assert domain_separator != swap.DOMAIN_SEPARATOR()

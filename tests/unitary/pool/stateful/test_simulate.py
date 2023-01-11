@@ -4,7 +4,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import invariant, rule, run_state_machine_as_test
 
-from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
+from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
@@ -38,26 +38,29 @@ class StatefulSimulation(StatefulBase):
             self.total_supply += self.token.balanceOf(u)
 
         self.virtual_price = self.swap.get_virtual_price()
+        A_gamma = self.swap.A_gamma()
+        fee_params = self.swap.internal._unpack(
+            self.swap._storage.packed_fee_params.get()
+        )
         self.trader = sim.Trader(
-            self.swap.A(),
-            self.swap.gamma(),
+            A_gamma[0],
+            A_gamma[1],
             self.swap.D(),
             3,
             [10**18] + [self.swap.price_scale(i) for i in range(2)],
-            self.swap.mid_fee() / 1e10,
-            self.swap.out_fee() / 1e10,
+            fee_params[0] / 1e10,
+            fee_params[1] / 1e10,
             self.swap.allowed_extra_profit(),
-            self.swap.fee_gamma(),
+            fee_params[2],
             self.swap.adjustment_step() / 1e18,
             self.swap.ma_time(),
-            exp_ma=self.optimized,
         )
         for i in range(3):
             self.trader.curve.x[i] = self.swap.balances(i)
 
         # Adjust virtual prices
         self.trader.xcp_profit = self.swap.xcp_profit()
-        self.trader.xcp_profit_real = self.swap.virtual_price()
+        self.trader.xcp_profit_real = self.swap._storage.virtual_price.get()
         self.trader.t = boa.env.vm.state.timestamp
 
     @rule(
@@ -105,14 +108,7 @@ class StatefulSimulation(StatefulBase):
                 raise
 
 
-def test_sim(
-    tricrypto_swap,
-    tricrypto_lp_token,
-    tricrypto_views,
-    users,
-    pool_coins,
-    optimized,
-):
+def test_sim(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

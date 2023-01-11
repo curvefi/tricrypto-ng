@@ -4,7 +4,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
-from tests.conftest import INITIAL_PRICES
+from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.checks import check_limits
 from tests.utils.tokens import mint_for_testing
 
@@ -17,13 +17,16 @@ class StatefulBase(RuleBasedStateMachine):
     user = strategy("address")
 
     def __init__(self):
+
         super().__init__()
+
         self.accounts = self.users
-        self.swap = self.tricrypto_swap
-        self.views = self.tricrypto_views
+        self.views = self.views_contract
         self.coins = self.pool_coins
-        self.token = self.tricrypto_lp_token
-        self.swap_admin = self.swap.owner()
+        self.token = self.swap
+
+        self.swap_admin = self.tricrypto_factory.admin()
+        self.fee_receiver = self.tricrypto_factory.fee_receiver()
 
         self.decimals = [int(c.decimals()) for c in self.coins]
         self.initial_prices = INITIAL_PRICES
@@ -69,6 +72,11 @@ class StatefulBase(RuleBasedStateMachine):
             "fee": self.swap.fee(),
         }
 
+    def get_coin_balance(self, user, coin):
+        if coin.symbol() == "WETH":
+            return boa.env.get_balance(user)
+        return coin.balanceOf(user)
+
     def convert_amounts(self, amounts):
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
         return [
@@ -108,7 +116,7 @@ class StatefulBase(RuleBasedStateMachine):
                 )
             else:
                 calc_amount = self.views.get_dy(
-                    exchange_i, exchange_j, exchange_amount_in
+                    exchange_i, exchange_j, exchange_amount_in, self.swap
                 )
         except Exception:
             _amounts = [0] * 3
@@ -160,6 +168,7 @@ class StatefulBase(RuleBasedStateMachine):
                 10**16
                 * 10 ** self.decimals[exchange_j]
                 // ([10**18] + INITIAL_PRICES)[exchange_j],
+                self.swap,
             )
 
         d_balance_i -= self.coins[exchange_i].balanceOf(user)
@@ -188,7 +197,9 @@ class StatefulBase(RuleBasedStateMachine):
     @invariant()
     def balances(self):
         balances = [self.swap.balances(i) for i in range(3)]
+        eth_balance_amm = boa.env.get_balance(self.swap.address)
         balances_of = [c.balanceOf(self.swap) for c in self.coins]
+        balances_of[2] = eth_balance_amm  # eth is set at i==2
         for i in range(3):
             assert self.balances[i] == balances[i]
             assert self.balances[i] == balances_of[i]
@@ -199,7 +210,7 @@ class StatefulBase(RuleBasedStateMachine):
 
     @invariant()
     def virtual_price(self):
-        virtual_price = self.swap.virtual_price()
+        virtual_price = self.swap._storage.virtual_price.get()
         xcp_profit = self.swap.xcp_profit()
         get_virtual_price = self.swap.get_virtual_price()
 

@@ -4,7 +4,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
+from tests.unitary.pool.stateful.stateful_base import StatefulBase
 
 MAX_SAMPLES = 100
 STEP_COUNT = 200
@@ -39,9 +39,11 @@ class StatefulAdmin(StatefulBase):
             boa.env.time_travel(seconds=3 * 86400 + 1)
             self.swap.apply_new_parameters()
 
+        packed_fee_params = self.swap._storage.packed_fee_params.get()
+        unpacked_fee_params = self.swap.internal._unpack(packed_fee_params)
         assert self.swap.admin_fee() == 5 * 10**9
-        self.mid_fee = self.swap.mid_fee()
-        self.out_fee = self.swap.out_fee()
+        self.mid_fee = unpacked_fee_params[0]
+        self.out_fee = unpacked_fee_params[1]
         self.admin_fee = 5 * 10**9
 
     @rule(
@@ -52,7 +54,7 @@ class StatefulAdmin(StatefulBase):
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
 
-        admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+        admin_balance = self.token.balanceOf(self.fee_receiver)
 
         if exchange_i > 0:
             exchange_amount_in_converted = (
@@ -67,19 +69,17 @@ class StatefulAdmin(StatefulBase):
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
 
-        admin_balance = (
-            self.token.balanceOf(self.swap.admin_fee_receiver())
-            - admin_balance
-        )
+        admin_balance = self.token.balanceOf(self.fee_receiver) - admin_balance
 
         self.total_supply += admin_balance
 
     @rule()
     def claim_admin_fees(self):
-        balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+
+        balance = self.token.balanceOf(self.fee_receiver)
 
         self.swap.claim_admin_fees()
-        admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+        admin_balance = self.token.balanceOf(self.fee_receiver)
         balance = admin_balance - balance
         self.total_supply += balance
 
@@ -96,14 +96,7 @@ class StatefulAdmin(StatefulBase):
                     raise
 
 
-def test_admin(
-    tricrypto_swap,
-    tricrypto_lp_token,
-    tricrypto_views,
-    users,
-    pool_coins,
-    optimized,
-):
+def test_admin(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

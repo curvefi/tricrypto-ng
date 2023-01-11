@@ -48,8 +48,8 @@ def alice():
 
 
 @pytest.fixture(scope="module")
-def loaded_alice(tricrypto_lp_token, alice):
-    mint_for_testing(tricrypto_lp_token, alice, 10**21)
+def loaded_alice(swap, alice):
+    mint_for_testing(swap, alice, 10**21)
     return alice
 
 

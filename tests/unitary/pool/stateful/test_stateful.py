@@ -2,8 +2,8 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.conftest import INITIAL_PRICES
-from tests.unitary.tricrypto.stateful.stateful_base import StatefulBase
+from tests.fixtures.pool import INITIAL_PRICES
+from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 100
@@ -101,14 +101,15 @@ class ProfitableState(StatefulBase):
             with boa.reverts(), boa.env.prank(user):
                 self.swap.remove_liquidity(token_amount, [0] * 3)
         else:
-            amounts = [c.balanceOf(user) for c in self.coins]
+            amounts = [self.get_coin_balance(user, c) for c in self.coins]
             tokens = self.token.balanceOf(user)
             with boa.env.prank(user):
                 self.swap.remove_liquidity(token_amount, [0] * 3)
             tokens -= self.token.balanceOf(user)
             self.total_supply -= tokens
             amounts = [
-                (c.balanceOf(user) - a) for c, a in zip(self.coins, amounts)
+                (self.get_coin_balance(user, c) - a)
+                for c, a in zip(self.coins, amounts)
             ]
             self.balances = [b - a for a, b in zip(amounts, self.balances)]
 
@@ -147,7 +148,7 @@ class ProfitableState(StatefulBase):
                 )
             return
 
-        d_balance = self.coins[exchange_i].balanceOf(user)
+        d_balance = self.get_coin_balance(user, self.coins[exchange_i])
         try:
             with boa.env.prank(user):
                 self.swap.remove_liquidity_one_coin(
@@ -173,7 +174,9 @@ class ProfitableState(StatefulBase):
         )
         self.views.calc_token_amount(_deposit, True)
 
-        d_balance = self.coins[exchange_i].balanceOf(user) - d_balance
+        d_balance = (
+            self.get_coin_balance(user, self.coins[exchange_i]) - d_balance
+        )
         d_token = d_token - self.token.balanceOf(user)
 
         if check_out_amount:
@@ -195,12 +198,7 @@ class ProfitableState(StatefulBase):
 
 
 def test_numba_go_up(
-    tricrypto_swap,
-    tricrypto_lp_token,
-    tricrypto_views,
-    users,
-    pool_coins,
-    optimized,
+    swap, views_contract, users, pool_coins, tricrypto_factory
 ):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
