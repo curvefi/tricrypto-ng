@@ -87,13 +87,3 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap, initial_prices):
 @pytest.fixture(scope="module")
 def swap_with_deposit(swap, coins, user):
     yield _crypto_swap_with_deposit(coins, user, swap, INITIAL_PRICES)
-
-
-@pytest.fixture(scope="module")
-def views(deployer, math_contract, swap):
-    with boa.env.prank(deployer):
-        return boa.load(
-            "contracts/CurveCryptoViews3Optimized.vy",
-            math_contract,
-            swap,
-        )

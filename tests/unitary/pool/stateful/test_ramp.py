@@ -2,7 +2,7 @@ import boa
 from boa.test import strategy
 from hypothesis.stateful import invariant, rule, run_state_machine_as_test
 
-from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
+from tests.unitary.pool.stateful.test_stateful import ProfitableState
 
 MAX_SAMPLES = 100
 MAX_COUNT = 100

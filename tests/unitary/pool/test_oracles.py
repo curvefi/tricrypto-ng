@@ -28,15 +28,10 @@ def norm(price_oracle, price_scale):
     return sqrt(norm)
 
 
-def test_initial(tricrypto_swap_with_deposit):
+def test_initial(swap_with_deposit):
     for i in range(2):
-        assert (
-            tricrypto_swap_with_deposit.price_scale(i) == INITIAL_PRICES[i + 1]
-        )
-        assert (
-            tricrypto_swap_with_deposit.price_oracle(i)
-            == INITIAL_PRICES[i + 1]
-        )
+        assert swap_with_deposit.price_scale(i) == INITIAL_PRICES[i + 1]
+        assert swap_with_deposit.price_oracle(i) == INITIAL_PRICES[i + 1]
 
 
 @given(
@@ -48,7 +43,7 @@ def test_initial(tricrypto_swap_with_deposit):
 )
 @settings(**SETTINGS)
 def test_last_price_exchange(
-    tricrypto_swap_with_deposit, coins, user, amount, i, j
+    swap_with_deposit, coins, user, amount, i, j
 ):
     if i == j:
         return
@@ -59,33 +54,33 @@ def test_last_price_exchange(
 
     out = coins[j].balanceOf(user)
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
+        swap_with_deposit.exchange(i, j, amount, 0)
 
     out = coins[j].balanceOf(user) - out
 
     if amount <= 10**5 or out <= 10**5:
         # A very rough sanity check
         for k in [1, 2]:
-            oracle_price = tricrypto_swap_with_deposit.last_prices(k - 1)
+            oracle_price = swap_with_deposit.last_prices(k - 1)
             assert abs(log2(oracle_price / prices[k])) < 1
         return
 
     if i > 0 and j > 0:
         price_j = (
-            tricrypto_swap_with_deposit.last_prices(i - 1) * amount // out
+            swap_with_deposit.last_prices(i - 1) * amount // out
         )
         assert approx(
-            price_j, tricrypto_swap_with_deposit.last_prices(j - 1), 2e-10
+            price_j, swap_with_deposit.last_prices(j - 1), 2e-10
         )
     elif i == 0:
         price_j = amount * 10**18 // out
         assert approx(
-            price_j, tricrypto_swap_with_deposit.last_prices(j - 1), 2e-10
+            price_j, swap_with_deposit.last_prices(j - 1), 2e-10
         )
     else:  # j == 0
         price_i = out * 10**18 // amount
         assert approx(
-            price_i, tricrypto_swap_with_deposit.last_prices(i - 1), 2e-10
+            price_i, swap_with_deposit.last_prices(i - 1), 2e-10
         )
 
 
@@ -95,19 +90,19 @@ def test_last_price_exchange(
 )
 @settings(**SETTINGS)
 def test_last_price_remove_liq(
-    tricrypto_swap_with_deposit, tricrypto_lp_token, user, token_frac, i
+    swap_with_deposit, user, token_frac, i
 ):
 
     prices = INITIAL_PRICES
-    token_amount = token_frac * tricrypto_lp_token.totalSupply() // 10**18
+    token_amount = token_frac * swap_with_deposit.totalSupply() // 10**18
 
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.remove_liquidity_one_coin(
+        swap_with_deposit.remove_liquidity_one_coin(
             token_amount, i, 0
         )
 
     for k in [1, 2]:
-        oracle_price = tricrypto_swap_with_deposit.last_prices(k - 1)
+        oracle_price = swap_with_deposit.last_prices(k - 1)
         assert abs(log2(oracle_price / prices[k])) < 0.1
 
 
@@ -121,7 +116,7 @@ def test_last_price_remove_liq(
 )
 @settings(**SETTINGS)
 def test_ma(
-    tricrypto_swap_with_deposit, optimized, coins, user, amount, i, j, t
+    swap_with_deposit, coins, user, amount, i, j, t
 ):
     if i == j:
         return
@@ -129,28 +124,24 @@ def test_ma(
     prices1 = INITIAL_PRICES
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
-    ma_time = tricrypto_swap_with_deposit.ma_time()
+    ma_time = swap_with_deposit.ma_time()
 
     # here we dont mine because we're time travelling later
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
+        swap_with_deposit.exchange(i, j, amount, 0)
 
-    prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
+    prices2 = [swap_with_deposit.last_prices(k) for k in [0, 1]]
 
     boa.env.time_travel(t)
 
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
+        swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
 
-    prices3 = [tricrypto_swap_with_deposit.price_oracle(k) for k in [0, 1]]
+    prices3 = [swap_with_deposit.price_oracle(k) for k in [0, 1]]
 
     for p1, p2, p3 in zip(prices1[1:], prices2, prices3):
-
-        if optimized:
-            alpha = exp(-1 * t / ma_time)
-        else:
-            alpha = 0.5 ** (t / ma_time)
-
+        
+        alpha = exp(-1 * t / ma_time)
         theory = p1 * alpha + p2 * (1 - alpha)
         assert abs(log2(theory / p3)) < 0.001
 
@@ -166,7 +157,7 @@ def test_ma(
 )
 @settings(**SETTINGS)
 def test_price_scale_range(
-    tricrypto_swap_with_deposit, coins, user, amount, i, j, t
+    swap_with_deposit, coins, user, amount, i, j, t
 ):
     if i == j:
         return
@@ -176,15 +167,15 @@ def test_price_scale_range(
     mint_for_testing(coins[i], user, amount)
 
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
+        swap_with_deposit.exchange(i, j, amount, 0)
 
-    prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
+    prices2 = [swap_with_deposit.last_prices(k) for k in [0, 1]]
     boa.env.time_travel(seconds=t)
 
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
+        swap_with_deposit.remove_liquidity_one_coin(10**15, 0, 0)
 
-    prices3 = [tricrypto_swap_with_deposit.price_scale(k) for k in [0, 1]]
+    prices3 = [swap_with_deposit.price_scale(k) for k in [0, 1]]
 
     for p1, p2, p3 in zip(prices1[1:], prices2, prices3):
         if p1 > p2:
@@ -198,7 +189,7 @@ def test_price_scale_range(
     j=strategy("uint8", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
+def test_price_scale_change(swap_with_deposit, i, j, coins, user):
 
     if i == j:
         return
@@ -212,13 +203,13 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
 
     out = coins[j].balanceOf(user)
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.exchange(i, j, amount, 0)
+        swap_with_deposit.exchange(i, j, amount, 0)
     out = coins[j].balanceOf(user) - out
 
     price_scale_1 = [
-        tricrypto_swap_with_deposit.price_scale(i) for i in range(2)
+        swap_with_deposit.price_scale(i) for i in range(2)
     ]
-    prices2 = [tricrypto_swap_with_deposit.last_prices(k) for k in [0, 1]]
+    prices2 = [swap_with_deposit.last_prices(k) for k in [0, 1]]
 
     if i == 0:
         out_price = amount * 10**18 // out
@@ -235,10 +226,10 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     mint_for_testing(coins[0], user, 10**18)
 
     with boa.env.prank(user):
-        tricrypto_swap_with_deposit.exchange(0, 1, 10**18, 0)
+        swap_with_deposit.exchange(0, 1, 10**18, 0)
 
     price_scale_2 = [
-        tricrypto_swap_with_deposit.price_scale(i) for i in range(2)
+        swap_with_deposit.price_scale(i) for i in range(2)
     ]
     price_diff = abs(price_scale_2[ix - 1] - price_scale_1[ix - 1])
 
@@ -246,11 +237,11 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
     if price_diff > 0:
 
         price_oracle = [
-            tricrypto_swap_with_deposit.price_oracle(k) for k in range(2)
+            swap_with_deposit.price_oracle(k) for k in range(2)
         ]
 
         _norm = norm(price_oracle, price_scale_1)
-        step = max(tricrypto_swap_with_deposit.adjustment_step(), _norm / 10)
+        step = max(swap_with_deposit.adjustment_step(), _norm / 10)
 
         adjustment = int(
             step * abs(price_oracle[ix - 1] - price_scale_1[ix - 1]) / _norm
@@ -259,11 +250,12 @@ def test_price_scale_change(tricrypto_swap_with_deposit, i, j, coins, user):
         assert approx(adjustment, price_diff, 0.01)
 
     assert approx(
-        tricrypto_swap_with_deposit.virtual_price(),
-        tricrypto_swap_with_deposit.get_virtual_price(),
+        swap_with_deposit.virtual_price(),
+        swap_with_deposit.get_virtual_price(),
         1e-10,
     )
 
 
 def test_last_prices():
+    # TODO: check last prices after analytical dy/dx implementation!
     pass

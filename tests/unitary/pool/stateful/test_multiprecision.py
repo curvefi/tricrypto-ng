@@ -4,7 +4,7 @@
 # from hypothesis.stateful import rule, run_state_machine_as_test
 
 # from tests.conftest import _compiled_swap, _crypto_swap
-# from tests.unitary.tricrypto.stateful.test_stateful import ProfitableState
+# from tests.unitary.pool.stateful.test_stateful import ProfitableState
 
 # COINS = [("USDC", 6), ("WBTC", 8), ("WETH", 18)]
 # INITIAL_PRICES = [17500 * 10**18, 1200 * 10**18]
