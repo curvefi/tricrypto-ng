@@ -21,20 +21,20 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user):
     # Very first deposit
     with boa.env.prank(user):
         swap.add_liquidity(quantities, 0)
-    
+
     # test if eth was deposited:
     assert boa.env.get_balance(swap.address) == quantities[2]
 
     token_balance = swap.balanceOf(user)
     assert token_balance == swap.totalSupply() > 0
     assert abs(swap.get_virtual_price() / 1e18 - 1) < 1e-3
-    
+
     # Empty the contract
     with boa.env.prank(user):
         swap.remove_liquidity(token_balance, [0] * 3)
 
     assert swap.balanceOf(user) == swap.totalSupply() == 0
-    
+
     # check eth balance. 1 wei should always be left over:
     assert boa.env.get_balance(swap.address) == 1
 
@@ -78,16 +78,13 @@ def test_second_deposit(
             amounts, True, swap_with_deposit
         )
         measured = swap_with_deposit.balanceOf(user)
-        d_balances = [
-            swap_with_deposit.balances(i) for i in range(3)
-        ]
+        d_balances = [swap_with_deposit.balances(i) for i in range(3)]
 
         with boa.env.prank(user):
             swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
         d_balances = [
-            swap_with_deposit.balances(i) - d_balances[i]
-            for i in range(3)
+            swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
         ]
         measured = swap_with_deposit.balanceOf(user) - measured
 
@@ -132,13 +129,10 @@ def test_second_deposit_one(
     d_balances = [swap_with_deposit.balances(i) for i in range(3)]
 
     with boa.env.prank(user):
-        swap_with_deposit.add_liquidity(
-            amounts, int(calculated * 0.999)
-        )
+        swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
     d_balances = [
-        swap_with_deposit.balances(i) - d_balances[i]
-        for i in range(3)
+        swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
     ]
     measured = swap_with_deposit.balanceOf(user) - measured
 
@@ -162,17 +156,13 @@ def test_immediate_withdraw(
 
     f = token_amount / swap_with_deposit.totalSupply()
     if f <= 1:
-        expected = [
-            int(f * swap_with_deposit.balances(i)) for i in range(3)
-        ]
+        expected = [int(f * swap_with_deposit.balances(i)) for i in range(3)]
         measured = [c.balanceOf(user) for c in coins]
         token_amount_calc = views_contract.calc_token_amount(
             expected, False, swap_with_deposit
         )
         assert abs(token_amount_calc - token_amount) / token_amount < 1e-3
-        d_balances = [
-            swap_with_deposit.balances(i) for i in range(3)
-        ]
+        d_balances = [swap_with_deposit.balances(i) for i in range(3)]
 
         with boa.env.prank(user):
             swap_with_deposit.remove_liquidity(
@@ -181,8 +171,7 @@ def test_immediate_withdraw(
             )
 
         d_balances = [
-            d_balances[i] - swap_with_deposit.balances(i)
-            for i in range(3)
+            d_balances[i] - swap_with_deposit.balances(i) for i in range(3)
         ]
         measured = [c.balanceOf(user) - m for c, m in zip(coins, measured)]
 
@@ -241,9 +230,7 @@ def test_immediate_withdraw_one(
             return
 
         measured = coins[i].balanceOf(user)
-        d_balances = [
-            swap_with_deposit.balances(k) for k in range(3)
-        ]
+        d_balances = [swap_with_deposit.balances(k) for k in range(3)]
         try:
             with boa.env.prank(user):
                 swap_with_deposit.remove_liquidity_one_coin(
@@ -265,8 +252,7 @@ def test_immediate_withdraw_one(
                 return
 
         d_balances = [
-            d_balances[k] - swap_with_deposit.balances(k)
-            for k in range(3)
+            d_balances[k] - swap_with_deposit.balances(k) for k in range(3)
         ]
         measured = coins[i].balanceOf(user) - measured
 

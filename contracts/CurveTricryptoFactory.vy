@@ -189,7 +189,7 @@ def deploy_pool(
         d: uint256 = ERC20(_coins[i]).decimals()
         assert d < 19, "Max 18 decimals for coins"
         decimals[i] = d
-        precisions[i] = 18 - d
+        precisions[i] = 10** (18 - d)
 
     # pack precisions
     packed_precisions: uint256 = self._pack_integers(precisions)

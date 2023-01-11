@@ -42,9 +42,7 @@ def test_initial(swap_with_deposit):
     j=strategy("uint8", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-def test_last_price_exchange(
-    swap_with_deposit, coins, user, amount, i, j
-):
+def test_last_price_exchange(swap_with_deposit, coins, user, amount, i, j):
     if i == j:
         return
 
@@ -66,22 +64,14 @@ def test_last_price_exchange(
         return
 
     if i > 0 and j > 0:
-        price_j = (
-            swap_with_deposit.last_prices(i - 1) * amount // out
-        )
-        assert approx(
-            price_j, swap_with_deposit.last_prices(j - 1), 2e-10
-        )
+        price_j = swap_with_deposit.last_prices(i - 1) * amount // out
+        assert approx(price_j, swap_with_deposit.last_prices(j - 1), 2e-10)
     elif i == 0:
         price_j = amount * 10**18 // out
-        assert approx(
-            price_j, swap_with_deposit.last_prices(j - 1), 2e-10
-        )
+        assert approx(price_j, swap_with_deposit.last_prices(j - 1), 2e-10)
     else:  # j == 0
         price_i = out * 10**18 // amount
-        assert approx(
-            price_i, swap_with_deposit.last_prices(i - 1), 2e-10
-        )
+        assert approx(price_i, swap_with_deposit.last_prices(i - 1), 2e-10)
 
 
 @given(
@@ -89,17 +79,13 @@ def test_last_price_exchange(
     i=strategy("uint8", min_value=0, max_value=2),
 )
 @settings(**SETTINGS)
-def test_last_price_remove_liq(
-    swap_with_deposit, user, token_frac, i
-):
+def test_last_price_remove_liq(swap_with_deposit, user, token_frac, i):
 
     prices = INITIAL_PRICES
     token_amount = token_frac * swap_with_deposit.totalSupply() // 10**18
 
     with boa.env.prank(user):
-        swap_with_deposit.remove_liquidity_one_coin(
-            token_amount, i, 0
-        )
+        swap_with_deposit.remove_liquidity_one_coin(token_amount, i, 0)
 
     for k in [1, 2]:
         oracle_price = swap_with_deposit.last_prices(k - 1)
@@ -115,9 +101,7 @@ def test_last_price_remove_liq(
     t=strategy("uint256", min_value=10, max_value=10 * 86400),
 )
 @settings(**SETTINGS)
-def test_ma(
-    swap_with_deposit, coins, user, amount, i, j, t
-):
+def test_ma(swap_with_deposit, coins, user, amount, i, j, t):
     if i == j:
         return
 
@@ -140,7 +124,7 @@ def test_ma(
     prices3 = [swap_with_deposit.price_oracle(k) for k in [0, 1]]
 
     for p1, p2, p3 in zip(prices1[1:], prices2, prices3):
-        
+
         alpha = exp(-1 * t / ma_time)
         theory = p1 * alpha + p2 * (1 - alpha)
         assert abs(log2(theory / p3)) < 0.001
@@ -156,9 +140,7 @@ def test_ma(
     t=strategy("uint256", max_value=10 * 86400),
 )
 @settings(**SETTINGS)
-def test_price_scale_range(
-    swap_with_deposit, coins, user, amount, i, j, t
-):
+def test_price_scale_range(swap_with_deposit, coins, user, amount, i, j, t):
     if i == j:
         return
 
@@ -206,9 +188,7 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
         swap_with_deposit.exchange(i, j, amount, 0)
     out = coins[j].balanceOf(user) - out
 
-    price_scale_1 = [
-        swap_with_deposit.price_scale(i) for i in range(2)
-    ]
+    price_scale_1 = [swap_with_deposit.price_scale(i) for i in range(2)]
     prices2 = [swap_with_deposit.last_prices(k) for k in [0, 1]]
 
     if i == 0:
@@ -228,17 +208,13 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
     with boa.env.prank(user):
         swap_with_deposit.exchange(0, 1, 10**18, 0)
 
-    price_scale_2 = [
-        swap_with_deposit.price_scale(i) for i in range(2)
-    ]
+    price_scale_2 = [swap_with_deposit.price_scale(i) for i in range(2)]
     price_diff = abs(price_scale_2[ix - 1] - price_scale_1[ix - 1])
 
     # checks if price scale changed is as expected:
     if price_diff > 0:
 
-        price_oracle = [
-            swap_with_deposit.price_oracle(k) for k in range(2)
-        ]
+        price_oracle = [swap_with_deposit.price_oracle(k) for k in range(2)]
 
         _norm = norm(price_oracle, price_scale_1)
         step = max(swap_with_deposit.adjustment_step(), _norm / 10)

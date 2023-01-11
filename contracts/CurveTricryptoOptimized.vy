@@ -114,9 +114,6 @@ event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
 
-event AdjustPrices:
-    price_scale: uint256[N_COINS-1]
-
 
 # ----------------------- Storage/State Variables ----------------------------
 
@@ -127,8 +124,8 @@ PRECISION: constant(uint256) = 10**18  # <------- The precision to convert to.
 A_MULTIPLIER: constant(uint256) = 10000
 packed_precisions: uint256
 
-math: public(address)
-coins: public(immutable(address[N_COINS]))
+math: address  # <--------- Math implementation contract is stored in Factory.
+coins: public(address[N_COINS])
 factory: public(address)
 
 price_scale_packed: uint256  # <------------------------ Internal price scale.
@@ -181,14 +178,15 @@ admin_actions_deadline: public(uint256)
 ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
 MIN_RAMP_TIME: constant(uint256) = 86400
 
-MAX_ADMIN_FEE: constant(uint256) = 10 * 10**9
-MIN_FEE: constant(uint256) = 5 * 10**5  # <-------------------------- 0.5 BPS.
-MAX_FEE: constant(uint256) = 10 * 10**9
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
 MAX_A_CHANGE: constant(uint256) = 10
 MIN_GAMMA: constant(uint256) = 10**10
 MAX_GAMMA: constant(uint256) = 5 * 10**16
+
+MAX_ADMIN_FEE: constant(uint256) = 10 * 10**9
+MIN_FEE: constant(uint256) = 5 * 10**5  # <-------------------------- 0.5 BPS.
+MAX_FEE: constant(uint256) = 10 * 10**9
 NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
@@ -244,8 +242,8 @@ def __init__(
 
     name = _name
     symbol = _symbol
-    coins = _coins
 
+    self.coins = _coins
     self.packed_precisions = packed_precisions  # <------- Precisions of coins
     # ------------------------------ are calculated as (18 - coin.decimals()).
 
@@ -401,6 +399,7 @@ def add_liquidity(
 
     packed_prices: uint256 = self.price_scale_packed
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+
     xp[0] *= precisions[0]
     xp_old[0] *= precisions[0]
     for i in range(1, N_COINS):
@@ -416,20 +415,26 @@ def add_liquidity(
 
     for i in range(N_COINS):
 
-        if use_eth and coins[i] == WETH20:
+        if use_eth and self.coins[i] == WETH20:
             assert msg.value == amounts[i]  # dev: incorrect eth amount
 
         if amounts[i] > 0:
 
-            assert ERC20(coins[i]).transferFrom(
-                msg.sender, self, amounts[i], default_return_value=True
-            )
+            if not use_eth or self.coins[i] != WETH20:
+
+                assert ERC20(self.coins[i]).transferFrom(
+                    msg.sender, self, amounts[i], default_return_value=True
+                )
+
+                if self.coins[i] == WETH20:
+                    WETH(WETH20).withdraw(amounts[i])
+
             amountsp[i] = xp[i] - xp_old[i]
 
-            if ix == INF_COINS:
-                ix = i
-            else:
-                ix = INF_COINS - 1
+        if ix == INF_COINS:
+            ix = i
+        else:
+            ix = INF_COINS - 1
 
     assert ix != INF_COINS  # dev: no coins to add
 
@@ -442,7 +447,6 @@ def add_liquidity(
             self.future_A_gamma_time = 1
     else:
         old_D = self.D
-
     D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
 
     token_supply: uint256 = self.totalSupply
@@ -536,6 +540,8 @@ def remove_liquidity(
 
     amount: uint256 = _amount - 1  # <-------------------------- Make rounding
     # ------------------------------------- errors favor other LPs a tiny bit.
+    # ------- Also, if the entire balance of the contract is emptied, then the
+    # ------------------- contract gets killed as it goes into a borked state.
 
     for i in range(N_COINS):
         d_balance: uint256 = balances[i] * amount / total_supply
@@ -543,14 +549,15 @@ def remove_liquidity(
         self.balances[i] = balances[i] - d_balance
         balances[i] = d_balance  # <---------- Now it's the amounts going out.
 
-        # ----- Transfers -----
-        if use_eth and coins[i] == WETH20:
+        # ------------------------------ Transfers ---------------------------
+
+        if use_eth and self.coins[i] == WETH20:
             raw_call(receiver, b"", value=d_balance)
         else:
-            if coins[i] == WETH20:
+            if self.coins[i] == WETH20:
                 WETH(WETH20).deposit(value=d_balance)
 
-            assert ERC20(coins[i]).transfer(
+            assert ERC20(self.coins[i]).transfer(
                 receiver, d_balance, default_return_value=True
             )
 
@@ -601,12 +608,12 @@ def remove_liquidity_one_coin(
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
 
-    if use_eth and coins[i] == WETH20:  # <------------------- ETH withdrawal.
+    if use_eth and self.coins[i] == WETH20:  # <------------------- ETH withdrawal.
         raw_call(receiver, b"", value=dy)
     else:
-        if coins[i] == WETH20:
+        if self.coins[i] == WETH20:
             WETH(WETH20).deposit(value=dy)
-        assert ERC20(coins[i]).transfer(
+        assert ERC20(self.coins[i]).transfer(
             receiver, dy, default_return_value=True
         )
 
@@ -723,10 +730,10 @@ def _claim_admin_fees():
     xcp_profit_a: uint256 = self.xcp_profit_a
 
     for i in range(N_COINS):  # <---------------------------------- Gulp here.
-        if coins[i] == WETH20:
+        if self.coins[i] == WETH20:
             self.balances[i] = self.balance
         else:
-            self.balances[i] = ERC20(coins[i]).balanceOf(self)
+            self.balances[i] = ERC20(self.coins[i]).balanceOf(self)
 
     vprice: uint256 = self.virtual_price
 
@@ -966,19 +973,15 @@ def tweak_price(
                 self.D = D
                 self.virtual_price = old_virtual_price
 
-                log AdjustPrices(p_new)  # <----------- Log new price_scale so
-                # ----------------------------------- indexers can capture it.
-
                 return  # <------------------------- Return if we've adjusted.
 
             else:
 
                 self.not_adjusted = 1  # <--- anything less than 2 is (False).
 
-    # ------------- If we are here, the price_scale adjustment did not happen.
+    self.D = D_unadjusted  # <---------------- If we are here, the price_scale
+    self.virtual_price = virtual_price  # --------- adjustment did not happen.
     # ---------------------- We Still need to update the profit counter and D.
-    self.D = D_unadjusted
-    self.virtual_price = virtual_price
 
 
 @internal
@@ -1067,42 +1070,44 @@ def _exchange(
     # ---------------------- Do Transfers in and out -------------------------
 
     # TRANSFER IN <-------
-    if use_eth and coins[i] == WETH20:
+    if use_eth and self.coins[i] == WETH20:
         assert mvalue == dx  # dev: incorrect eth amount
     else:
         assert mvalue == 0  # dev: nonzero eth amount
 
         if callback_sig == empty(bytes32):
 
-            assert ERC20(coins[i]).transferFrom(sender, self, dx, default_return_value=True)
+            assert ERC20(self.coins[i]).transferFrom(
+                sender, self, dx, default_return_value=True
+            )
 
         else:
 
             # --------------- First call callback logic and then check if pool
             # ---------------- gets dx amounts of _coins[i], revert otherwise.
-            b: uint256 = ERC20(coins[i]).balanceOf(self)
+            b: uint256 = ERC20(self.coins[i]).balanceOf(self)
             raw_call(
                 callbacker,
                 concat(
                     slice(callback_sig, 0, 4),
-                    _abi_encode(sender, receiver, coins[i], dx, dy)
+                    _abi_encode(sender, receiver, self.coins[i], dx, dy)
                 )
             )
-            assert ERC20(coins[i]).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+            assert ERC20(self.coins[i]).balanceOf(self) - b == dx  # dev: callback didn't give us coins
 
 
-        if coins[i] == WETH20:
+        if self.coins[i] == WETH20:
             WETH(WETH20).withdraw(dx)  # <--------- if WETH was transferred in
             # ---------- previous step and `not use_eth`, withdraw WETH to ETH.
 
     # -------> TRANSFER OUT
-    if coins[j] == WETH20 and use_eth:
+    if self.coins[j] == WETH20 and use_eth:
         raw_call(receiver, b"", value=dy)
     else:
-        if coins[j] == WETH20:
+        if self.coins[j] == WETH20:
             WETH(WETH20).deposit(value=dy)
 
-        assert ERC20(coins[j]).transfer(receiver, dy, default_return_value=True)
+        assert ERC20(self.coins[j]).transfer(receiver, dy, default_return_value=True)
 
     # --------------------- Calculate and adjust prices ----------------------
 
@@ -1564,20 +1569,20 @@ def DOMAIN_SEPARATOR() -> bytes32:
 
 @view
 @external
-def A() -> uint256:
-    return self._A_gamma()[0]
-
-
-@view
-@external
-def gamma() -> uint256:
-    return self._A_gamma()[1]
+def A_gamma() -> uint256[2]:  # <- A and gamma in view to save bytecode space.
+    return self._A_gamma()
 
 
 @view
 @external
 def precisions() -> uint256[N_COINS]:  # <--------- Required by view contract.
     return self._unpack(self.packed_precisions)
+
+
+@external
+@view
+def fee_calc(xp: uint256[N_COINS]) -> uint256:  # <- Required by view contract
+    return self._fee(xp)
 
 
 # ------------------------- AMM Admin Functions ------------------------------

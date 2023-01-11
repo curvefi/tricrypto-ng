@@ -46,9 +46,7 @@ def test_exchange_all(
         d_balance_j = swap_with_deposit.balances(j)
 
         with boa.env.prank(user):
-            swap_with_deposit.exchange(
-                i, j, amount, int(0.999 * calculated)
-            )
+            swap_with_deposit.exchange(i, j, amount, int(0.999 * calculated))
 
         measured_i -= coins[i].balanceOf(user)
         measured_j = coins[j].balanceOf(user) - measured_j
@@ -131,9 +129,7 @@ def test_exchange_into_eth(
     d_balance_j = swap_with_deposit.balances(2)
 
     with boa.env.prank(user):
-        swap_with_deposit.exchange(
-            i, 2, amount, int(0.999 * calculated), True
-        )
+        swap_with_deposit.exchange(i, 2, amount, int(0.999 * calculated), True)
 
     measured_i -= coins[i].balanceOf(user)
     measured_j = boa.env.get_balance(user) - measured_j
@@ -161,15 +157,11 @@ def test_incorrect_eth_amount(swap_with_deposit, user, j, modifier):
 def test_send_eth_without_use_eth(swap_with_deposit, user, j):
     amount = 10**18
     with boa.reverts(dev="nonzero eth amount"), boa.env.prank(user):
-        swap_with_deposit.exchange(
-            2, j, amount, 0, False, value=amount
-        )
+        swap_with_deposit.exchange(2, j, amount, 0, False, value=amount)
 
 
 @pytest.mark.parametrize("i", [0, 1])
 def test_send_eth_with_incorrect_i(swap_with_deposit, user, i):
     amount = 10**18
     with boa.reverts(dev="nonzero eth amount"), boa.env.prank(user):
-        swap_with_deposit.exchange(
-            i, 2, amount, 0, True, value=amount
-        )
+        swap_with_deposit.exchange(i, 2, amount, 0, True, value=amount)
