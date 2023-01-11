@@ -51,6 +51,10 @@ event UpdateMathImplementation:
     _old_math_implementation: address
     _new_math_implementation: address
 
+event UpdateViewsImplementation:
+    _old_views_implementation: address
+    _new_views_implementation: address
+
 event TransferOwnership:
     _old_owner: address
     _new_owner: address
@@ -91,6 +95,7 @@ fee_receiver: public(address)
 pool_implementation: public(address)
 gauge_implementation: public(address)
 math_implementation: public(address)
+views_implementation: public(address)
 
 # mapping of coins -> pools for trading
 # a mapping key is generated for each pair of addresses via
@@ -333,12 +338,25 @@ def set_gauge_implementation(_gauge_implementation: address):
 def set_math_implementation(_math_implementation: address):
     """
     @notice Set math implementation
-    @param _math_implementation Address of the new views contract
+    @param _math_implementation Address of the new math contract
     """
     assert msg.sender == self.admin  # dev: admin only
 
     log UpdateMathImplementation(self.math_implementation, _math_implementation)
     self.math_implementation = _math_implementation
+
+
+@external
+def set_views_implementation(_views_implementation: address):
+    """
+    @notice Set views contract implementation
+    @param _views_implementation Address of the new views contract
+    """
+    assert msg.sender == self.admin  # dev: admin only
+
+    log UpdateViewsImplementation(self.views_implementation, _views_implementation)
+    self.views_implementation = _views_implementation
+
 
 
 @external
