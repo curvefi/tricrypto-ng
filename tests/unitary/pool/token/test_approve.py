@@ -5,9 +5,7 @@ from tests.utils.tokens import mint_for_testing
 
 
 @pytest.mark.parametrize("idx", range(5))
-def test_initial_approval_is_zero(
-    swap, alice, users, idx
-):
+def test_initial_approval_is_zero(swap, alice, users, idx):
     assert swap.allowance(alice, users[idx]) == 0
 
 

@@ -14,9 +14,7 @@ def test_sender_balance_decreases(loaded_alice, bob, charlie, swap):
     assert swap.balanceOf(loaded_alice) == sender_balance - amount
 
 
-def test_receiver_balance_increases(
-    loaded_alice, bob, charlie, swap
-):
+def test_receiver_balance_increases(loaded_alice, bob, charlie, swap):
     receiver_balance = swap.balanceOf(charlie)
     amount = swap.balanceOf(loaded_alice) // 4
 
@@ -29,9 +27,7 @@ def test_receiver_balance_increases(
     assert swap.balanceOf(charlie) == receiver_balance + amount
 
 
-def test_caller_balance_not_affected(
-    loaded_alice, bob, charlie, swap
-):
+def test_caller_balance_not_affected(loaded_alice, bob, charlie, swap):
     caller_balance = swap.balanceOf(bob)
     amount = swap.balanceOf(loaded_alice)
 
@@ -54,15 +50,10 @@ def test_caller_approval_affected(alice, bob, charlie, swap):
     with boa.env.prank(bob):
         swap.transferFrom(alice, charlie, transfer_amount)
 
-    assert (
-        swap.allowance(alice, bob)
-        == approval_amount - transfer_amount
-    )
+    assert swap.allowance(alice, bob) == approval_amount - transfer_amount
 
 
-def test_receiver_approval_not_affected(
-    loaded_alice, bob, charlie, swap
-):
+def test_receiver_approval_not_affected(loaded_alice, bob, charlie, swap):
     approval_amount = swap.balanceOf(loaded_alice)
     transfer_amount = approval_amount // 4
 
@@ -187,8 +178,7 @@ def test_transfer_to_self(loaded_alice, swap):
 
     assert swap.balanceOf(loaded_alice) == sender_balance
     assert (
-        swap.allowance(loaded_alice, loaded_alice)
-        == sender_balance - amount
+        swap.allowance(loaded_alice, loaded_alice) == sender_balance - amount
     )
 
 

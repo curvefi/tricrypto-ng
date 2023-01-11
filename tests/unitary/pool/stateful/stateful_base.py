@@ -17,15 +17,16 @@ class StatefulBase(RuleBasedStateMachine):
     user = strategy("address")
 
     def __init__(self):
-        
+
         super().__init__()
-        
+
         self.accounts = self.users
         self.views = self.views_contract
         self.coins = self.pool_coins
         self.token = self.swap
-        
+
         self.swap_admin = self.tricrypto_factory.admin()
+        self.fee_receiver = self.tricrypto_factory.fee_receiver()
 
         self.decimals = [int(c.decimals()) for c in self.coins]
         self.initial_prices = INITIAL_PRICES
@@ -162,7 +163,7 @@ class StatefulBase(RuleBasedStateMachine):
                 10**16
                 * 10 ** self.decimals[exchange_j]
                 // ([10**18] + INITIAL_PRICES)[exchange_j],
-                self.swap
+                self.swap,
             )
 
         d_balance_i -= self.coins[exchange_i].balanceOf(user)
@@ -191,7 +192,9 @@ class StatefulBase(RuleBasedStateMachine):
     @invariant()
     def balances(self):
         balances = [self.swap.balances(i) for i in range(3)]
+        eth_balance_amm = boa.env.get_balance(self.swap.address)
         balances_of = [c.balanceOf(self.swap) for c in self.coins]
+        balances_of[2] = eth_balance_amm  # eth is set at i==2
         for i in range(3):
             assert self.balances[i] == balances[i]
             assert self.balances[i] == balances_of[i]
@@ -202,7 +205,7 @@ class StatefulBase(RuleBasedStateMachine):
 
     @invariant()
     def virtual_price(self):
-        virtual_price = self.swap.virtual_price()
+        virtual_price = self.swap._storage.virtual_price.get()
         xcp_profit = self.swap.xcp_profit()
         get_virtual_price = self.swap.get_virtual_price()
 

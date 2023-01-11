@@ -976,7 +976,7 @@ def tweak_price(
                 self.D = D
                 self.virtual_price = old_virtual_price
 
-                # TODO: consider adding a log to show new price_scale if 
+                # TODO: consider adding a log to show new price_scale if
                 # there's enought space left
 
                 return  # <------------------------- Return if we've adjusted.
@@ -1657,7 +1657,7 @@ def commit_new_parameters(
     self.admin_actions_deadline = _deadline
 
     # ----------------------------- Set fee params ---------------------------
-    
+
     new_admin_fee: uint256 = _new_admin_fee
     new_mid_fee: uint256 = _new_mid_fee
     new_out_fee: uint256 = _new_out_fee
@@ -1681,7 +1681,7 @@ def commit_new_parameters(
 
     if new_admin_fee > MAX_ADMIN_FEE:  # <------------------- Check admin fee.
         new_admin_fee = self.admin_fee
-    
+
     self.future_packed_fee_params = self._pack(
         [new_mid_fee, new_out_fee, new_fee_gamma]
     )

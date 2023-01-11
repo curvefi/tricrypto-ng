@@ -54,7 +54,7 @@ class StatefulAdmin(StatefulBase):
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
 
-        admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+        admin_balance = self.token.balanceOf(self.fee_receiver)
 
         if exchange_i > 0:
             exchange_amount_in_converted = (
@@ -69,19 +69,17 @@ class StatefulAdmin(StatefulBase):
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
 
-        admin_balance = (
-            self.token.balanceOf(self.swap.admin_fee_receiver())
-            - admin_balance
-        )
+        admin_balance = self.token.balanceOf(self.fee_receiver) - admin_balance
 
         self.total_supply += admin_balance
 
     @rule()
     def claim_admin_fees(self):
-        balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+
+        balance = self.token.balanceOf(self.fee_receiver)
 
         self.swap.claim_admin_fees()
-        admin_balance = self.token.balanceOf(self.swap.admin_fee_receiver())
+        admin_balance = self.token.balanceOf(self.fee_receiver)
         balance = admin_balance - balance
         self.total_supply += balance
 
