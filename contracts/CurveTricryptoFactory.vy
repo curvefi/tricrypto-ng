@@ -125,7 +125,7 @@ def __init__(
 
 @internal
 @view
-def _pack_integers(x: uint256[3]) -> uint256:
+def _pack(x: uint256[3]) -> uint256:
     return shift(x[0], 128) | shift(x[1], 64) | x[2]
 
 
@@ -192,10 +192,10 @@ def deploy_pool(
         precisions[i] = 10** (18 - d)
 
     # pack precisions
-    packed_precisions: uint256 = self._pack_integers(precisions)
+    packed_precisions: uint256 = self._pack(precisions)
 
     # pack fees
-    packed_fee_params: uint256 = self._pack_integers(
+    packed_fee_params: uint256 = self._pack(
         [mid_fee, out_fee, fee_gamma]
     )
 

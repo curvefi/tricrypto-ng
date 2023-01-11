@@ -1,6 +1,6 @@
 # @version 0.3.7
 # (c) Curve.Fi, 2021
-# Pool for 3 coin unpegged assets (ETH, BTC, USD)
+# Pool for 3 coin unpegged assets (e.g. ETH, BTC, USD)
 
 from vyper.interfaces import ERC20
 
@@ -156,7 +156,7 @@ future_ma_time: public(uint256)
 
 xcp_profit: public(uint256)
 xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
-virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
+virtual_price: uint256  # <------ Cached (fast to read) virtual price.
 # -------------------------The cached `virtual_price` is also used internally.
 not_adjusted: uint256  # <-------- Defined as a uint but is treated as a bool.
 
@@ -168,9 +168,6 @@ future_packed_fee_params: uint256
 
 admin_fee: public(uint256)
 future_admin_fee: public(uint256)
-
-owner: public(address)
-future_owner: public(address)
 
 transfer_ownership_deadline: public(uint256)
 admin_actions_deadline: public(uint256)
@@ -637,6 +634,12 @@ def claim_admin_fees():
 
 @internal
 @view
+def _pack(x: uint256[3]) -> uint256:
+    return shift(x[0], 128) | shift(x[1], 64) | x[2]
+
+
+@internal
+@view
 def _unpack(_packed: uint256) -> uint256[3]:
     """
     @notice Unpacks a uint256 into 3 integers with values <= 10**18
@@ -972,6 +975,9 @@ def tweak_price(
                 self.price_scale_packed = packed_prices
                 self.D = D
                 self.virtual_price = old_virtual_price
+
+                # TODO: consider adding a log to show new price_scale if 
+                # there's enought space left
 
                 return  # <------------------------- Return if we've adjusted.
 
@@ -1480,28 +1486,13 @@ def get_virtual_price() -> uint256:
 @external
 @view
 @nonreentrant("lock")
-def lp_price() -> uint256:
-
-    price_oracle: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-    packed_prices: uint256 = self.price_oracle_packed
-    for k in range(N_COINS - 1):
-        price_oracle[k] = packed_prices & PRICE_MASK
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
-
-    return (
-        3 * self.virtual_price *
-        Math(self.math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
-    )
-
-
-@external
-@view
-@nonreentrant("lock")
 def price_oracle(k: uint256) -> uint256:
     price_oracle: uint256 = self._packed_view(k, self.price_oracle_packed)
     last_prices_timestamp: uint256 = self.last_prices_timestamp
 
-    if last_prices_timestamp < block.timestamp:
+    if last_prices_timestamp < block.timestamp:  # <------------ Update moving
+        # ------------------------------------------------- average if needed.
+
         last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
         ma_time: uint256 = self.ma_time
         alpha: uint256 = Math(self.math).wad_exp(
@@ -1510,6 +1501,7 @@ def price_oracle(k: uint256) -> uint256:
                 int256,
             )
         )
+
         return (
             last_prices * (10**18 - alpha) + price_oracle * alpha
         ) / 10**18
@@ -1592,7 +1584,7 @@ def fee_calc(xp: uint256[N_COINS]) -> uint256:  # <- Required by view contract
 def ramp_A_gamma(
     future_A: uint256, future_gamma: uint256, future_time: uint256
 ):
-    assert msg.sender == self.owner  # dev: only owner
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
     assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1)
     assert future_time > block.timestamp + MIN_RAMP_TIME - 1  # dev: insufficient time
 
@@ -1633,7 +1625,7 @@ def ramp_A_gamma(
 
 @external
 def stop_ramp_A_gamma():
-    assert msg.sender == self.owner  # dev: only owner
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
 
     A_gamma: uint256[2] = self._A_gamma()
     current_A_gamma: uint256 = shift(A_gamma[0], 128)
@@ -1650,43 +1642,56 @@ def stop_ramp_A_gamma():
 
 @external
 def commit_new_parameters(
-    _new_packed_fee_params: uint256,
+    _new_mid_fee: uint256,
+    _new_out_fee: uint256,
     _new_admin_fee: uint256,
+    _new_fee_gamma: uint256,
     _new_allowed_extra_profit: uint256,
     _new_adjustment_step: uint256,
     _new_ma_time: uint256,
 ):
-    assert msg.sender == self.owner  # dev: only owner
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
     assert self.admin_actions_deadline == 0  # dev: active action
 
-    new_admin_fee: uint256 = _new_admin_fee
-    fee_params: uint256[3] = self._unpack(_new_packed_fee_params)
-    new_allowed_extra_profit: uint256 = _new_allowed_extra_profit
-    new_adjustment_step: uint256 = _new_adjustment_step
-    new_ma_time: uint256 = _new_ma_time
+    _deadline: uint256 = block.timestamp + ADMIN_ACTIONS_DELAY
+    self.admin_actions_deadline = _deadline
 
     # ----------------------------- Set fee params ---------------------------
+    
+    new_admin_fee: uint256 = _new_admin_fee
+    new_mid_fee: uint256 = _new_mid_fee
+    new_out_fee: uint256 = _new_out_fee
+    new_fee_gamma: uint256 = _new_fee_gamma
 
     current_fee_params: uint256[3] = self._unpack(self.packed_fee_params)
 
-    if fee_params[1] < MAX_FEE + 1:
-        assert fee_params[1] > MIN_FEE - 1  # dev: fee is out of range
+    if new_out_fee < MAX_FEE + 1:
+        assert new_out_fee > MIN_FEE - 1  # dev: fee is out of range
     else:
-        fee_params[1] = current_fee_params[1]
+        new_out_fee = current_fee_params[1]
 
-    if fee_params[0] > MAX_FEE:
-        fee_params[0] = current_fee_params[0]
-    assert fee_params[0] <= fee_params[1]  # dev: mid-fee is too high
+    if new_mid_fee > MAX_FEE:
+        new_mid_fee = current_fee_params[0]
+    assert new_mid_fee <= new_out_fee  # dev: mid-fee is too high
 
-    if fee_params[2] < 10**18:
-        assert fee_params[2] > 0  # dev: fee_gamma out of range [1 .. 10**18]
+    if new_fee_gamma < 10**18:
+        assert new_fee_gamma > 0  # dev: fee_gamma out of range [1 .. 10**18]
     else:
-        fee_params[2] = current_fee_params[2]
+        new_fee_gamma = current_fee_params[2]
 
-    if new_admin_fee > MAX_ADMIN_FEE:
+    if new_admin_fee > MAX_ADMIN_FEE:  # <------------------- Check admin fee.
         new_admin_fee = self.admin_fee
+    
+    self.future_packed_fee_params = self._pack(
+        [new_mid_fee, new_out_fee, new_fee_gamma]
+    )
+    self.future_admin_fee = new_admin_fee
 
     # ----------------- Set liquidity rebalancing parameters -----------------
+
+    new_allowed_extra_profit: uint256 = _new_allowed_extra_profit
+    new_adjustment_step: uint256 = _new_adjustment_step
+    new_ma_time: uint256 = _new_ma_time
 
     if new_allowed_extra_profit > 10**18:
         new_allowed_extra_profit = self.allowed_extra_profit
@@ -1698,13 +1703,6 @@ def commit_new_parameters(
     else:
         new_ma_time = self.ma_time
 
-    _deadline: uint256 = block.timestamp + ADMIN_ACTIONS_DELAY
-    self.admin_actions_deadline = _deadline
-
-    self.future_admin_fee = new_admin_fee
-
-    self.future_packed_fee_params = _new_packed_fee_params
-
     self.future_allowed_extra_profit = new_allowed_extra_profit
     self.future_adjustment_step = new_adjustment_step
     self.future_ma_time = new_ma_time
@@ -1712,9 +1710,9 @@ def commit_new_parameters(
     log CommitNewParameters(
         _deadline,
         new_admin_fee,
-        fee_params[0],
-        fee_params[1],
-        fee_params[2],
+        new_mid_fee,
+        new_out_fee,
+        new_fee_gamma,
         new_allowed_extra_profit,
         new_adjustment_step,
         new_ma_time,
@@ -1724,7 +1722,7 @@ def commit_new_parameters(
 @external
 @nonreentrant("lock")
 def apply_new_parameters():
-    assert msg.sender == self.owner  #dev: only owner
+    assert msg.sender == Factory(self.factory).admin()  #dev: only owner
     assert block.timestamp >= self.admin_actions_deadline  #dev: insufficient time
     assert self.admin_actions_deadline != 0  #dev: no active action
 
@@ -1760,5 +1758,5 @@ def apply_new_parameters():
 
 @external
 def revert_new_parameters():
-    assert msg.sender == self.owner  # dev: only owner
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
     self.admin_actions_deadline = 0

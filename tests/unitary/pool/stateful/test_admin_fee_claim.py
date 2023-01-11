@@ -39,9 +39,11 @@ class StatefulAdmin(StatefulBase):
             boa.env.time_travel(seconds=3 * 86400 + 1)
             self.swap.apply_new_parameters()
 
+        packed_fee_params = self.swap._storage.packed_fee_params.get()
+        unpacked_fee_params = self.swap.internal._unpack(packed_fee_params)
         assert self.swap.admin_fee() == 5 * 10**9
-        self.mid_fee = self.swap.mid_fee()
-        self.out_fee = self.swap.out_fee()
+        self.mid_fee = unpacked_fee_params[0]
+        self.out_fee = unpacked_fee_params[1]
         self.admin_fee = 5 * 10**9
 
     @rule(
@@ -96,14 +98,7 @@ class StatefulAdmin(StatefulBase):
                     raise
 
 
-def test_admin(
-    tricrypto_swap,
-    tricrypto_lp_token,
-    tricrypto_views,
-    users,
-    pool_coins,
-    optimized,
-):
+def test_admin(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

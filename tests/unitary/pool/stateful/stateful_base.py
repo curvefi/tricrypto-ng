@@ -17,13 +17,15 @@ class StatefulBase(RuleBasedStateMachine):
     user = strategy("address")
 
     def __init__(self):
+        
         super().__init__()
+        
         self.accounts = self.users
-        self.swap = self.tricrypto_swap
-        self.views = self.tricrypto_views
+        self.views = self.views_contract
         self.coins = self.pool_coins
-        self.token = self.tricrypto_lp_token
-        self.swap_admin = self.swap.owner()
+        self.token = self.swap
+        
+        self.swap_admin = self.tricrypto_factory.admin()
 
         self.decimals = [int(c.decimals()) for c in self.coins]
         self.initial_prices = INITIAL_PRICES
@@ -108,7 +110,7 @@ class StatefulBase(RuleBasedStateMachine):
                 )
             else:
                 calc_amount = self.views.get_dy(
-                    exchange_i, exchange_j, exchange_amount_in
+                    exchange_i, exchange_j, exchange_amount_in, self.swap
                 )
         except Exception:
             _amounts = [0] * 3
@@ -160,6 +162,7 @@ class StatefulBase(RuleBasedStateMachine):
                 10**16
                 * 10 ** self.decimals[exchange_j]
                 // ([10**18] + INITIAL_PRICES)[exchange_j],
+                self.swap
             )
 
         d_balance_i -= self.coins[exchange_i].balanceOf(user)
