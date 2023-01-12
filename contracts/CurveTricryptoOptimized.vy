@@ -635,6 +635,11 @@ def claim_admin_fees():
 @internal
 @view
 def _pack(x: uint256[3]) -> uint256:
+    """
+    @notice Packs 3 integers with values <= 10**18 into a uint256
+    @param x The uint256[3] to pack
+    @return The packed uint256
+    """
     return shift(x[0], 128) | shift(x[1], 64) | x[2]
 
 
@@ -642,7 +647,7 @@ def _pack(x: uint256[3]) -> uint256:
 @view
 def _unpack(_packed: uint256) -> uint256[3]:
     """
-    @notice Unpacks a uint256 into 3 integers with values <= 10**18
+    @notice Unpacks a uint256 into 3 integers (values must be <= 10**18)
     @param val The uint256 to unpack
     @return The unpacked uint256[3]
     """
