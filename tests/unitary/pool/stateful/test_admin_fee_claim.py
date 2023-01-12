@@ -1,6 +1,5 @@
 from math import log
 
-import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
@@ -25,23 +24,9 @@ class StatefulAdmin(StatefulBase):
 
     def setup(self):
         super().setup(user_id=1)
-        with boa.env.prank(self.swap_admin):
-            self.swap.commit_new_parameters(
-                NO_CHANGE,
-                NO_CHANGE,
-                5 * 10**9,  # admin fee
-                NO_CHANGE,
-                NO_CHANGE,
-                NO_CHANGE,
-                NO_CHANGE,
-            )
-
-            boa.env.time_travel(seconds=3 * 86400 + 1)
-            self.swap.apply_new_parameters()
 
         packed_fee_params = self.swap._storage.packed_fee_params.get()
         unpacked_fee_params = self.swap.internal._unpack(packed_fee_params)
-        assert self.swap.admin_fee() == 5 * 10**9
         self.mid_fee = unpacked_fee_params[0]
         self.out_fee = unpacked_fee_params[1]
         self.admin_fee = 5 * 10**9

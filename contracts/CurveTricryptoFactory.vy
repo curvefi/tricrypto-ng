@@ -26,7 +26,6 @@ event TricryptoPoolDeployed:
     allowed_extra_profit: uint256
     fee_gamma: uint256
     adjustment_step: uint256
-    admin_fee: uint256
     ma_exp_time: uint256
     initial_prices: uint256[N_COINS-1]
     deployer: address
@@ -144,7 +143,6 @@ def deploy_pool(
     allowed_extra_profit: uint256,
     fee_gamma: uint256,
     adjustment_step: uint256,
-    admin_fee: uint256,
     ma_exp_time: uint256,
     initial_prices: uint256[N_COINS-1],
 ) -> address:
@@ -166,7 +164,6 @@ def deploy_pool(
     assert mid_fee < MAX_FEE-1
     assert out_fee >= mid_fee
     assert out_fee < MAX_FEE-1
-    assert admin_fee < 10**18+1
     assert allowed_extra_profit < 10**16+1
     assert fee_gamma < 10**18+1
     assert fee_gamma > 0
@@ -176,9 +173,7 @@ def deploy_pool(
     assert ma_exp_time > 0
     assert min(initial_prices[0], initial_prices[1]) > 10**6
     assert max(initial_prices[0], initial_prices[1]) < 10**30
-    assert _coins[0] != _coins[1], "Duplicate coins"
-    assert _coins[1] != _coins[2], "Duplicate coins"
-    assert _coins[0] != _coins[2], "Duplicate coins"
+    assert _coins[0] != _coins[1] and _coins[1] != _coins[2], "Duplicate coins"
 
     name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
     symbol: String[32] = concat(_symbol, "-f")
@@ -197,6 +192,11 @@ def deploy_pool(
     # pack fees
     packed_fee_params: uint256 = self._pack(
         [mid_fee, out_fee, fee_gamma]
+    )
+
+    # pack liquidity rebalancing params
+    packed_rebalancing_params: uint256 = self._pack(
+        [allowed_extra_profit, adjustment_step, ma_exp_time]
     )
 
     # pack A_gamma
@@ -222,10 +222,7 @@ def deploy_pool(
         packed_precisions,
         packed_A_gamma,
         packed_fee_params,
-        allowed_extra_profit,
-        adjustment_step,
-        admin_fee,
-        ma_exp_time,
+        packed_rebalancing_params,
         packed_prices,
         code_offset=3
     )
@@ -261,7 +258,6 @@ def deploy_pool(
         allowed_extra_profit,
         fee_gamma,
         adjustment_step,
-        admin_fee,
         ma_exp_time,
         initial_prices,
         msg.sender

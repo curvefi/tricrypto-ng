@@ -80,7 +80,6 @@ event RemoveLiquidityOne:
 
 event CommitNewParameters:
     deadline: indexed(uint256)
-    admin_fee: uint256
     mid_fee: uint256
     out_fee: uint256
     fee_gamma: uint256
@@ -89,7 +88,6 @@ event CommitNewParameters:
     ma_time: uint256
 
 event NewParameters:
-    admin_fee: uint256
     mid_fee: uint256
     out_fee: uint256
     fee_gamma: uint256
@@ -145,14 +143,9 @@ D: public(uint256)
 
 # -------------- Params that affect how price_scale get adjusted -------------
 
-allowed_extra_profit: public(uint256)  # <---- 2 * 10**12 - recommended value.
-future_allowed_extra_profit: public(uint256)
-
-adjustment_step: public(uint256)
-future_adjustment_step: public(uint256)
-
-ma_time: public(uint256)
-future_ma_time: public(uint256)
+packed_rebalancing_params: uint256  # <------- Contains rebalancing parameters
+# ------------------------ allowed_extra_profit, adjustment_step, and ma_time.
+future_packed_rebalancing_params: uint256
 
 xcp_profit: public(uint256)
 xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
@@ -161,13 +154,16 @@ virtual_price: uint256  # <------ Cached (fast to read) virtual price.
 not_adjusted: uint256  # <-------- Defined as a uint but is treated as a bool.
 
 # ---------------- Fee params that determine dynamic fees --------------------
+
 packed_fee_params: uint256  # <- Packs mid_fee, out_fee, fee_gamma to uint256.
 future_packed_fee_params: uint256
 
-# ----------------------- Admin params ---------------------------------------
+ADMIN_FEE: constant(uint256) = 5 * 10**9  # <------------- 50% of earned fees.
+MIN_FEE: constant(uint256) = 5 * 10**5  # <-------------------------- 0.5 BPS.
+MAX_FEE: constant(uint256) = 10 * 10**9
+NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 
-admin_fee: public(uint256)
-future_admin_fee: public(uint256)
+# ----------------------- Admin params ---------------------------------------
 
 transfer_ownership_deadline: public(uint256)
 admin_actions_deadline: public(uint256)
@@ -180,11 +176,6 @@ MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
 MAX_A_CHANGE: constant(uint256) = 10
 MIN_GAMMA: constant(uint256) = 10**10
 MAX_GAMMA: constant(uint256) = 5 * 10**16
-
-MAX_ADMIN_FEE: constant(uint256) = 10 * 10**9
-MIN_FEE: constant(uint256) = 5 * 10**5  # <-------------------------- 0.5 BPS.
-MAX_FEE: constant(uint256) = 10 * 10**9
-NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
@@ -228,10 +219,7 @@ def __init__(
     packed_precisions: uint256,
     packed_A_gamma: uint256,
     packed_fee_params: uint256,
-    allowed_extra_profit: uint256,
-    adjustment_step: uint256,
-    admin_fee: uint256,
-    ma_time: uint256,
+    packed_rebalancing_params: uint256,
     packed_prices: uint256,
 ):
 
@@ -240,27 +228,26 @@ def __init__(
     name = _name
     symbol = _symbol
 
+    self.math = _math
     self.coins = _coins
     self.packed_precisions = packed_precisions  # <------- Precisions of coins
-    # ------------------------------ are calculated as (18 - coin.decimals()).
+    # -------------------------- are calculated as 10**(18 - coin.decimals()).
 
-    self.math = _math
-
-    self.initial_A_gamma = packed_A_gamma
+    self.initial_A_gamma = packed_A_gamma  # <------------------ A and gamma.
     self.future_A_gamma = packed_A_gamma
 
-    self.allowed_extra_profit = allowed_extra_profit
-    self.adjustment_step = adjustment_step
-    self.packed_fee_params = packed_fee_params
-    self.admin_fee = admin_fee
-
+    self.packed_rebalancing_params = packed_rebalancing_params  # <-- Contains
+    # ------------- rebalancing params: allowed_extra_profit, adjustment_step,
+    # ------------------------------------------------------- and ma_exp_time.
     self.not_adjusted = 1  # <--------------------- < 2 is False, > 2 is True.
+
+    self.packed_fee_params = packed_fee_params  # <-------------- Contains Fee
+    # -------------------------------- params: mid_fee, out_fee and fee_gamma.
 
     self.price_scale_packed = packed_prices
     self.price_oracle_packed = packed_prices
     self.last_prices_packed = packed_prices
     self.last_prices_timestamp = block.timestamp
-    self.ma_time = ma_time
     self.xcp_profit_a = 10**18
 
     NAME_HASH = keccak256(name)
@@ -746,23 +733,19 @@ def _claim_admin_fees():
     vprice: uint256 = self.virtual_price
 
     if xcp_profit > xcp_profit_a:
-        fees: uint256 = (
-            (xcp_profit - xcp_profit_a) * self.admin_fee / (2 * 10**10)
-        )
+        fees: uint256 = (xcp_profit - xcp_profit_a) * ADMIN_FEE / (2 * 10**10)
 
         # ------------------------ Claim admin fee ---------------------------
 
-        if fees > 0:  # <---------- Don't proceed if `self.admin_fee` is zero.
-            receiver: address = Factory(self.factory).fee_receiver()
-            if receiver != empty(address):
-                frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
-                claimed: uint256 = self.mint_relative(receiver, frac)
-                xcp_profit -= fees * 2
-                self.xcp_profit = xcp_profit
-                log ClaimAdminFee(receiver, claimed)
+        receiver: address = Factory(self.factory).fee_receiver()
+        if receiver != empty(address):
+            frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
+            claimed: uint256 = self.mint_relative(receiver, frac)
+            xcp_profit -= fees * 2
+            self.xcp_profit = xcp_profit
+            log ClaimAdminFee(receiver, claimed)
 
     total_supply: uint256 = self.totalSupply
-
 
     D: uint256 = (
         Math(self.math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
@@ -790,6 +773,10 @@ def tweak_price(
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     p_new: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
 
+    rebalancing_params: uint256[3] = self._unpack(
+        self.packed_rebalancing_params
+    )  # <---------- Contains: allowed_extra_profit, adjustment_step, ma_time.
+
     # ------------- Get internal oracle and last prices ----------------------
 
     packed_prices: uint256 = self.price_oracle_packed
@@ -809,10 +796,12 @@ def tweak_price(
 
         # ------------------ Calculate moving average params -----------------
 
-        ma_time: uint256 = self.ma_time
         alpha: uint256 = Math(self.math).wad_exp(
             -convert(
-                (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
+                (
+                    (block.timestamp - last_prices_timestamp) * 10**18 /
+                    rebalancing_params[2]  # <----------------------- ma_time.
+                ),
                 int256,
             )
         )
@@ -917,7 +906,7 @@ def tweak_price(
     if (
         needs_adjustment < 2
         and virtual_price * 2 - 10**18
-        > xcp_profit + 2 * self.allowed_extra_profit
+        > xcp_profit + 2 * rebalancing_params[0]  # <--- allowed_extra_profit.
     ):
         needs_adjustment = 3
         self.not_adjusted = 3  # <------- 3 means True (saves gas over bools).
@@ -936,7 +925,8 @@ def tweak_price(
             norm += ratio**2
 
         norm = isqrt(norm)
-        adjustment_step: uint256 = max(self.adjustment_step, norm / 10)
+        adjustment_step: uint256 = max(rebalancing_params[1], norm / 10)
+        #                              ^---------------- self.adjustment_step.
 
         if norm > adjustment_step and old_virtual_price > 0:
 
@@ -1499,7 +1489,7 @@ def price_oracle(k: uint256) -> uint256:
         # ------------------------------------------------- average if needed.
 
         last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
-        ma_time: uint256 = self.ma_time
+        ma_time: uint256 = self._unpack(self.packed_rebalancing_params)[2]
         alpha: uint256 = Math(self.math).wad_exp(
             -convert(
                 (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
@@ -1526,6 +1516,12 @@ def price_scale(k: uint256) -> uint256:
     return self._packed_view(k, self.price_scale_packed)
 
 
+@external
+@view
+def fee() -> uint256:
+    return self._fee(self.xp())
+
+
 @view
 @external
 def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
@@ -1549,21 +1545,6 @@ def calc_token_fee(
     return self._calc_token_fee(amounts, xp)
 
 
-@external
-@view
-def fee() -> uint256:
-    return self._fee(self.xp())
-
-
-@view
-@external
-def DOMAIN_SEPARATOR() -> bytes32:
-    """
-    @notice EIP712 domain separator.
-    """
-    return self._domain_separator()
-
-
 @view
 @external
 def A_gamma() -> uint256[2]:  # <- A and gamma in view to save bytecode space.
@@ -1580,6 +1561,15 @@ def precisions() -> uint256[N_COINS]:  # <--------- Required by view contract.
 @view
 def fee_calc(xp: uint256[N_COINS]) -> uint256:  # <- Required by view contract
     return self._fee(xp)
+
+
+@view
+@external
+def DOMAIN_SEPARATOR() -> bytes32:
+    """
+    @notice EIP712 domain separator.
+    """
+    return self._domain_separator()
 
 
 # ------------------------- AMM Admin Functions ------------------------------
@@ -1649,7 +1639,6 @@ def stop_ramp_A_gamma():
 def commit_new_parameters(
     _new_mid_fee: uint256,
     _new_out_fee: uint256,
-    _new_admin_fee: uint256,
     _new_fee_gamma: uint256,
     _new_allowed_extra_profit: uint256,
     _new_adjustment_step: uint256,
@@ -1663,7 +1652,6 @@ def commit_new_parameters(
 
     # ----------------------------- Set fee params ---------------------------
 
-    new_admin_fee: uint256 = _new_admin_fee
     new_mid_fee: uint256 = _new_mid_fee
     new_out_fee: uint256 = _new_out_fee
     new_fee_gamma: uint256 = _new_fee_gamma
@@ -1684,13 +1672,9 @@ def commit_new_parameters(
     else:
         new_fee_gamma = current_fee_params[2]
 
-    if new_admin_fee > MAX_ADMIN_FEE:  # <------------------- Check admin fee.
-        new_admin_fee = self.admin_fee
-
     self.future_packed_fee_params = self._pack(
         [new_mid_fee, new_out_fee, new_fee_gamma]
     )
-    self.future_admin_fee = new_admin_fee
 
     # ----------------- Set liquidity rebalancing parameters -----------------
 
@@ -1698,23 +1682,26 @@ def commit_new_parameters(
     new_adjustment_step: uint256 = _new_adjustment_step
     new_ma_time: uint256 = _new_ma_time
 
+    current_rebalancing_params: uint256[3] = self._unpack(self.packed_rebalancing_params)
+
     if new_allowed_extra_profit > 10**18:
-        new_allowed_extra_profit = self.allowed_extra_profit
+        new_allowed_extra_profit = current_rebalancing_params[0]
     if new_adjustment_step > 10**18:
-        new_adjustment_step = self.adjustment_step
+        new_adjustment_step = current_rebalancing_params[1]
 
     if new_ma_time < 872542:  # <----- Calculated as: 7 * 24 * 60 * 60 / ln(2)
         assert new_ma_time > 0  # dev: MA time should be longer than 1 second
     else:
-        new_ma_time = self.ma_time
+        new_ma_time = current_rebalancing_params[2]
 
-    self.future_allowed_extra_profit = new_allowed_extra_profit
-    self.future_adjustment_step = new_adjustment_step
-    self.future_ma_time = new_ma_time
+    self.future_packed_rebalancing_params = self._pack(
+        [new_allowed_extra_profit, new_adjustment_step, new_ma_time]
+    )
+
+    # --------------- LOG ---------------
 
     log CommitNewParameters(
         _deadline,
-        new_admin_fee,
         new_mid_fee,
         new_out_fee,
         new_fee_gamma,
@@ -1733,31 +1720,22 @@ def apply_new_parameters():
 
     self.admin_actions_deadline = 0
 
-    admin_fee: uint256 = self.future_admin_fee
-    if self.admin_fee != admin_fee:
-        self._claim_admin_fees()
-        self.admin_fee = admin_fee
-
     packed_fee_params: uint256 = self.future_packed_fee_params
     self.packed_fee_params = packed_fee_params
 
-    allowed_extra_profit: uint256 = self.future_allowed_extra_profit
-    self.allowed_extra_profit = allowed_extra_profit
-    adjustment_step: uint256 = self.future_adjustment_step
-    self.adjustment_step = adjustment_step
-    ma_time: uint256 = self.future_ma_time
-    self.ma_time = ma_time
+    packed_rebalancing_params: uint256 = self.future_packed_rebalancing_params
+    self.packed_rebalancing_params = packed_rebalancing_params
 
+    rebalancing_params: uint256[3] = self._unpack(packed_rebalancing_params)
     fee_params: uint256[3] = self._unpack(packed_fee_params)
 
     log NewParameters(
-        admin_fee,
         fee_params[0],
         fee_params[1],
         fee_params[2],
-        allowed_extra_profit,
-        adjustment_step,
-        ma_time,
+        rebalancing_params[0],
+        rebalancing_params[1],
+        rebalancing_params[2],
     )
 
 

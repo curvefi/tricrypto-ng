@@ -16,6 +16,11 @@ def owner():
 
 
 @pytest.fixture(scope="module")
+def factory_admin(tricrypto_factory):
+    return tricrypto_factory.admin()
+
+
+@pytest.fixture(scope="module")
 def fee_receiver():
     return boa.env.generate_address()
 
