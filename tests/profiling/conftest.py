@@ -37,7 +37,6 @@ def math_legacy():
     return boa.load("contracts/old/CurveCryptoMath3.vy", name="TricryptoMath")
 
 
-
 @pytest.fixture(scope="module")
 def views_legacy(deployer, math2):
     with boa.env.prank(deployer):
