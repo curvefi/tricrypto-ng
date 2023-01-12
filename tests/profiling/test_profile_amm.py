@@ -3,12 +3,10 @@ import sys
 
 import boa
 import pytest
-from rich.console import Console
 
 from tests.utils.tokens import mint_for_testing
 
 NUM_RUNS = 20
-console = Console(file=sys.stdout)
 
 
 def _choose_indices():
@@ -80,9 +78,9 @@ def _random_withdraw_one(swaps, total_supply):
 
 @pytest.mark.skip
 @pytest.mark.profile
-def test_profile_amms(swap2, swap3, token2, coins, user):
+def test_profile_amms(swap_legacy, swap, coins, user):
 
-    swaps = [swap3, swap2]
+    swaps = [swap, swap_legacy]
 
     with boa.env.prank(user):
         for k in range(NUM_RUNS):
@@ -94,17 +92,10 @@ def test_profile_amms(swap2, swap3, token2, coins, user):
             _random_deposit_one(user, swaps, coins)
 
             # swap:
-            out = _random_exchange(user, swaps, coins)
-            console.log(
-                f"\ni, j: {out[0][0]}, {out[0][1]} \n"
-                f"amounts in opt, og: {out[0][2]}, {out[1][2]} \n"
-                f"exchange outputs optimised, og: {out[0][3]}, {out[1][3]} \n"
-                f"% input (opt-og): {100*(out[0][2] - out[1][2])/out[0][2]} \n"
-                f"% output (opt-og): {100*(out[0][3] - out[1][3])/out[0][3]}"
-            )
+            _random_exchange(user, swaps, coins)
 
             # withdraw proportionally:
-            _random_proportional_withdraw(swaps, swap3.totalSupply())
+            _random_proportional_withdraw(swaps, swap.totalSupply())
 
             # withdraw in one coin:
-            _random_withdraw_one(swaps, swap3.totalSupply())
+            _random_withdraw_one(swaps, swap.totalSupply())
