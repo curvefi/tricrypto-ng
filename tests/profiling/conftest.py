@@ -28,28 +28,25 @@ def token_legacy(deployer):
             "contracts/old/CurveTokenV4.vy",
             "Curve USD-BTC-ETH",
             "crvUSDBTCETH",
-            name="TricryptoLPToken",
         )
 
 
 @pytest.fixture(scope="module")
 def math_legacy():
-    return boa.load("contracts/old/CurveCryptoMath3.vy", name="TricryptoMath")
+    return boa.load("contracts/old/CurveCryptoMath3.vy")
 
 
 @pytest.fixture(scope="module")
-def views_legacy(deployer, math2):
+def views_legacy(deployer, math_legacy):
     with boa.env.prank(deployer):
-        return boa.load(
-            "contracts/old/CurveCryptoViews3.vy", math2, name="TricryptoViews"
-        )
+        return boa.load("contracts/old/CurveCryptoViews3.vy", math_legacy)
 
 
 @pytest.fixture(scope="module")
 def swap_legacy_empty(
     owner,
     fee_receiver,
-    init_params_legacy,
+    init_params,
     token_legacy,
     math_legacy,
     views_legacy,
@@ -108,8 +105,7 @@ def swap_legacy_empty(
             init_params["adjustment_step"],
             init_params["admin_fee"],
             init_params["ma_time"],
-            INITIAL_PRICES,
-            name="TricryptoSwap",
+            INITIAL_PRICES[1:],
         )
         token_legacy.set_minter(swap.address)
 
@@ -118,9 +114,7 @@ def swap_legacy_empty(
 
 @pytest.fixture(scope="module")
 def swap_legacy(swap_legacy_empty, coins, user):
-    quantities = [
-        10**6 * 10**36 // p for p in [10**18] + INITIAL_PRICES
-    ]  # $3M worth
+    quantities = [10**6 * 10**36 // p for p in INITIAL_PRICES]  # $3M worth
 
     for coin, quantity in zip(coins, quantities):
         # mint coins for user:
