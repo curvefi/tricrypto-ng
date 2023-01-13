@@ -165,7 +165,6 @@ NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 
 # ----------------------- Admin params ---------------------------------------
 
-transfer_ownership_deadline: public(uint256)
 admin_actions_deadline: public(uint256)
 
 ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
@@ -1580,7 +1579,7 @@ def ramp_A_gamma(
     future_A: uint256, future_gamma: uint256, future_time: uint256
 ):
     assert msg.sender == Factory(self.factory).admin()  # dev: only owner
-    assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1)
+    assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1)  # dev: ramp undergoing
     assert future_time > block.timestamp + MIN_RAMP_TIME - 1  # dev: insufficient time
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -1686,11 +1685,12 @@ def commit_new_parameters(
 
     if new_allowed_extra_profit > 10**18:
         new_allowed_extra_profit = current_rebalancing_params[0]
+
     if new_adjustment_step > 10**18:
         new_adjustment_step = current_rebalancing_params[1]
 
     if new_ma_time < 872542:  # <----- Calculated as: 7 * 24 * 60 * 60 / ln(2)
-        assert new_ma_time > 0  # dev: MA time should be longer than 1 second
+        assert new_ma_time > 86  # dev: MA time should be longer than 60/ln(2)
     else:
         new_ma_time = current_rebalancing_params[2]
 

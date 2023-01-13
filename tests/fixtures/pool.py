@@ -18,7 +18,6 @@ def params():
         "allowed_extra_profit": 2 * 10**12,
         "fee_gamma": int(0.01 * 1e18),
         "adjustment_step": int(0.0015 * 1e18),
-        "admin_fee": 0,
         "ma_time": ma_time,
         "initial_prices": INITIAL_PRICES[1:],
     }
@@ -41,8 +40,8 @@ def swap(
             params["gamma"],
             params["mid_fee"],
             params["out_fee"],
-            params["allowed_extra_profit"],
             params["fee_gamma"],
+            params["allowed_extra_profit"],
             params["adjustment_step"],
             params["ma_time"],  # <--- no admin_fee needed
             params["initial_prices"],
