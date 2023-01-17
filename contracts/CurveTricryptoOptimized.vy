@@ -2,8 +2,9 @@
 # (c) Curve.Fi, 2021
 # Pool for 3 coin unpegged assets (e.g. ETH, BTC, USD)
 
-from vyper.interfaces import ERC20
 
+from vyper.interfaces import ERC20
+implements: ERC20  # <--------------------- AMM contract is also the LP token.
 
 # --------------------------------- Interfaces -------------------------------
 
@@ -575,7 +576,6 @@ def remove_liquidity_one_coin(
     approx_fee: uint256 = 0
 
     # ------------------------------------------------------------------------
-    # TODO: check if the logic here is safe
 
     future_A_gamma_time: uint256 = self.future_A_gamma_time
     dy, p, D, xp, K0_prev, approx_fee = self._calc_withdraw_one_coin(
@@ -591,7 +591,7 @@ def remove_liquidity_one_coin(
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
 
-    if use_eth and self.coins[i] == WETH20:  # <------------------- ETH withdrawal.
+    if use_eth and self.coins[i] == WETH20:  # <-------------- ETH withdrawal.
         raw_call(receiver, b"", value=dy)
     else:
         if self.coins[i] == WETH20:
