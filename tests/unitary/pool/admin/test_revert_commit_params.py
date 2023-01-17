@@ -62,11 +62,12 @@ def test_commit_rebalancing_params(swap, factory_admin, params):
 
         with boa.env.anchor():
             _commit_new_params(swap, p)
+            logs = swap.get_logs()[0]
 
-        logs = swap.get_logs()[0]
-        assert logs.args[3] == params["allowed_extra_profit"]
-        assert logs.args[4] == params["adjustment_step"]
-        assert logs.args[5] == params["ma_time"]
+            # values revert to contract's storage values:
+            assert logs.args[3] == params["allowed_extra_profit"]
+            assert logs.args[4] == params["adjustment_step"]
+            assert logs.args[5] == params["ma_time"]
 
         with boa.reverts(dev="MA time should be longer than 60/ln(2)"):
             p["ma_time"] = 86
@@ -95,3 +96,23 @@ def test_unauthorised_revert(swap, user, factory_admin, params):
 
     with boa.env.prank(user), boa.reverts(dev="only owner"):
         swap.revert_new_parameters()
+
+
+def test_revert_new_params(swap, factory_admin, params):
+
+    p = copy.deepcopy(params)
+    p["mid_fee"] += 1
+
+    with boa.env.prank(factory_admin):
+        _commit_new_params(swap, p)
+
+        mid_fee = swap.internal._unpack(swap._storage.packed_fee_params.get())[
+            0
+        ]
+        assert params["mid_fee"] == mid_fee
+
+        swap.revert_new_parameters()
+        boa.env.time_travel(7 * 24 * 60 * 60)
+
+        with boa.reverts(dev="no active action"):
+            swap.apply_new_parameters()
