@@ -66,7 +66,7 @@ struct PoolArray:
     decimals: uint256[N_COINS]
 
 
-N_COINS: constant(int128) = 3
+N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 # Limits
@@ -170,7 +170,7 @@ def deploy_pool(
     assert adjustment_step < 10**18+1
     assert adjustment_step > 0
     assert ma_exp_time < 872542  # 7 * 24 * 60 * 60 / ln(2)
-    assert ma_exp_time > 0
+    assert ma_exp_time > 86  # 60 / ln(2)
     assert min(initial_prices[0], initial_prices[1]) > 10**6
     assert max(initial_prices[0], initial_prices[1]) < 10**30
     assert _coins[0] != _coins[1] and _coins[1] != _coins[2], "Duplicate coins"
@@ -277,9 +277,7 @@ def deploy_gauge(_pool: address) -> address:
     assert self.pool_data[_pool].liquidity_gauge == empty(address), "Gauge already deployed"
     assert self.gauge_implementation != empty(address), "Gauge implementation not set"
 
-    gauge: address = create_from_blueprint(
-        self.gauge_implementation, _pool, code_offset=3
-    )
+    gauge: address = create_from_blueprint(self.gauge_implementation, _pool, code_offset=3)
 
     token: address = self.pool_data[_pool].token
     LiquidityGauge(gauge).initialize(token)
@@ -453,12 +451,15 @@ def get_coin_indices(
     """
     coins: address[N_COINS] = self.pool_data[_pool].coins
 
-    if _from == coins[0] and _to == coins[1]:
-        return 0, 1
-    elif _from == coins[1] and _to == coins[0]:
-        return 1, 0
-    else:
-        raise "Coins not found"
+    for i in range(N_COINS):
+        for j in range(N_COINS):
+            if i == j:
+                continue
+
+            if coins[i] == _from and coins[j] == _to:
+                return i, j
+
+    raise "Coins not found"
 
 
 @view
@@ -480,7 +481,7 @@ def get_eth_index(_pool: address) -> uint256:
     @notice Get the index of WETH for a pool
     @dev Returns max_value(uint256) if WETH is not a coin in the pool
     """
-    for i in range(2):
+    for i in range(N_COINS):
         if self.pool_data[_pool].coins[i] == WETH:
             return i
     a: uint256 = max_value(uint256)
