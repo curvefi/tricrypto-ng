@@ -150,7 +150,7 @@ future_packed_rebalancing_params: uint256
 
 xcp_profit: public(uint256)
 xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
-virtual_price: uint256  # <------ Cached (fast to read) virtual price.
+virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
 # -------------------------The cached `virtual_price` is also used internally.
 not_adjusted: uint256  # <-------- Defined as a uint but is treated as a bool.
 
