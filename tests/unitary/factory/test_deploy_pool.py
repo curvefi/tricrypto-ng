@@ -3,11 +3,15 @@ import pytest
 
 
 @pytest.fixture(scope="module")
-def empty_factory(deployer, fee_receiver, owner, weth):
+def empty_factory(deployer, fee_receiver, owner, weth, math_contract):
 
     with boa.env.prank(deployer):
         factory = boa.load(
-            "contracts/CurveTricryptoFactory.vy", fee_receiver, owner, weth
+            "contracts/CurveTricryptoFactory.vy",
+            fee_receiver,
+            owner,
+            weth,
+            math_contract,
         )
 
     return factory
@@ -86,7 +90,6 @@ def test_revert_deploy_without_implementations(
     coins,
     params,
     deployer,
-    swap,
 ):
     with boa.env.prank(deployer):
         with boa.reverts("Pool implementation not set"):
@@ -104,6 +107,3 @@ def test_revert_deploy_without_implementations(
                 params["ma_time"],  # <--- no admin_fee needed
                 params["initial_prices"],
             )
-
-        with boa.reverts("Gauge implementation not set"):
-            empty_factory.deploy_gauge(swap.address)

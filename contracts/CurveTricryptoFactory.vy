@@ -70,7 +70,6 @@ N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 # Limits
-MAX_ADMIN_FEE: constant(uint256) = 10 * 10 ** 9
 MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
 
@@ -84,16 +83,16 @@ PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
 WETH: immutable(address)
+math: public(immutable(address))
 
 admin: public(address)
 future_admin: public(address)
 
-# fee receiver for plain pools
+# fee receiver for all pools:
 fee_receiver: public(address)
 
 pool_implementation: public(address)
 gauge_implementation: public(address)
-math_implementation: public(address)
 views_implementation: public(address)
 
 # mapping of coins -> pools for trading
@@ -112,8 +111,10 @@ def __init__(
     _fee_receiver: address,
     _admin: address,
     _weth: address,
+    _math: address,
 ):
     WETH = _weth
+    math = _math
 
     self.fee_receiver = _fee_receiver
     self.admin = _admin
@@ -125,6 +126,11 @@ def __init__(
 @internal
 @view
 def _pack(x: uint256[3]) -> uint256:
+    """
+    @notice Packs 3 integers with values <= 10**18 into a uint256
+    @param x The uint256[3] to pack
+    @return The packed uint256
+    """
     return shift(x[0], 128) | shift(x[1], 64) | x[2]
 
 
@@ -217,7 +223,7 @@ def deploy_pool(
         _name,
         _symbol,
         _coins,
-        self.math_implementation,
+        math,
         WETH,
         packed_precisions,
         packed_A_gamma,
@@ -322,22 +328,10 @@ def set_gauge_implementation(_gauge_implementation: address):
     @dev Set to empty(address) to prevent deployment of new gauges
     @param _gauge_implementation Address of the new token implementation
     """
-    assert msg.sender == self.admin  # dev: admin-only function
+    assert msg.sender == self.admin  # dev: admin only
 
     log UpdateGaugeImplementation(self.gauge_implementation, _gauge_implementation)
     self.gauge_implementation = _gauge_implementation
-
-
-@external
-def set_math_implementation(_math_implementation: address):
-    """
-    @notice Set math implementation
-    @param _math_implementation Address of the new math contract
-    """
-    assert msg.sender == self.admin  # dev: admin only
-
-    log UpdateMathImplementation(self.math_implementation, _math_implementation)
-    self.math_implementation = _math_implementation
 
 
 @external

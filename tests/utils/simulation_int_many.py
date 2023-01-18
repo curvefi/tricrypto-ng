@@ -1,5 +1,5 @@
 import json
-from math import exp
+from math import exp, log
 
 A_MULTIPLIER = 10000
 
@@ -219,7 +219,7 @@ class Trader:
         allowed_extra_profit=2 * 10**13,
         fee_gamma=None,
         adjustment_step=0.003,
-        ma_time=600,  # 10 minutes
+        ma_time=int(600 / log(2)),  # 10 minutes
         log=True,
     ):
         # allowed_extra_profit is actually not used
@@ -361,7 +361,7 @@ class Trader:
             )
             ** 0.5
         )
-        adjustment_step = max(self.adjustment_step, norm // 10)
+        adjustment_step = max(self.adjustment_step, norm // 5)
         if norm <= adjustment_step:
             # Already close to the target price
             return norm

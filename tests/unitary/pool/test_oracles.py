@@ -108,7 +108,11 @@ def test_ma(swap_with_deposit, coins, user, amount, i, j, t):
     prices1 = INITIAL_PRICES
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
-    ma_time = swap_with_deposit.ma_time()
+
+    rebal_params = swap_with_deposit.internal._unpack(
+        swap_with_deposit._storage.packed_rebalancing_params.get()
+    )
+    ma_time = rebal_params[2]
 
     # here we dont mine because we're time travelling later
     with boa.env.prank(user):
@@ -214,10 +218,14 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
     # checks if price scale changed is as expected:
     if price_diff > 0:
 
+        rebal_params = swap_with_deposit.internal._unpack(
+            swap_with_deposit._storage.packed_rebalancing_params.get()
+        )
+
         price_oracle = [swap_with_deposit.price_oracle(k) for k in range(2)]
 
         _norm = norm(price_oracle, price_scale_1)
-        step = max(swap_with_deposit.adjustment_step(), _norm / 10)
+        step = max(rebal_params[1], _norm / 10)
 
         adjustment = int(
             step * abs(price_oracle[ix - 1] - price_scale_1[ix - 1]) / _norm

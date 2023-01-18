@@ -42,18 +42,22 @@ class StatefulSimulation(StatefulBase):
         fee_params = self.swap.internal._unpack(
             self.swap._storage.packed_fee_params.get()
         )
+        rebal_params = self.swap.internal._unpack(
+            self.swap._storage.packed_rebalancing_params.get()
+        )
+
         self.trader = sim.Trader(
             A_gamma[0],
             A_gamma[1],
             self.swap.D(),
             3,
             [10**18] + [self.swap.price_scale(i) for i in range(2)],
-            fee_params[0] / 1e10,
-            fee_params[1] / 1e10,
-            self.swap.allowed_extra_profit(),
-            fee_params[2],
-            self.swap.adjustment_step() / 1e18,
-            self.swap.ma_time(),
+            mid_fee=fee_params[0] / 1e10,
+            out_fee=fee_params[1] / 1e10,
+            fee_gamma=fee_params[2],
+            allowed_extra_profit=rebal_params[0],
+            adjustment_step=rebal_params[1] / 1e18,
+            ma_time=rebal_params[2],
         )
         for i in range(3):
             self.trader.curve.x[i] = self.swap.balances(i)

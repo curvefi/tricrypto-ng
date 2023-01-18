@@ -1,6 +1,8 @@
 # @version 0.3.7
 # (c) Curve.Fi, 2021
 # Pool for 3 coin unpegged assets (e.g. ETH, BTC, USD)
+# note: View methods for `get_dy`, `get_dx`, `calc_token_amounts`
+#       etc. are available in the `views_implementation` of the Factory.
 
 
 from vyper.interfaces import ERC20
@@ -113,10 +115,22 @@ event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
 
+event TweakPriceScale:
+    price_scale: uint256[2]
+    adjustment_step: uint256
+
+
+# ------------------------------- Enums --------------------------------------
+
+# -- We track the status of price_scale adjustments in tweak_price. This makes
+# ---- price_scale adjustments less frequent in chains where gas is expensive.
+enum PriceAdjustmentStatus:
+    ADJUSTED
+    NOT_ADJUSTED
 
 # ----------------------- Storage/State Variables ----------------------------
 
-WETH20: immutable(address)
+WETH20: immutable(address)  # <- Address of wrapper contract for native asset.
 
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # <------- The precision to convert to.
@@ -144,19 +158,20 @@ D: public(uint256)
 
 # -------------- Params that affect how price_scale get adjusted -------------
 
-packed_rebalancing_params: uint256  # <------- Contains rebalancing parameters
-# ------------------------ allowed_extra_profit, adjustment_step, and ma_time.
+adjustment_status: PriceAdjustmentStatus  # <----- Tracks price_scale changes.
+
+packed_rebalancing_params: public(uint256)  # <---------- Contains rebalancing
+# ------------- parameters allowed_extra_profit, adjustment_step, and ma_time.
 future_packed_rebalancing_params: uint256
 
 xcp_profit: public(uint256)
 xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
 virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
 # -------------------------The cached `virtual_price` is also used internally.
-not_adjusted: uint256  # <-------- Defined as a uint but is treated as a bool.
 
 # ---------------- Fee params that determine dynamic fees --------------------
 
-packed_fee_params: uint256  # <- Packs mid_fee, out_fee, fee_gamma to uint256.
+packed_fee_params: public(uint256)  # <---- Packs mid_fee, out_fee, fee_gamma.
 future_packed_fee_params: uint256
 
 ADMIN_FEE: constant(uint256) = 5 * 10**9  # <------------- 50% of earned fees.
@@ -239,7 +254,6 @@ def __init__(
     self.packed_rebalancing_params = packed_rebalancing_params  # <-- Contains
     # ------------- rebalancing params: allowed_extra_profit, adjustment_step,
     # ------------------------------------------------------- and ma_exp_time.
-    self.not_adjusted = 1  # <--------------------- < 2 is False, > 2 is True.
 
     self.packed_fee_params = packed_fee_params  # <-------------- Contains Fee
     # -------------------------------- params: mid_fee, out_fee and fee_gamma.
@@ -250,6 +264,12 @@ def __init__(
     self.last_prices_timestamp = block.timestamp
     self.xcp_profit_a = 10**18
 
+    self.adjustment_status = PriceAdjustmentStatus.NOT_ADJUSTED
+
+    # ------- Cache DOMAIN_SEPARATOR. If chain.id is not CACHED_CHAIN_ID, then
+    # ---- DOMAIN_SEPARATOR will be re-calculated each time `permit` is called.
+    # ------------------ Otherwise, it will always use CACHED_DOMAIN_SEPARATOR.
+    # ---------------------- see: `_domain_separator()` for its implementation.
     NAME_HASH = keccak256(name)
     salt = block.prevhash
     CACHED_CHAIN_ID = chain.id
@@ -272,7 +292,9 @@ def __init__(
 @payable
 @external
 def __default__():
-    pass
+    if msg.value > 0:
+        assert WETH20 in self.coins  # dev: ETH not in pool
+        # ------------------------------ Checks if deployed pool contains ETH.
 
 
 # -------------------------- AMM Main Functions ------------------------------
@@ -578,7 +600,7 @@ def remove_liquidity_one_coin(
     # ------------------------------------------------------------------------
 
     future_A_gamma_time: uint256 = self.future_A_gamma_time
-    dy, p, D, xp, K0_prev, approx_fee = self._calc_withdraw_one_coin(
+    dy, p, D, xp, approx_fee = self._calc_withdraw_one_coin(
         A_gamma, token_amount, i, (future_A_gamma_time > 0), True
     )
     assert dy >= min_amount, "Slippage"
@@ -600,7 +622,7 @@ def remove_liquidity_one_coin(
             receiver, dy, default_return_value=True
         )
 
-    self.tweak_price(A_gamma, xp, i, p, D, K0_prev)  # <----- Tweak price with
+    self.tweak_price(A_gamma, xp, i, p, D, 0)  # <----- Tweak price with
     # -------------------- good initial guess derived from get_y calculated in
     # ---------------- self._calc_withdraw_one_coin(...) in the previous step.
 
@@ -766,6 +788,16 @@ def tweak_price(
     new_D: uint256,
     K0_prev: uint256 = 0
 ):
+    """
+    @notice Conditionally adjust prices in the pool.
+    @dev Contains main liquidity rebalancing logic, by tweaking `price_scale`
+    @param A_gamma Array of A and gamma parameters
+    @param _xp Array of current balances
+    @param i Index of the coin to tweak
+    @param p_i Current price of the coin
+    @param new_D New D value
+    @param K0_prev Initial guess for `newton_D`
+    """
     price_oracle: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
     last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
     price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
@@ -776,7 +808,7 @@ def tweak_price(
         self.packed_rebalancing_params
     )  # <---------- Contains: allowed_extra_profit, adjustment_step, ma_time.
 
-    # ------------- Get internal oracle and last prices ----------------------
+    # ------------------ Unpack internal oracle and last prices --------------
 
     packed_prices: uint256 = self.price_oracle_packed
     for k in range(N_COINS - 1):
@@ -880,13 +912,15 @@ def tweak_price(
 
     # ------- Update profit numbers without price adjustment first -----------
 
-    xp[0] = D_unadjusted / N_COINS
+    xp[0] = unsafe_div(D_unadjusted, N_COINS)
     for k in range(N_COINS - 1):
         xp[k + 1] = D_unadjusted * 10**18 / (N_COINS * price_scale[k])
+
     xcp_profit: uint256 = 10**18
     virtual_price: uint256 = 10**18
 
     if old_virtual_price > 0:
+
         xcp: uint256 = Math(self.math).geometric_mean(xp)
         virtual_price = 10**18 * xcp / total_supply
         xcp_profit = old_xcp_profit * virtual_price / old_virtual_price
@@ -898,19 +932,14 @@ def tweak_price(
             self.future_A_gamma_time = 0
 
     self.xcp_profit = xcp_profit
-    needs_adjustment: uint256 = self.not_adjusted
 
-    # ------- Check if there are enough profits to rebalance liquidity -------
-
+    # ---------- If price_scale was not adjusted in the previous `tweak_price`
+    # -------------------- call, check if there's enough profits to adjust it:
     if (
-        needs_adjustment < 2
-        and virtual_price * 2 - 10**18
-        > xcp_profit + 2 * rebalancing_params[0]  # <--- allowed_extra_profit.
+        self.adjustment_status == PriceAdjustmentStatus.NOT_ADJUSTED and
+        virtual_price * 2 - 10**18 > xcp_profit + 2 * rebalancing_params[0]
     ):
-        needs_adjustment = 3
-        self.not_adjusted = 3  # <------- 3 means True (saves gas over bools).
-
-    if needs_adjustment == 3:
+        #                          allowed_extra_profit --------^
 
         # ------------------- Get adjustment step ----------------------------
 
@@ -924,7 +953,7 @@ def tweak_price(
             norm += ratio**2
 
         norm = isqrt(norm)
-        adjustment_step: uint256 = max(rebalancing_params[1], norm / 10)
+        adjustment_step: uint256 = max(rebalancing_params[1], norm / 5)
         #                              ^---------------- self.adjustment_step.
 
         if norm > adjustment_step and old_virtual_price > 0:
@@ -933,7 +962,7 @@ def tweak_price(
 
             for k in range(N_COINS - 1):
                 p_new[k] = (
-                    price_scale[k] * (norm - adjustment_step)
+                    price_scale[k] * unsafe_sub(norm, adjustment_step)
                     + adjustment_step * price_oracle[k]
                 ) / norm
 
@@ -949,9 +978,10 @@ def tweak_price(
             for k in range(N_COINS - 1):
                 xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
 
+            # ------------------------------------- Reuse `old_virtual_price`.
             old_virtual_price = (
                 10**18 * Math(self.math).geometric_mean(xp) / total_supply
-            )  # <--------------------------------- Reuse `old_virtual_price`.
+            )
 
             # --------- Proceed if we've got enough profit -------------------
 
@@ -959,6 +989,7 @@ def tweak_price(
                 old_virtual_price > 10**18 and
                 2 * old_virtual_price - 10**18 > xcp_profit
             ):
+
                 packed_prices = 0
                 for k in range(N_COINS - 1):
                     packed_prices = shift(packed_prices, PRICE_SIZE)
@@ -970,18 +1001,22 @@ def tweak_price(
                 self.D = D
                 self.virtual_price = old_virtual_price
 
-                # TODO: consider adding a log to show new price_scale if
-                # there's enought space left
+                self.adjustment_status = PriceAdjustmentStatus.ADJUSTED
+
+                log TweakPriceScale(p_new, adjustment_step)  # <--- Log tweak.
+
+                self._claim_admin_fees()  # <--------------- Claim admin fees.
 
                 return  # <------------------------- Return if we've adjusted.
 
-            else:
+    # --------------------- If we are here, the price_scale adjustment did not
+    # -------------- happen. We Still need to update the profit counter and D.
+    self.adjustment_status = PriceAdjustmentStatus.NOT_ADJUSTED
+    self.D = D_unadjusted
+    self.virtual_price = virtual_price
 
-                self.not_adjusted = 1  # <--- anything less than 2 is (False).
-
-    self.D = D_unadjusted  # <---------------- If we are here, the price_scale
-    self.virtual_price = virtual_price  # --------- adjustment did not happen.
-    # ---------------------- We Still need to update the profit counter and D.
+    self._claim_admin_fees()  # <----------- We claim admin fees. So this only
+    # ---------------------------- happens if the price_scale is not adjusted.
 
 
 @internal
@@ -1023,7 +1058,10 @@ def _exchange(
 
     xp[0] *= precisions[0]
     for k in range(1, N_COINS):
-        xp[k] = xp[k] * price_scale[k - 1] * precisions[k] / PRECISION
+        xp[k] = unsafe_div(
+            xp[k] * price_scale[k - 1] * precisions[k],
+            PRECISION
+        )
 
     prec_i: uint256 = precisions[i]
 
@@ -1048,12 +1086,15 @@ def _exchange(
     # ----------------------- Calculate dy and fees --------------------------
 
     prec_j: uint256 = precisions[j]
-    y_out: uint256[2] = Math(self.math).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
-    dy = xp[j] - y_out[0]
+    y_out: uint256[2] = Math(
+        self.math
+    ).get_y(A_gamma[0], A_gamma[1], xp, self.D, j)
+    dy = xp[j] - y_out[0]  # <------------------------- y_out[0] is the new y.
 
     xp[j] -= dy  # <----------------------------- Not defining new "y" here to
     # ------------------- have less variables / make subsequent calls cheaper.
-    dy -= 1  # <------------------------------------------ Favor LPs by 1 Wei.
+    dy -= 1  # <----------------- This ensures that the pool isn't emptied one
+    # ----------------------------------------- sided and math equations work.
 
     if j > 0:
         dy = dy * PRECISION / price_scale[j - 1]
@@ -1175,7 +1216,7 @@ def _calc_withdraw_one_coin(
     i: uint256,
     update_D: bool,
     calc_price: bool,
-) -> (uint256, uint256, uint256, uint256[N_COINS], uint256, uint256):
+) -> (uint256, uint256, uint256, uint256[N_COINS], uint256):
 
     token_supply: uint256 = self.totalSupply
     assert token_amount <= token_supply  # dev: token amount more than supply
@@ -1249,7 +1290,7 @@ def _calc_withdraw_one_coin(
             / (dy * precisions[i] - dD * xx[i] * precisions[i] / D0)
         )
 
-    return dy, p, D, xp, y_out[1], approx_fee
+    return dy, p, D, xp, approx_fee
 
 
 # ------------------------ ERC20 functions -----------------------------------
