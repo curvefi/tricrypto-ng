@@ -627,6 +627,8 @@ def remove_liquidity_one_coin(
     # ---------------- self._calc_withdraw_one_coin(...) in the previous step.
 
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
+    
+    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
 
     return dy
 
@@ -1005,8 +1007,6 @@ def tweak_price(
 
                 log TweakPriceScale(p_new, adjustment_step)  # <--- Log tweak.
 
-                self._claim_admin_fees()  # <--------------- Claim admin fees.
-
                 return  # <------------------------- Return if we've adjusted.
 
     # --------------------- If we are here, the price_scale adjustment did not
@@ -1014,9 +1014,6 @@ def tweak_price(
     self.adjustment_status = PriceAdjustmentStatus.NOT_ADJUSTED
     self.D = D_unadjusted
     self.virtual_price = virtual_price
-
-    self._claim_admin_fees()  # <----------- We claim admin fees. So this only
-    # ---------------------------- happens if the price_scale is not adjusted.
 
 
 @internal
