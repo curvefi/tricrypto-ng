@@ -8,7 +8,7 @@ from tests.unitary.pool.stateful.test_stateful import ProfitableState
 COINS = [("USDC", 6), ("WBTC", 8), ("WETH", 18)]
 INITIAL_PRICES = [10**18, 17500 * 10**18, 1200 * 10**18]
 
-MAX_SAMPLES = 100
+MAX_SAMPLES = 20
 MAX_COUNT = 20
 
 

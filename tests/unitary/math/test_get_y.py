@@ -7,7 +7,6 @@ import pytest
 from hypothesis import given, note, settings
 from hypothesis import strategies as st
 
-from tests.utils.checks import check_limits
 from tests.utils.simulation_ma_4 import inv_target_decimal as inv_target
 
 N_COINS = 3
@@ -61,27 +60,11 @@ def test_get_y(
         new_X[j] = y0
         return inv_target(A_dec, gamma, new_X, D)
 
-    try:
-        result_original = math_unoptimized.newton_y(A, gamma, X, D, j)
-    except:
-        decimals = [18, 18, 18]
-        prices = [10**18, btc_p, eth_p]
-        if check_limits(D, prices, X, decimals, X):
-            raise
-        else:
-            return  # expected behavior
+    result_original = math_unoptimized.newton_y(A, gamma, X, D, j)
 
     pytest.gas_original += math_unoptimized._computation.get_gas_used()
 
-    try:
-        (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
-    except:
-        decimals = [18, 18, 18]
-        prices = [10**18, btc_p, eth_p]
-        if check_limits(D, prices, X, decimals, X):
-            raise
-        else:
-            return  # expected behavior
+    (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
 
     pytest.gas_new += math_optimized._computation.get_gas_used()
     note(

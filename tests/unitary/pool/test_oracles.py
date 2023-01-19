@@ -225,7 +225,7 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
         price_oracle = [swap_with_deposit.price_oracle(k) for k in range(2)]
 
         _norm = norm(price_oracle, price_scale_1)
-        step = max(rebal_params[1], _norm / 10)
+        step = max(rebal_params[1], _norm / 5)
 
         adjustment = int(
             step * abs(price_oracle[ix - 1] - price_scale_1[ix - 1]) / _norm

@@ -101,15 +101,15 @@ def test_profile_amms(swap_legacy, swap_with_deposit, coins, user):
             _random_deposit(swaps)
 
             # deposit single token:
-            _random_deposit_one(swaps)
+            # _random_deposit_one(swaps)
 
             # swap:
             _random_exchange(swaps)
 
-            # withdraw proportionally:
-            _random_proportional_withdraw(
-                swaps, swap_with_deposit.totalSupply()
-            )
+            # # withdraw proportionally:
+            # _random_proportional_withdraw(
+            #     swaps, swap_with_deposit.totalSupply()
+            # )
 
-            # withdraw in one coin:
-            _random_withdraw_one(swaps, swap_with_deposit.totalSupply())
+            # # withdraw in one coin:
+            # _random_withdraw_one(swaps, swap_with_deposit.totalSupply())

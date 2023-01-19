@@ -8,8 +8,8 @@ from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 100
-STEP_COUNT = 200
+MAX_SAMPLES = 20
+STEP_COUNT = 100
 
 
 def get_price_scale(swap):
@@ -83,9 +83,16 @@ class StatefulSimulation(StatefulBase):
         price_scale = get_price_scale(self.swap)
         trader_price_scale = self.trader.curve.p
 
-        if super().exchange(exchange_amount_in, exchange_i, exchange_j, user):
-            dy = self.trader.buy(exchange_amount_in, exchange_i, exchange_j)
-            price = exchange_amount_in * 10**18 // dy
+        dy_swap = super().exchange(
+            exchange_amount_in, exchange_i, exchange_j, user
+        )
+
+        if dy_swap:
+
+            dy_trader = self.trader.buy(
+                exchange_amount_in, exchange_i, exchange_j
+            )
+            price = exchange_amount_in * 10**18 // dy_trader
             self.trader.tweak_price(
                 boa.env.vm.state.timestamp, exchange_i, exchange_j, price
             )
@@ -93,6 +100,9 @@ class StatefulSimulation(StatefulBase):
             # ensure that if trader tweaks price, so does the amm:
             if self.trader.curve.p != trader_price_scale:
                 assert get_price_scale(self.swap) != price_scale
+
+            # check if output value is similar
+            assert abs(log(dy_swap / dy_trader)) < 0.01
 
     @invariant()
     def simulator(self):

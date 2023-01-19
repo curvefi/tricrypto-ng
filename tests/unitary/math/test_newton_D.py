@@ -8,7 +8,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import tests.utils.simulation_int_many as sim
-from tests.utils.checks import check_limits
 
 sys.stdout = sys.stderr
 
@@ -118,15 +117,7 @@ def _test_newton_D(
         )
     X = [D * xD // 10**18, D * yD // 10**18, D * zD // 10**18]
 
-    try:
-        (result_get_y, K0) = tricrypto_math.get_y(A, gamma, X, D, j)
-    except:
-        decimals = [c.decimals() for c in coins]
-        prices = [10**18, btcScalePrice, ethScalePrice]
-        if check_limits(D, prices, X, decimals, X):
-            raise
-        else:
-            return  # expected behavior
+    (result_get_y, K0) = tricrypto_math.get_y(A, gamma, X, D, j)
 
     # dy should be positive
     if result_get_y < X[j]:
@@ -147,29 +138,11 @@ def _test_newton_D(
             pytest.positive_dy += 1
             X[j] = y
 
-            try:
-                result_sim = tricrypto_math.newton_D(A, gamma, X)
-            except:
-                decimals = [c.decimals() for c in coins]
-                prices = [10**18, btcScalePrice, ethScalePrice]
-                if check_limits(D, prices, X, decimals, X):
-                    raise
-                else:
-                    return  # expected behavior
-
+            result_sim = tricrypto_math.newton_D(A, gamma, X)
             pytest.gas_original += tricrypto_math._computation.get_gas_used()
-
-            try:
-                result_contract = tricrypto_math.newton_D(A, gamma, X, K0)
-            except:
-                decimals = [c.decimals() for c in coins]
-                prices = [10**18, btcScalePrice, ethScalePrice]
-                if check_limits(D, prices, X, decimals, X):
-                    raise
-                else:
-                    return  # expected behavior
-
+            result_contract = tricrypto_math.newton_D(A, gamma, X, K0)
             pytest.gas_new += tricrypto_math._computation.get_gas_used()
+
             assert abs(result_sim - result_contract) <= max(
                 10000, result_sim / 1e12
             )

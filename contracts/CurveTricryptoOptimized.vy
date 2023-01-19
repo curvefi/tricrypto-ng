@@ -512,7 +512,7 @@ def add_liquidity(
                     )
                 )
 
-        self.tweak_price(A_gamma, xp, ix, p, D)
+        self.tweak_price(A_gamma, xp, ix, p, D, 0)
 
     else:
 
@@ -627,7 +627,7 @@ def remove_liquidity_one_coin(
     # ---------------- self._calc_withdraw_one_coin(...) in the previous step.
 
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
-    
+
     self._claim_admin_fees()  # <--------------------------- Claim admin fees.
 
     return dy
@@ -1175,8 +1175,7 @@ def _exchange(
             p = _dy * 10**18 / _dx
             ix = i
 
-    self.tweak_price(A_gamma, xp, ix, p, 0, y_out[1])  # <---- Tweak price with
-    # ----------------------------------------------------- good initial guess.
+    self.tweak_price(A_gamma, xp, ix, p, 0, 0)  # <-------- Tweak price_scale.
 
     log TokenExchange(sender, i, dx, j, dy, fee)
 

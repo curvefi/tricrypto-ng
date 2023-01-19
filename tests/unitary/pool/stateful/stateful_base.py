@@ -5,7 +5,6 @@ from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
 from tests.fixtures.pool import INITIAL_PRICES
-from tests.utils.checks import check_limits
 from tests.utils.tokens import mint_for_testing
 
 
@@ -85,10 +84,41 @@ class StatefulBase(RuleBasedStateMachine):
         ]
 
     def check_limits(self, amounts, D=True, y=True):
+        """
+        Should be good if within limits, but if outside - can be either
+        """
         _D = self.swap.D()
-        prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
-        xp_0 = [self.swap.balances(i) for i in range(3)]
-        return check_limits(_D, prices, xp_0, self.decimals, amounts, D, y)
+        prices = [10**18] + [self.swap.price_scale()]
+        xp_0 = [self.swap.balances(i) for i in range(2)]
+        xp = xp_0
+        xp_0 = [
+            x * p // 10**d for x, p, d in zip(xp_0, prices, self.decimals)
+        ]
+        xp = [
+            (x + a) * p // 10**d
+            for a, x, p, d in zip(amounts, xp, prices, self.decimals)
+        ]
+
+        if D:
+            for _xp in [xp_0, xp]:
+                if (
+                    (min(_xp) * 10**18 // max(_xp) < 10**14)
+                    or (max(_xp) < 10**9 * 10**18)
+                    or (max(_xp) > 10**15 * 10**18)
+                ):
+                    return False
+
+        if y:
+            for _xp in [xp_0, xp]:
+                if (
+                    (_D < 10**17)
+                    or (_D > 10**15 * 10**18)
+                    or (min(_xp) * 10**18 // _D < 10**16)
+                    or (max(_xp) * 10**18 // _D > 10**20)
+                ):
+                    return False
+
+        return True
 
     @rule(
         exchange_amount_in=exchange_amount_in,
@@ -109,15 +139,11 @@ class StatefulBase(RuleBasedStateMachine):
     ):
         if exchange_i == exchange_j:
             return False
+
         try:
-            if not self.optimized:
-                calc_amount = self.swap.get_dy(
-                    exchange_i, exchange_j, exchange_amount_in
-                )
-            else:
-                calc_amount = self.views.get_dy(
-                    exchange_i, exchange_j, exchange_amount_in, self.swap
-                )
+            calc_amount = self.views.get_dy(
+                exchange_i, exchange_j, exchange_amount_in, self.swap
+            )
         except Exception:
             _amounts = [0] * 3
             _amounts[exchange_i] = exchange_amount_in
@@ -137,39 +163,26 @@ class StatefulBase(RuleBasedStateMachine):
                 )
         except Exception:
 
-            _amounts = [0] * 3
-            _amounts[exchange_i] = exchange_amount_in
-
             # Small amounts may fail with rounding errors
             if (
                 calc_amount > 100
                 and exchange_amount_in > 100
                 and calc_amount / self.swap.balances(exchange_j) > 1e-13
                 and exchange_amount_in / self.swap.balances(exchange_i) > 1e-13
-                and self.check_limits(_amounts)
             ):
                 raise
             return False
 
         # This is to check that we didn't end up in a borked state after
         # an exchange succeeded
-        if not self.optimized:
-            self.swap.get_dy(
-                exchange_j,
-                exchange_i,
-                10**16
-                * 10 ** self.decimals[exchange_j]
-                // ([10**18] + INITIAL_PRICES)[exchange_j],
-            )
-        else:
-            self.views.get_dy(
-                exchange_j,
-                exchange_i,
-                10**16
-                * 10 ** self.decimals[exchange_j]
-                // ([10**18] + INITIAL_PRICES)[exchange_j],
-                self.swap,
-            )
+        self.views.get_dy(
+            exchange_j,
+            exchange_i,
+            10**16
+            * 10 ** self.decimals[exchange_j]
+            // ([10**18] + INITIAL_PRICES)[exchange_j],
+            self.swap,
+        )
 
         d_balance_i -= self.coins[exchange_i].balanceOf(user)
         d_balance_j -= self.coins[exchange_j].balanceOf(user)
