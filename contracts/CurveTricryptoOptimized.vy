@@ -358,25 +358,25 @@ def _transfer_in(
 
 @internal
 def _transfer_out(
-    _amount: uint256, i: uint256, use_eth: bool, receiver: address
+    _coin: address, _amount: uint256, use_eth: bool, receiver: address
 ):
     """
-    @notice Withdraws a single token from the pool
+    @notice Transfer a single token from the pool to receiver.
     @dev This function is called by `remove_liquidity` and
          `remove_liquidity_one` and `_exchange` methods.
-    @params _amount Amount of token to withdraw
-    @params i Index of token to withdraw
-    @params use_eth Whether to withdraw ETH or not
-    @params receiver Address to send the withdrawn tokens to
+    @params _coin Address of the token to transfer out
+    @params _amount Amount of token to transfer out
+    @params use_eth Whether to transfer ETH or not
+    @params receiver Address to send the tokens to
     """
 
-    if use_eth and self.coins[i] == WETH20:
+    if use_eth and _coin == WETH20:
         raw_call(receiver, b"", value=_amount)
     else:
-        if self.coins[i] == WETH20:
+        if _coin == WETH20:
             WETH(WETH20).deposit(value=_amount)
 
-        assert ERC20(self.coins[i]).transfer(
+        assert ERC20(_coin).transfer(
             receiver, _amount, default_return_value=True
         )
 
@@ -677,7 +677,7 @@ def remove_liquidity(
     # ---------------------------------- Transfers ---------------------------
 
     for i in range(N_COINS):
-        self._transfer_out(d_balances[i], i, use_eth, receiver)
+        self._transfer_out(self.coins[i], d_balances[i], use_eth, receiver)
 
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
 
@@ -729,7 +729,7 @@ def remove_liquidity_one_coin(
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
 
-    self._transfer_out(dy, i, use_eth, receiver)  # <--------- Withdraw token.
+    self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
     self.tweak_price(A_gamma, xp, i, p, D, 0, check_loss)
 
@@ -910,7 +910,7 @@ def _exchange(
     )
 
     # -------> TRANSFER OUT
-    self._transfer_out(dy, i, use_eth, receiver)
+    self._transfer_out(self.coins[j], dy, use_eth, receiver)
 
     # --------------------- Calculate and adjust prices ----------------------
 
