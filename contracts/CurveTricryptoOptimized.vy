@@ -282,12 +282,103 @@ def __init__(
     # ------------------------------------- 0x0 to self for indexers to catch.
 
 
+# ------------------- Token transfers in and out of the AMM ------------------
+
+
 @payable
 @external
 def __default__():
     if msg.value > 0:
         assert WETH20 in self.coins  # dev: ETH not in pool
         # ------------------------------ Checks if deployed pool contains ETH.
+        # ---- This ensures no ETH is stuck in a pool where ETH is not a coin.
+
+
+@internal
+def _transfer_in(
+    _coin: address,
+    dx: uint256,
+    dy: uint256,
+    mvalue: uint256,
+    callbacker: address,
+    callback_sig: bytes32,
+    sender: address,
+    receiver: address,
+    use_eth: bool
+):
+    """
+    @notice Transfers `_coin` from `sender` to `self` and calls `callback_sig`
+            if it is not empty.
+    @dev The callback sig must have the following args:
+         sender: address
+         receiver: address
+         coin: address
+         dx: uint256
+         dy: uint256
+    @params _coin: address of the coin to transfer in.
+    @params dx: amount of `_coin` to transfer into the pool.
+    @params dy: amount of `_coin` to transfer out of the pool.
+    @params mvalue: msg.value if the transfer is ETH, 0 otherwise.
+    @params callbacker: address to call `callback_sig` on.
+    @params callback_sig: signature of the callback function.
+    @params sender: address to transfer `_coin` from.
+    @params receiver: address to transfer `_coin` to.
+    @params use_eth: True if the transfer is ETH, False otherwise.
+    """
+
+    if use_eth and _coin == WETH20:
+        assert mvalue == dx  # dev: incorrect eth amount
+    else:
+        assert mvalue == 0  # dev: nonzero eth amount
+
+        if callback_sig == empty(bytes32):
+
+            assert ERC20(_coin).transferFrom(
+                sender, self, dx, default_return_value=True
+            )
+
+        else:
+
+            # --------------- First call callback logic and then check if pool
+            # ---------------- gets dx amounts of _coins[i], revert otherwise.
+            b: uint256 = ERC20(_coin).balanceOf(self)
+            raw_call(
+                callbacker,
+                concat(
+                    slice(callback_sig, 0, 4),
+                    _abi_encode(sender, receiver, _coin, dx, dy)
+                )
+            )
+            assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+
+        if _coin == WETH20:
+            WETH(WETH20).withdraw(dx)  # <--------- if WETH was transferred in
+            # --------- previous step and `not use_eth`, withdraw WETH to ETH.
+
+
+@internal
+def _transfer_out(
+    _amount: uint256, i: uint256, use_eth: bool, receiver: address
+):
+    """
+    @notice Withdraws a single token from the pool
+    @dev This function is called by `remove_liquidity` and
+         `remove_liquidity_one` and `_exchange` methods.
+    @params _amount Amount of token to withdraw
+    @params i Index of token to withdraw
+    @params use_eth Whether to withdraw ETH or not
+    @params receiver Address to send the withdrawn tokens to
+    """
+
+    if use_eth and self.coins[i] == WETH20:
+        raw_call(receiver, b"", value=_amount)
+    else:
+        if self.coins[i] == WETH20:
+            WETH(WETH20).deposit(value=_amount)
+
+        assert ERC20(self.coins[i]).transfer(
+            receiver, _amount, default_return_value=True
+        )
 
 
 # -------------------------- AMM Main Functions ------------------------------
@@ -440,16 +531,17 @@ def add_liquidity(
     # -------------------- Calculate LP tokens to mint -----------------------
 
     check_loss: bool = True
-    if self.future_A_gamma_time > block.timestamp:  # <------ Pool is ramping.
+    if self.future_A_gamma_time > block.timestamp:  # <--- A_gamma is ramping.
 
-        # ----- Recalculate the invariant if A or gamma are undergoing a ramp.
-        old_D = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
-
-        check_loss = False  # <-------------- If the pool is undergoing a ramp
+        check_loss = False  # <----------- If the A_gamma is undergoing a ramp
         # -------- then new virtual_price can be lower than old virtual_price.
         # -------- In this case, we want to switch off this Loss check so that
         # ----------------------- the pool continues to function even during a
         # ----------------------- ramp and collect profits to offset the loss.
+
+        # ----- Recalculate the invariant if A or gamma are undergoing a ramp.
+        old_D = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
+
     else:
         old_D = self.D
 
@@ -528,34 +620,6 @@ def add_liquidity(
     return d_token
 
 
-@internal
-def _withdraw_token(
-    _amount: uint256, i: uint256, use_eth: bool, receiver: address
-):
-    """
-    @notice Withdraws a single token from the pool
-    @dev This function is called by `remove_liquidity` and
-         `remove_liquidity_one` only. There is no macro for deposit
-         as add_liquidity and _exchange have differing deposit
-         logic, whereas the token withdraw logic for removing liquidity
-         is the same. Doing it this way saves bytecode space.
-    @params _amount Amount of token to withdraw
-    @params i Index of token to withdraw
-    @params use_eth Whether to withdraw ETH or not
-    @params receiver Address to send the withdrawn tokens to
-    """
-
-    if use_eth and self.coins[i] == WETH20:
-        raw_call(receiver, b"", value=_amount)
-    else:
-        if self.coins[i] == WETH20:
-            WETH(WETH20).deposit(value=_amount)
-
-        assert ERC20(self.coins[i]).transfer(
-            receiver, _amount, default_return_value=True
-        )
-
-
 @external
 @nonreentrant("lock")
 def remove_liquidity(
@@ -565,7 +629,7 @@ def remove_liquidity(
     receiver: address = msg.sender
 ):
     """
-    @notice Safe withdrawal method is very safe, does no complex math since
+    @notice This withdrawal method is very safe, does no complex math since
             tokens are withdrawn in balanced proportions. No fees are charged.
     @param _amount Amount of LP tokens to burn
     @param min_amounts Minimum amounts of tokens to withdraw
@@ -613,7 +677,7 @@ def remove_liquidity(
     # ---------------------------------- Transfers ---------------------------
 
     for i in range(N_COINS):
-        self._withdraw_token(d_balances[i], i, use_eth, receiver)
+        self._transfer_out(d_balances[i], i, use_eth, receiver)
 
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
 
@@ -665,7 +729,7 @@ def remove_liquidity_one_coin(
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
 
-    self._withdraw_token(dy, i, use_eth, receiver)  # <------- Withdraw token.
+    self._transfer_out(dy, i, use_eth, receiver)  # <--------- Withdraw token.
 
     self.tweak_price(A_gamma, xp, i, p, D, 0, check_loss)
 
@@ -796,7 +860,10 @@ def _exchange(
     check_loss: bool = True
     if t > block.timestamp:
 
-        check_loss = False
+        check_loss = False  # <----------------- Do not check loss if ramping.
+        # --------- This is because during ramping, virtual_price can go down.
+        # --------- If it does, then the check will raise an error and the AMM
+        # ----------------------------------------------------- will not work.
 
         x0 *= prec_i
 
@@ -836,38 +903,14 @@ def _exchange(
     # ---------------------- Do Transfers in and out -------------------------
 
     # TRANSFER IN <-------
-    if use_eth and self.coins[i] == WETH20:
-        assert mvalue == dx  # dev: incorrect eth amount
-    else:
-        assert mvalue == 0  # dev: nonzero eth amount
-
-        if callback_sig == empty(bytes32):
-
-            assert ERC20(self.coins[i]).transferFrom(
-                sender, self, dx, default_return_value=True
-            )
-
-        else:
-
-            # --------------- First call callback logic and then check if pool
-            # ---------------- gets dx amounts of _coins[i], revert otherwise.
-            b: uint256 = ERC20(self.coins[i]).balanceOf(self)
-            raw_call(
-                callbacker,
-                concat(
-                    slice(callback_sig, 0, 4),
-                    _abi_encode(sender, receiver, self.coins[i], dx, dy)
-                )
-            )
-            assert ERC20(self.coins[i]).balanceOf(self) - b == dx  # dev: callback didn't give us coins
-
-
-        if self.coins[i] == WETH20:
-            WETH(WETH20).withdraw(dx)  # <--------- if WETH was transferred in
-            # ---------- previous step and `not use_eth`, withdraw WETH to ETH.
+    self._transfer_in(
+        self.coins[i], dx, dy, mvalue,
+        callbacker, callback_sig,  # <-------- Callback method is called here.
+        sender, receiver, use_eth,
+    )
 
     # -------> TRANSFER OUT
-    self._withdraw_token(dy, i, use_eth, receiver)
+    self._transfer_out(dy, i, use_eth, receiver)
 
     # --------------------- Calculate and adjust prices ----------------------
 
@@ -897,8 +940,10 @@ def _exchange(
             p = _dy * 10**18 / _dx
             ix = i
 
-    self.tweak_price(A_gamma, xp, ix, p, 0, 0, check_loss)  # <-------- Tweak price_scale.
-    #                                       ^--- Don't use any initial guess for newton_D.
+    # ----------------------------------------------------- Tweak price_scale.
+    self.tweak_price(A_gamma, xp, ix, p, 0, 0, check_loss)
+    #                                    ^  ^-- No initial guess for newton_D.
+    #                                    ^--------- recalculate invariant (D).
 
     log TokenExchange(sender, i, dx, j, dy, fee)
 
@@ -1033,8 +1078,8 @@ def tweak_price(
             old_virtual_price
         )  # <---------------- Safe to do unsafe_div as old_virtual_price > 0.
 
-        # ------------ If A and gamma re not undergoing ramps (t == 0), ensure
-        # -------------- new virtual_price is not less than old virtual_price,
+        # ------ If A and gamma re not undergoing ramps (t < block.timestamp),
+        # ------- ensure new virtual_price is not less than old virtual_price,
         # -------------------------------------- else the pool suffers a loss.
         if check_loss:
             assert virtual_price > old_virtual_price, "Loss"
@@ -1116,6 +1161,47 @@ def tweak_price(
 
 
 @internal
+def _claim_admin_fees():
+    A_gamma: uint256[2] = self._A_gamma()
+
+    xcp_profit: uint256 = self.xcp_profit
+    xcp_profit_a: uint256 = self.xcp_profit_a
+
+    for i in range(N_COINS):  # <---------------------------------- Gulp here.
+        if self.coins[i] == WETH20:
+            self.balances[i] = self.balance
+        else:
+            self.balances[i] = ERC20(self.coins[i]).balanceOf(self)
+
+    vprice: uint256 = self.virtual_price
+
+    if xcp_profit > xcp_profit_a:
+        fees: uint256 = (xcp_profit - xcp_profit_a) * ADMIN_FEE / (2 * 10**10)
+
+        # ------------------------ Claim admin fee ---------------------------
+
+        receiver: address = Factory(self.factory).fee_receiver()
+        if receiver != empty(address):
+            frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
+            claimed: uint256 = self.mint_relative(receiver, frac)
+            xcp_profit -= fees * 2
+            self.xcp_profit = xcp_profit
+            log ClaimAdminFee(receiver, claimed)
+
+    total_supply: uint256 = self.totalSupply
+
+    D: uint256 = (
+        Math(self.math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
+    )  # <--------------------------------------- Recalculate D b/c we gulped.
+    self.D = D
+
+    self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
+
+    if xcp_profit > xcp_profit_a:
+        self.xcp_profit_a = xcp_profit
+
+
+@internal
 @view
 def xp() -> uint256[N_COINS]:
     result: uint256[N_COINS] = self.balances
@@ -1178,47 +1264,6 @@ def get_xcp(D: uint256) -> uint256:
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     return Math(self.math).geometric_mean(x)
-
-
-@internal
-def _claim_admin_fees():
-    A_gamma: uint256[2] = self._A_gamma()
-
-    xcp_profit: uint256 = self.xcp_profit
-    xcp_profit_a: uint256 = self.xcp_profit_a
-
-    for i in range(N_COINS):  # <---------------------------------- Gulp here.
-        if self.coins[i] == WETH20:
-            self.balances[i] = self.balance
-        else:
-            self.balances[i] = ERC20(self.coins[i]).balanceOf(self)
-
-    vprice: uint256 = self.virtual_price
-
-    if xcp_profit > xcp_profit_a:
-        fees: uint256 = (xcp_profit - xcp_profit_a) * ADMIN_FEE / (2 * 10**10)
-
-        # ------------------------ Claim admin fee ---------------------------
-
-        receiver: address = Factory(self.factory).fee_receiver()
-        if receiver != empty(address):
-            frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
-            claimed: uint256 = self.mint_relative(receiver, frac)
-            xcp_profit -= fees * 2
-            self.xcp_profit = xcp_profit
-            log ClaimAdminFee(receiver, claimed)
-
-    total_supply: uint256 = self.totalSupply
-
-    D: uint256 = (
-        Math(self.math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
-    )  # <--------------------------------------- Recalculate D b/c we gulped.
-    self.D = D
-
-    self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
-
-    if xcp_profit > xcp_profit_a:
-        self.xcp_profit_a = xcp_profit
 
 
 @view
