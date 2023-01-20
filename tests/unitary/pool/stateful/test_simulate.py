@@ -8,8 +8,12 @@ from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 20
+MAX_SAMPLES = 100
 STEP_COUNT = 100
+
+
+def approx(x1, x2, precision):
+    return abs(log(x1 / x2)) <= precision
 
 
 def get_price_scale(swap):
@@ -80,9 +84,6 @@ class StatefulSimulation(StatefulBase):
             // self.trader.price_oracle[exchange_i]
         )
 
-        price_scale = get_price_scale(self.swap)
-        trader_price_scale = self.trader.curve.p
-
         dy_swap = super().exchange(
             exchange_amount_in, exchange_i, exchange_j, user
         )
@@ -93,16 +94,13 @@ class StatefulSimulation(StatefulBase):
                 exchange_amount_in, exchange_i, exchange_j
             )
             price = exchange_amount_in * 10**18 // dy_trader
+
             self.trader.tweak_price(
                 boa.env.vm.state.timestamp, exchange_i, exchange_j, price
             )
 
-            # ensure that if trader tweaks price, so does the amm:
-            if self.trader.curve.p != trader_price_scale:
-                assert get_price_scale(self.swap) != price_scale
-
-            # check if output value is similar
-            assert abs(log(dy_swap / dy_trader)) < 0.01
+            # check if output value from exchange is similar
+            assert abs(log(dy_swap / dy_trader)) < 1e-10
 
     @invariant()
     def simulator(self):
@@ -112,14 +110,11 @@ class StatefulSimulation(StatefulBase):
                 / (self.trader.xcp_profit - 10**18)
                 < 0.05
             )
-        precision = 0.001
+
         for i in range(2):
-            diff = abs(
-                log(self.trader.curve.p[i + 1] / self.swap.price_scale(i))
-            )
-            balances = [self.swap.balances(i) for i in range(3)]
-            if not diff <= precision and self.check_limits(balances):
-                raise
+            price_scale = self.swap.price_scale(i)
+            price_trader = self.trader.curve.p[i + 1]
+            assert approx(price_scale, price_trader, 1e-3)
 
 
 def test_sim(swap, views_contract, users, pool_coins, tricrypto_factory):

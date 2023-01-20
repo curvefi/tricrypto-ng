@@ -1,3 +1,6 @@
+import boa
+
+
 def test_A_gamma(swap):
 
     A, gamma = swap.A_gamma()
@@ -7,26 +10,38 @@ def test_A_gamma(swap):
 
 
 # https://github.com/curvefi/curve-factory-crypto/blob/master/tests/test_a_gamma.py
-def test_ramp_A_gamma(chain, crypto_swap, accounts):
-    initial_A = 90 * 2**2 * 10000
+def test_ramp_A_gamma(swap, factory_admin):
+
+    A_gamma_initial = swap.A_gamma()
+
     future_A = 180 * 2**2 * 10000
-    initial_gamma = int(2.8e-4 * 1e18)
     future_gamma = int(5e-4 * 1e18)
-    t0 = chain.time()
+    t0 = boa.env.vm.state.timestamp
     t1 = t0 + 7 * 86400
-    crypto_swap.ramp_A_gamma(future_A, future_gamma, t1, {"from": accounts[0]})
+
+    with boa.env.prank(factory_admin):
+        swap.ramp_A_gamma(future_A, future_gamma, t1)
 
     for i in range(1, 8):
-        chain.sleep(86400)
-        chain.mine()
+        boa.env.time_travel(86400)
+        A_gamma = swap.A_gamma()
         assert (
-            abs(crypto_swap.A() - (initial_A + (future_A - initial_A) * i / 7))
-            < 1e-4 * initial_A
+            abs(
+                A_gamma[0]
+                - (
+                    A_gamma_initial[0]
+                    + (future_A - A_gamma_initial[0]) * i / 7
+                )
+            )
+            < 1e-4 * A_gamma_initial[0]
         )
         assert (
             abs(
-                crypto_swap.gamma()
-                - (initial_gamma + (future_gamma - initial_gamma) * i / 7)
+                A_gamma[1]
+                - (
+                    A_gamma_initial[1]
+                    + (future_gamma - A_gamma_initial[1]) * i / 7
+                )
             )
-            < 1e-4 * initial_gamma
+            < 1e-4 * A_gamma_initial[1]
         )

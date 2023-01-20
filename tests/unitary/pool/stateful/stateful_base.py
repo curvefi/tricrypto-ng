@@ -137,8 +137,9 @@ class StatefulBase(RuleBasedStateMachine):
         user,
         check_out_amount=True,
     ):
+
         if exchange_i == exchange_j:
-            return False
+            return None
 
         try:
             calc_amount = self.views.get_dy(
@@ -149,7 +150,7 @@ class StatefulBase(RuleBasedStateMachine):
             _amounts[exchange_i] = exchange_amount_in
             if self.check_limits(_amounts):
                 raise
-            return False
+            return None
 
         mint_for_testing(self.coins[exchange_i], user, exchange_amount_in)
 
@@ -158,7 +159,7 @@ class StatefulBase(RuleBasedStateMachine):
         try:
             with boa.env.prank(user):
                 self.coins[exchange_i].approve(self.swap, 2**256 - 1)
-                self.swap.exchange(
+                out = self.swap.exchange(
                     exchange_i, exchange_j, exchange_amount_in, 0
                 )
         except Exception:
@@ -171,7 +172,7 @@ class StatefulBase(RuleBasedStateMachine):
                 and exchange_amount_in / self.swap.balances(exchange_i) > 1e-13
             ):
                 raise
-            return False
+            return None
 
         # This is to check that we didn't end up in a borked state after
         # an exchange succeeded
@@ -180,7 +181,7 @@ class StatefulBase(RuleBasedStateMachine):
             exchange_i,
             10**16
             * 10 ** self.decimals[exchange_j]
-            // ([10**18] + INITIAL_PRICES)[exchange_j],
+            // INITIAL_PRICES[exchange_j],
             self.swap,
         )
 
@@ -201,7 +202,7 @@ class StatefulBase(RuleBasedStateMachine):
         self.balances[exchange_i] += d_balance_i
         self.balances[exchange_j] += d_balance_j
 
-        return True
+        return out
 
     @rule(sleep_time=sleep_time)
     def sleep(self, sleep_time):

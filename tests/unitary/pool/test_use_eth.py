@@ -1,4 +1,4 @@
-# from: https://github.com/curvefi/curve-factory-crypto/blob/master/tests/test_use_eth.py
+# from: https://github.com/curvefi/curve-factory-crypto/blob/master/tests/test_use_eth.py  # noqa: E501
 
 
 def test_exchange_receives_eth():

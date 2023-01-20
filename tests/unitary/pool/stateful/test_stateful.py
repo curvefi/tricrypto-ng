@@ -170,7 +170,7 @@ class ProfitableState(StatefulBase):
         _deposit[exchange_i] = (
             10**16
             * 10 ** self.decimals[exchange_i]
-            // ([10**18] + INITIAL_PRICES)[exchange_i]
+            // INITIAL_PRICES[exchange_i]
         )
         self.views.calc_token_amount(_deposit, True)
 
