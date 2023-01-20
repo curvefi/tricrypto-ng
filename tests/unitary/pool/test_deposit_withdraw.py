@@ -1,4 +1,5 @@
 import boa
+import pytest
 from boa.test import strategy
 from hypothesis import given, settings
 
@@ -9,6 +10,7 @@ from tests.utils.tokens import mint_for_testing
 SETTINGS = {"max_examples": 100, "deadline": None}
 
 
+@pytest.fixture(scope="module")
 def test_1st_deposit_and_last_withdraw(swap, coins, user):
 
     quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
@@ -37,6 +39,36 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user):
 
     # check eth balance. 1 wei should always be left over:
     assert boa.env.get_balance(swap.address) == 1
+    for i in range(len(coins)):
+        assert swap.balances(i) == 1
+
+    return swap
+
+
+def test_first_deposit_full_withdraw_second_deposit(
+    test_1st_deposit_and_last_withdraw, user, coins
+):
+    swap = test_1st_deposit_and_last_withdraw
+
+    quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
+
+    for coin, q in zip(coins, quantities):
+        mint_for_testing(coin, user, q)
+        with boa.env.prank(user):
+            coin.approve(swap, 2**256 - 1)
+
+    # Second deposit
+    with boa.env.prank(user):
+        swap.add_liquidity(quantities, 0)
+
+    # test if eth was deposited:
+    assert boa.env.get_balance(swap.address) == quantities[2] + 1
+    for i in range(len(coins)):
+        assert swap.balances(i) == quantities[i] + 1
+
+    token_balance = swap.balanceOf(user)
+    assert token_balance == swap.totalSupply() > 0
+    assert abs(swap.get_virtual_price() / 1e18 - 1) < 1e-3
 
 
 @given(
