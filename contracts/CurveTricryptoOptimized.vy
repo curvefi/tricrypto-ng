@@ -574,13 +574,9 @@ def add_liquidity(
             if ix < N_COINS:
 
                 S: uint256 = 0
-
-                last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-                packed_prices = self.last_prices_packed
-
-                for k in range(N_COINS - 1):
-                    last_prices[k] = packed_prices & PRICE_MASK
-                    packed_prices = shift(packed_prices, -PRICE_SIZE)
+                last_prices: uint256[N_COINS - 1] = self._unpack_prices(
+                    self.last_prices_packed
+                )
 
                 for i in range(N_COINS):
                     if i != ix:
@@ -748,7 +744,7 @@ def claim_admin_fees():
     self._claim_admin_fees()
 
 
-# ----------------------------- Packing function -----------------------------
+# -------------------------- Packing functions -------------------------------
 
 
 @internal
@@ -800,13 +796,6 @@ def _unpack_prices(_packed_prices: uint256) -> uint256[2]:
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     return unpacked_prices
-
-
-@internal
-@view
-def _packed_view(k: uint256, p: uint256) -> uint256:
-    assert k < N_COINS - 1
-    return shift(p, -PRICE_SIZE * convert(k, int256)) & PRICE_MASK
 
 
 # ---------------------- AMM Internal Functions -------------------------------
@@ -887,8 +876,7 @@ def _exchange(
 
     xp[j] -= dy  # <----------------------------- Not defining new "y" here to
     # ------------------- have less variables / make subsequent calls cheaper.
-    dy -= 1  # <----------------- This ensures that the pool isn't emptied one
-    # ----------------------------------------- sided and math equations work.
+    dy -= 1
 
     if j > 0:
         dy = dy * PRECISION / price_scale[j - 1]
@@ -896,10 +884,11 @@ def _exchange(
 
     fee: uint256 = self._fee(xp) * dy / 10**10
 
-    dy -= fee
+    dy -= fee  # <--------------------- Subtract fee from the outgoing amount.
     assert dy >= min_dy, "Slippage"
-    y -= dy
 
+    # ---------------------------- Update pool balance at outgoing coin index.
+    y -= dy
     self.balances[j] = y
 
     # ---------------------- Do Transfers in and out -------------------------
@@ -1367,12 +1356,9 @@ def _calc_withdraw_one_coin(
 
         # p_i = dD / D0 * sum'(p_k * x_k) / (dy - dD / D0 * y0)
         S: uint256 = 0
-        last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-
-        packed_prices = self.last_prices_packed
-        for k in range(N_COINS - 1):
-            last_prices[k] = packed_prices & PRICE_MASK
-            packed_prices = shift(packed_prices, -PRICE_SIZE)
+        last_prices: uint256[N_COINS - 1] = self._unpack_prices(
+            self.last_prices_packed
+        )
 
         for k in range(N_COINS):
             if k != i:
@@ -1620,13 +1606,13 @@ def get_virtual_price() -> uint256:
 @view
 @nonreentrant("lock")
 def price_oracle(k: uint256) -> uint256:
-    price_oracle: uint256 = self._packed_view(k, self.price_oracle_packed)
+    price_oracle: uint256 = self._unpack_prices(self.price_oracle_packed)[k]
     last_prices_timestamp: uint256 = self.last_prices_timestamp
 
     if last_prices_timestamp < block.timestamp:  # <------------ Update moving
         # ------------------------------------------------- average if needed.
 
-        last_prices: uint256 = self._packed_view(k, self.last_prices_packed)
+        last_prices: uint256 = self._unpack_prices(self.last_prices_packed)[k]
         ma_time: uint256 = self._unpack(self.packed_rebalancing_params)[2]
         alpha: uint256 = Math(self.math).wad_exp(
             -convert(
@@ -1645,13 +1631,13 @@ def price_oracle(k: uint256) -> uint256:
 @external
 @view
 def last_prices(k: uint256) -> uint256:
-    return self._packed_view(k, self.last_prices_packed)
+    return self._unpack_prices(self.last_prices_packed)[k]
 
 
 @external
 @view
 def price_scale(k: uint256) -> uint256:
-    return self._packed_view(k, self.price_scale_packed)
+    return self._unpack_prices(self.price_scale_packed)[k]
 
 
 @external

@@ -39,8 +39,6 @@ class StatefulAdmin(StatefulBase):
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
 
-        admin_balance = self.token.balanceOf(self.fee_receiver)
-
         if exchange_i > 0:
             exchange_amount_in_converted = (
                 exchange_amount_in
@@ -54,10 +52,6 @@ class StatefulAdmin(StatefulBase):
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
 
-        admin_balance = self.token.balanceOf(self.fee_receiver) - admin_balance
-
-        self.total_supply += admin_balance
-
     @rule()
     def claim_admin_fees(self):
 
@@ -65,23 +59,18 @@ class StatefulAdmin(StatefulBase):
 
         self.swap.claim_admin_fees()
         admin_balance = self.token.balanceOf(self.fee_receiver)
-        balance = admin_balance - balance
-        self.total_supply += balance
+        _claimed = admin_balance - balance
+        self.total_supply += _claimed
 
         if balance > 0:
             self.xcp_profit = self.swap.xcp_profit()
             measured_profit = admin_balance / self.total_supply
-            try:
-                assert approx(
-                    measured_profit, log(self.xcp_profit / 1e18) / 2, 0.1
-                )
-            except AssertionError:
-                balances = [self.swap.balances(i) for i in range(3)]
-                if self.check_limits(balances):
-                    raise
+            assert approx(
+                measured_profit, log(self.xcp_profit / 1e18) / 2, 0.1
+            )
 
 
-def test_admin(swap, views_contract, users, pool_coins, tricrypto_factory):
+def test_admin_fee(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 
