@@ -152,17 +152,16 @@ future_A_gamma_time: public(uint256)  # <------ Time when ramping is finished.
 
 balances: public(uint256[N_COINS])
 D: public(uint256)
+xcp_profit: public(uint256)
+xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
+virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
+# -------------------------The cached `virtual_price` is also used internally.
 
 # -------------- Params that affect how price_scale get adjusted -------------
 
 packed_rebalancing_params: public(uint256)  # <---------- Contains rebalancing
 # ------------- parameters allowed_extra_profit, adjustment_step, and ma_time.
 future_packed_rebalancing_params: uint256
-
-xcp_profit: public(uint256)
-xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
-virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
-# -------------------------The cached `virtual_price` is also used internally.
 
 # ---------------- Fee params that determine dynamic fees --------------------
 
@@ -636,32 +635,33 @@ def remove_liquidity(
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
     """
-    total_supply: uint256 = self.totalSupply
-    self.burnFrom(msg.sender, _amount)
+    amount: uint256 = _amount
     balances: uint256[N_COINS] = self.balances
     d_balances: uint256[N_COINS] = empty(uint256[N_COINS])
 
-    # -------------- There are two cases for withdrawing tokens from the pool:
+    # -------------------------------------------------------- Burn LP tokens.
+    total_supply: uint256 = self.totalSupply  # <------ Get totalSupply before
+    self.burnFrom(msg.sender, _amount)  # ---- reducing it with self.burnFrom.
+
+    # - There are two cases for withdrawing tokens from the pool:
     # - Case 1. Withdrawal does not empty the pool.
     # --------- In this situation, D is adjusted proportional to the amount of
     # --------- LP tokens burnt. ERC20 tokens transferred is proportional
     # --------- to : (AMM balance * LP tokens in) / LP token total supply
     # - Case 2. Withdrawal empties the pool.
-    # --------- In this situation, D is set to 0 and all but 1 Wei of each
-    # --------- token is withdrawn.
+    # --------- In this situation, all tokens are withdrawn and the invariant
+    # --------- is reset.
 
-    if _amount == total_supply:  # <---------------------------------- Case 1.
+    if amount == total_supply:  # <----------------------------------- Case 1.
 
         for i in range(N_COINS):
 
-            d_balances[i] = balances[i] - 1
-            self.balances[i] = 1  # <--------------------- Leave 1 wei behind.
-
-        self.D = 0  # <--------- Set D to 0 and reset the pool to start state.
+            d_balances[i] = balances[i]
+            self.balances[i] = 0  # <------------------------- Empty the pool.
 
     else:  # <-------------------------------------------------------- Case 2.
 
-        amount: uint256 = _amount - 1
+        amount -= 1  # <---- To prevent rounding errors, favor LPs a tiny bit.
 
         for i in range(N_COINS):
             d_balances[i] = balances[i] * amount / total_supply
@@ -669,10 +669,11 @@ def remove_liquidity(
             self.balances[i] = balances[i] - d_balances[i]
             balances[i] = d_balances[i]  # <-- Now it's the amounts going out.
 
-        D: uint256 = self.D
-        self.D = D - D * amount / total_supply  # <----- Reduce D proportional
-        # ----------------------------------- to the amount of tokens leaving.
-        # ------ Since withdrawals are balanced, this is a simple subtraction.
+    D: uint256 = self.D
+    self.D = D - D * amount / total_supply  # <--------- Reduce D proportional
+    # --------------------------------------- to the amount of tokens leaving.
+    # ---------- Since withdrawals are balanced, this is a simple subtraction.
+    # -------------------------------- If amount == total_supply, D will be 0.
 
     # ---------------------------------- Transfers ---------------------------
 
@@ -715,27 +716,28 @@ def remove_liquidity_one_coin(
 
     dy, p, D, xp, approx_fee = self._calc_withdraw_one_coin(
         A_gamma, token_amount, i, not check_loss, True
-    )  #                           ^--- If check_loss is True, then `update_D`
-    # ------------- is False. If check_loss is False, then `update_D` is True.
-    # -------- We need to update D if ramps are happening. This is because the
-    # ---------------- invariant experiences a change while parameter ramping.
-    # ----------- If we do not recalculate invariant during ramping, then the
-    # --------------------------------------- calculated dy will be incorrect.
+    )  #                           ^
+    #                              ^--- If check_loss is True, then `update_D`
+    # ------------------ is False and vice versa. We need to update D if ramps
+    # ------------- are happening. This is because the invariant experiences a
+    # --------------- change while parameter ramping. If we do not recalculate
+    # ---- invariant during ramping, then the calculated dy will be incorrect.
 
     assert dy >= min_amount, "Slippage"
 
-    # ------------------------------------------------------------------------
+    # ------------------------- Transfers ------------------------------------
 
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
-
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
     self.tweak_price(A_gamma, xp, i, p, D, 0, check_loss)
+    self._claim_admin_fees()  # <----------- Because virtual_price can go down
+    # ----- slightly, there can be instances where `remove_liquidity_one_coin`
+    # -------------- can result in the virtual price going down slightly, even
+    # --------------------------- if this loss check happens in `tweak_price`.
 
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
-
-    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
 
     return dy
 
@@ -961,14 +963,16 @@ def tweak_price(
     check_loss: bool = True,
 ):
     """
-    @notice Conditionally adjust prices in the pool.
-    @dev Contains main liquidity rebalancing logic, by tweaking `price_scale`
-    @param A_gamma Array of A and gamma parameters
-    @param _xp Array of current balances
-    @param i Index of the coin to tweak
-    @param p_i Current price of the coin
-    @param new_D New D value
-    @param K0_prev Initial guess for `newton_D`
+    @notice Conditionally adjust prices around which liquidity is distributed.
+    @dev Contains main liquidity rebalancing logic, by tweaking `price_scale`.
+    @param A_gamma Array of A and gamma parameters.
+    @param _xp Array of current balances.
+    @param i Index of the coin to tweak.
+    @param p_i Current price of the coin.
+    @param new_D New D value.
+    @param K0_prev Initial guess for `newton_D`.
+    @param check_loss Boolean flag, if activated, will check if virtual price
+           decreases.
     """
     price_oracle: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
     last_prices: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
@@ -980,14 +984,11 @@ def tweak_price(
         self.packed_rebalancing_params
     )  # <---------- Contains: allowed_extra_profit, adjustment_step, ma_time.
 
-    # ------------------ Unpack internal oracle and last prices --------------
+    # ----------------------- Update MA if needed ----------------------------
 
     price_oracle = self._unpack_prices(self.price_oracle_packed)
-
     last_prices_timestamp: uint256 = self.last_prices_timestamp
     last_prices = self._unpack_prices(self.last_prices_packed)
-
-    # ----------------------- Update MA if needed ----------------------------
 
     if last_prices_timestamp < block.timestamp:
 
@@ -1109,9 +1110,9 @@ def tweak_price(
 
         if norm > adjustment_step and old_virtual_price > 0:  # <----- We only
             # ------------------- adjust prices if the vector distance between
-            # ------ price_oracle and price_scale are large enough. This check
-            # --- ensures that no rebalancing occurs if the distance is small,
-            # ---------- i.e. the pool prices are pegged to the oracle prices.
+            # ------- price_oracle and price_scale is large enough. This check
+            # ---------- ensures that no rebalancing occurs if the distance is
+            # ------ low i.e. the pool prices are pegged to the oracle prices.
 
             # -------------- Calculate new price scale -----------------------
 
@@ -1162,20 +1163,34 @@ def tweak_price(
 
 @internal
 def _claim_admin_fees():
+    """
+    @notice Claims admin fees and sends it to fee_receiver set in the factory.
+    """
     A_gamma: uint256[2] = self._A_gamma()
 
-    xcp_profit: uint256 = self.xcp_profit
-    xcp_profit_a: uint256 = self.xcp_profit_a
+    xcp_profit: uint256 = self.xcp_profit  # <---------- Current pool profits.
+    xcp_profit_a: uint256 = self.xcp_profit_a  # <- Profits at previous claim.
 
-    for i in range(N_COINS):  # <---------------------------------- Gulp here.
+    # ---------------------- Claim tokens belonging to the admin here. This is
+    # ----------- done by 'gulping' pool tokens that have accrued as fees, but
+    # ------------- not accounted in pool's `self.balances` yet: pool balances
+    # ---------------- only account for incoming and outgoing tokens excluding
+    # ------------------------ fees. These fees are 'gulped' in the following:
+
+    for i in range(N_COINS):
         if self.coins[i] == WETH20:
             self.balances[i] = self.balance
         else:
             self.balances[i] = ERC20(self.coins[i]).balanceOf(self)
 
+    # ---------- If the pool has made no profits, `xcp_profit == xcp_profit_a`
+    # ----------------------- and the pool gulps nothing in the previous step.
+
     vprice: uint256 = self.virtual_price
 
+    # ----------- If pool has accrued profits since last claim, claim profits.
     if xcp_profit > xcp_profit_a:
+
         fees: uint256 = (xcp_profit - xcp_profit_a) * ADMIN_FEE / (2 * 10**10)
 
         # ------------------------ Claim admin fee ---------------------------
@@ -1188,17 +1203,19 @@ def _claim_admin_fees():
             self.xcp_profit = xcp_profit
             log ClaimAdminFee(receiver, claimed)
 
-    total_supply: uint256 = self.totalSupply
-
-    D: uint256 = (
-        Math(self.math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
-    )  # <--------------------------------------- Recalculate D b/c we gulped.
+    # ------------------------------------------- Recalculate D b/c we gulped.
+    D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
     self.D = D
 
-    self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
+    # ------------------- Recalculate virtual_price following admin fee claim.
+    # --- In this instance we do not check if current virtual price is greater
+    # ------------- than old virtual price, since the claim process can result
+    # ----------------------------------- in a small decrease in pool's value.
+
+    self.virtual_price = 10**18 * self.get_xcp(D) / self.totalSupply
 
     if xcp_profit > xcp_profit_a:
-        self.xcp_profit_a = xcp_profit
+        self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
 
 
 @internal

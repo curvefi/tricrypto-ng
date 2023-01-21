@@ -68,8 +68,9 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap, initial_prices):
 
     for coin, quantity in zip(coins, quantities):
         # mint coins for user:
+        user_balance = coin.balanceOf(user)
         mint_for_testing(coin, user, quantity)
-        assert coin.balanceOf(user) == quantity
+        assert coin.balanceOf(user) == user_balance + quantity
 
         # approve crypto_swap to trade coin for user:
         with boa.env.prank(user):

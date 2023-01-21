@@ -37,10 +37,10 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user):
 
     assert swap.balanceOf(user) == swap.totalSupply() == 0
 
-    # check eth balance. 1 wei should always be left over:
-    assert boa.env.get_balance(swap.address) == 1
+    # check balances. nothing should be left over
+    assert boa.env.get_balance(swap.address) == 0
     for i in range(len(coins)):
-        assert swap.balances(i) == 1
+        assert swap.balances(i) == 0
 
     return swap
 
@@ -49,6 +49,11 @@ def test_first_deposit_full_withdraw_second_deposit(
     test_1st_deposit_and_last_withdraw, user, coins
 ):
     swap = test_1st_deposit_and_last_withdraw
+
+    # check balances. pool should be completely empty
+    assert boa.env.get_balance(swap.address) == 0
+    for i in range(len(coins)):
+        assert swap.balances(i) == 0
 
     quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
 
@@ -62,9 +67,9 @@ def test_first_deposit_full_withdraw_second_deposit(
         swap.add_liquidity(quantities, 0)
 
     # test if eth was deposited:
-    assert boa.env.get_balance(swap.address) == quantities[2] + 1
+    assert boa.env.get_balance(swap.address) == quantities[2] + 0
     for i in range(len(coins)):
-        assert swap.balances(i) == quantities[i] + 1
+        assert swap.balances(i) == quantities[i] + 0
 
     token_balance = swap.balanceOf(user)
     assert token_balance == swap.totalSupply() > 0
