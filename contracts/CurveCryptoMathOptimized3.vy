@@ -2,6 +2,9 @@
 
 # (c) Curve.Fi, 2022
 # Math for 3-coin Curve cryptoswap pools
+#
+# Unless otherwise agreed on, only contracts owned by Curve DAO or
+# Swiss Stake GmbH are allowed to call this contract.
 
 
 N_COINS: constant(uint256) = 3

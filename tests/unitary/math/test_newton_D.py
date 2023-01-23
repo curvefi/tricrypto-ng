@@ -61,7 +61,6 @@ pytest.gas_new = 0
 @settings(max_examples=MAX_SAMPLES, deadline=timedelta(seconds=1000))
 def test_newton_D(
     math_optimized,
-    coins,
     A,
     D,
     xD,
@@ -77,7 +76,6 @@ def test_newton_D(
 ):
     _test_newton_D(
         math_optimized,
-        coins,
         A,
         D,
         xD,
@@ -95,7 +93,6 @@ def test_newton_D(
 
 def _test_newton_D(
     tricrypto_math,
-    coins,
     A,
     D,
     xD,

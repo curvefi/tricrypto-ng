@@ -36,7 +36,9 @@ class StatefulBase(RuleBasedStateMachine):
         self.user_balances = {u: [0] * 3 for u in self.accounts}
         self.balances = self.initial_deposit[:]
         self.xcp_profit = 10**18
+
         self.total_supply = 0
+        self.previous_pool_profit = 0
 
         for user in self.accounts:
             for coin in self.coins:
@@ -82,6 +84,14 @@ class StatefulBase(RuleBasedStateMachine):
             p * a // 10 ** (36 - d)
             for p, a, d in zip(prices, amounts, self.decimals)
         ]
+
+    def calculate_up_only_profit(self):
+
+        xcp_profit = self.swap.xcp_profit()
+        xcp_profit_a = self.swap.xcp_profit_a()
+
+        uponly_profit = (xcp_profit + xcp_profit_a + 1) // 2
+        return uponly_profit
 
     def check_limits(self, amounts, D=True, y=True):
         """
@@ -224,7 +234,8 @@ class StatefulBase(RuleBasedStateMachine):
 
     @invariant()
     def virtual_price(self):
-        virtual_price = self.swap._storage.virtual_price.get()
+
+        virtual_price = self.swap.virtual_price()
         xcp_profit = self.swap.xcp_profit()
         get_virtual_price = self.swap.get_virtual_price()
 
@@ -235,9 +246,18 @@ class StatefulBase(RuleBasedStateMachine):
         assert (
             xcp_profit - self.xcp_profit > -3
         ), f"{xcp_profit} vs {self.xcp_profit}"
+
         assert (virtual_price - 10**18) * 2 - (
             xcp_profit - 10**18
         ) >= -5, f"vprice={virtual_price}, xcp_profit={xcp_profit}"
+
         assert abs(log(virtual_price / get_virtual_price)) < 1e-10
 
         self.xcp_profit = xcp_profit
+
+    @invariant()
+    def up_only_profit(self):
+
+        current_profit = self.calculate_up_only_profit()
+        assert current_profit >= self.previous_pool_profit
+        self.previous_pool_profit = current_profit

@@ -56,13 +56,12 @@ class StatefulAdmin(StatefulBase):
     def claim_admin_fees(self):
 
         balance = self.token.balanceOf(self.fee_receiver)
-
         self.swap.claim_admin_fees()
         admin_balance = self.token.balanceOf(self.fee_receiver)
         _claimed = admin_balance - balance
         self.total_supply += _claimed
 
-        if balance > 0:
+        if _claimed > 0:
             self.xcp_profit = self.swap.xcp_profit()
             measured_profit = admin_balance / self.total_supply
             assert approx(
