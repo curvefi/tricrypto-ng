@@ -295,30 +295,6 @@ def __default__():
 
 
 @internal
-def _call_callback_and_check(
-    _coin: address,
-    dx: uint256,
-    dy: uint256,
-    callbacker: address,
-    callback_sig: bytes32,
-    sender: address,
-    receiver: address,
-):
-
-    # ----------------------- First call callback logic and then check if pool
-    # ------------------------ gets dx amounts of _coins[i], revert otherwise.
-    b: uint256 = ERC20(_coin).balanceOf(self)
-    raw_call(
-        callbacker,
-        concat(
-            slice(callback_sig, 0, 4),
-            _abi_encode(sender, receiver, _coin, dx, dy)
-        )
-    )
-    assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
-
-
-@internal
 def _transfer_in(
     _coin: address,
     dx: uint256,
@@ -363,9 +339,17 @@ def _transfer_in(
 
         else:
 
-            self._call_callback_and_check(
-                _coin, dx, dy, callbacker, callback_sig, sender, receiver
+            # --------------- First call callback logic and then check if pool
+            # ---------------- gets dx amounts of _coins[i], revert otherwise.
+            b: uint256 = ERC20(_coin).balanceOf(self)
+            raw_call(
+                callbacker,
+                concat(
+                    slice(callback_sig, 0, 4),
+                    _abi_encode(sender, receiver, _coin, dx, dy)
+                )
             )
+            assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
 
         if _coin == WETH20:
             WETH(WETH20).withdraw(dx)  # <--------- if WETH was transferred in
@@ -601,7 +585,7 @@ def add_liquidity(
                     self.last_prices_packed
                 )
 
-                # ------- Calculat
+                # -------------------- Calculate prices post liquidity action.
                 for i in range(N_COINS):
                     if i != ix:
                         if i == 0:
