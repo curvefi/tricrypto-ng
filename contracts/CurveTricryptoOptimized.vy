@@ -482,8 +482,8 @@ def add_liquidity(
     # --------------------- Get prices, balances -----------------------------
 
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
-    price_scale: uint256[N_COINS-1] = self._unpack_prices(
-        self.price_scale_packed
+    price_scale: uint256[N_COINS-1] = (
+        self._unpack_prices(self.price_scale_packed)
     )
 
     # -------------------------------------- Update balances and calculate xp.

@@ -69,6 +69,12 @@ class RampTest(ProfitableState):
         # so we need to override super().virtual_price()
         pass
 
+    @invariant()
+    def up_only_profit(self):
+        # Invariant is not conserved here
+        # so we need to override super().up_only_profit()
+        pass
+
 
 def test_ramp(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
