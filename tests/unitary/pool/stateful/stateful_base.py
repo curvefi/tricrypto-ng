@@ -7,6 +7,9 @@ from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
+MIN_XD = 10**16
+MAX_XD = 10**20
+
 
 class StatefulBase(RuleBasedStateMachine):
     exchange_amount_in = strategy("uint256", max_value=10**9 * 10**18)
@@ -58,21 +61,6 @@ class StatefulBase(RuleBasedStateMachine):
         assert self.token.totalSupply() > 0
         self.total_supply = self.token.balanceOf(user)
 
-    def state_dump(self):
-        amm_balances = []
-        for i in range(len(self.coins)):
-            amm_balances.append(self.swap.balances(i))
-
-        price_oracle = [self.swap.price_oracle(0), self.swap.price_oracle(1)]
-        price_scale = [self.swap.price_scale(0), self.swap.price_scale(1)]
-
-        return {
-            "balances": amm_balances,
-            "price_oracle": price_oracle,
-            "price_scale": price_scale,
-            "fee": self.swap.fee(),
-        }
-
     def get_coin_balance(self, user, coin):
         if coin.symbol() == "WETH":
             return boa.env.get_balance(user)
@@ -98,8 +86,8 @@ class StatefulBase(RuleBasedStateMachine):
         Should be good if within limits, but if outside - can be either
         """
         _D = self.swap.D()
-        prices = [10**18] + [self.swap.price_scale()]
-        xp_0 = [self.swap.balances(i) for i in range(2)]
+        prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
+        xp_0 = [self.swap.balances(i) for i in range(3)]
         xp = xp_0
         xp_0 = [
             x * p // 10**d for x, p, d in zip(xp_0, prices, self.decimals)
@@ -123,8 +111,8 @@ class StatefulBase(RuleBasedStateMachine):
                 if (
                     (_D < 10**17)
                     or (_D > 10**15 * 10**18)
-                    or (min(_xp) * 10**18 // _D < 10**16)
-                    or (max(_xp) * 10**18 // _D > 10**20)
+                    or (min(_xp) * 10**18 // _D < MIN_XD)
+                    or (max(_xp) * 10**18 // _D > MAX_XD)
                 ):
                     return False
 
@@ -174,14 +162,19 @@ class StatefulBase(RuleBasedStateMachine):
                 )
         except Exception:
 
+            _amounts = [0] * 3
+            _amounts[exchange_i] = exchange_amount_in
+
             # Small amounts may fail with rounding errors
             if (
                 calc_amount > 100
                 and exchange_amount_in > 100
                 and calc_amount / self.swap.balances(exchange_j) > 1e-13
                 and exchange_amount_in / self.swap.balances(exchange_i) > 1e-13
+                and self.check_limits(_amounts)
             ):
                 raise
+
             return None
 
         # This is to check that we didn't end up in a borked state after

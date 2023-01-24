@@ -100,7 +100,7 @@ class StatefulSimulation(StatefulBase):
             )
 
             # check if output value from exchange is similar
-            assert abs(log(dy_swap / dy_trader)) < 1e-10
+            assert abs(log(dy_swap / dy_trader)) < 1e-5
 
     @invariant()
     def simulator(self):

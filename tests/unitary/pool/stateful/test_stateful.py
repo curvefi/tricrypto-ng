@@ -107,6 +107,7 @@ class ProfitableState(StatefulBase):
                 self.swap.remove_liquidity(token_amount, [0] * 3)
             tokens -= self.token.balanceOf(user)
             self.total_supply -= tokens
+
             amounts = [
                 (self.get_coin_balance(user, c) - a)
                 for c, a in zip(self.coins, amounts)
@@ -127,7 +128,13 @@ class ProfitableState(StatefulBase):
         self, token_amount, exchange_i, user, check_out_amount
     ):
         if check_out_amount:
+            admin_balances = self.swap.balanceOf(self.fee_receiver)
             self.swap.claim_admin_fees()
+            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
+            if _claimed > 0:
+                self.total_supply += _claimed
+
+                self.xcp_profit = self.swap.xcp_profit()
 
         try:
             calc_out_amount = self.swap.calc_withdraw_one_coin(
@@ -150,10 +157,13 @@ class ProfitableState(StatefulBase):
 
         d_balance = self.get_coin_balance(user, self.coins[exchange_i])
         try:
+            admin_balances = self.swap.balanceOf(self.fee_receiver)
             with boa.env.prank(user):
                 self.swap.remove_liquidity_one_coin(
                     token_amount, exchange_i, 0
                 )
+            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
+
         except Exception:
             # Small amounts may fail with rounding errors
             if (
@@ -191,6 +201,10 @@ class ProfitableState(StatefulBase):
 
         self.balances[exchange_i] -= d_balance
         self.total_supply -= d_token
+
+        if _claimed > 0:
+            self.total_supply += _claimed
+            self.xcp_profit = self.swap.xcp_profit()
 
         # Virtual price resets if everything is withdrawn
         if self.total_supply == 0:

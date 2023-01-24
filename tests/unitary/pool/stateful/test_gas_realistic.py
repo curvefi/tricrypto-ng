@@ -75,8 +75,14 @@ class StatefulGas(StatefulBase):
     def remove_liquidity_one_coin(
         self, token_fraction, exchange_i, user, update_D
     ):
+
         if update_D:
+            admin_balance = self.swap.balanceOf(self.fee_receiver)
             self.swap.claim_admin_fees()
+            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
+            if _claimed > 0:
+                self.total_supply += _claimed
+                self.xcp_profit = self.swap.xcp_profit()
 
         token_amount = token_fraction * self.total_supply // 10**18
         d_token = self.token.balanceOf(user)
@@ -95,12 +101,15 @@ class StatefulGas(StatefulBase):
             return
 
         d_balance = self.get_coin_balance(self.coins[exchange_i], user)
-
         try:
+            admin_balance = self.swap.balanceOf(self.fee_receiver)
             with boa.env.prank(user):
                 self.swap.remove_liquidity_one_coin(
                     token_amount, exchange_i, 0
                 )
+            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
+            self.total_supply += _claimed
+
         except Exception:
             # Small amounts may fail with rounding errors
             if (
