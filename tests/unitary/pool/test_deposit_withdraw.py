@@ -99,7 +99,7 @@ def test_second_deposit(
     for i in range(3):
         xp[i] += int(values[i] * 10**18)
 
-    _A, _gamma = swap_with_deposit.A_gamma()
+    _A, _gamma = [swap_with_deposit.A(), swap_with_deposit.gamma()]
     _D = sim.solve_D(_A, _gamma, xp)
 
     safe = all(
@@ -247,7 +247,7 @@ def test_immediate_withdraw_one(
         # Test if we are safe
         xp = [10**6 * 10**18] * 3
         _supply = swap_with_deposit.totalSupply()
-        _A, _gamma = swap_with_deposit.A_gamma()
+        _A, _gamma = [swap_with_deposit.A(), swap_with_deposit.gamma()]
         _D = swap_with_deposit.D() * (_supply - token_amount) // _supply
 
         xp[i] = sim.solve_x(_A, _gamma, xp, _D, i)

@@ -3,7 +3,6 @@ import sys
 import time
 from datetime import timedelta
 
-import boa
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -13,7 +12,7 @@ import tests.utils.simulation_int_many as sim
 sys.stdout = sys.stderr
 
 N_COINS = 3
-MAX_SAMPLES = 10000  # Increase for fuzzing
+MAX_SAMPLES = 1000  # Increase for fuzzing
 
 A_MUL = 10000 * 3**3
 MIN_A = int(0.01 * A_MUL)

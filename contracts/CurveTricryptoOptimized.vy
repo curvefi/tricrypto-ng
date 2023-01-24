@@ -315,15 +315,16 @@ def _transfer_in(
          coin: address
          dx: uint256
          dy: uint256
-    @params _coin: address of the coin to transfer in.
-    @params dx: amount of `_coin` to transfer into the pool.
-    @params dy: amount of `_coin` to transfer out of the pool.
-    @params mvalue: msg.value if the transfer is ETH, 0 otherwise.
-    @params callbacker: address to call `callback_sig` on.
-    @params callback_sig: signature of the callback function.
-    @params sender: address to transfer `_coin` from.
-    @params receiver: address to transfer `_coin` to.
-    @params use_eth: True if the transfer is ETH, False otherwise.
+         A use case is to use it to reduce number of ERC20 token transfers.
+    @params _coin address of the coin to transfer in.
+    @params dx amount of `_coin` to transfer into the pool.
+    @params dy amount of `_coin` to transfer out of the pool.
+    @params mvalue msg.value if the transfer is ETH, 0 otherwise.
+    @params callbacker address to call `callback_sig` on.
+    @params callback_sig signature of the callback function.
+    @params sender address to transfer `_coin` from.
+    @params receiver address to transfer `_coin` to.
+    @params use_eth True if the transfer is ETH, False otherwise.
     """
 
     if use_eth and _coin == WETH20:
@@ -480,6 +481,12 @@ def add_liquidity(
 
     # --------------------- Get prices, balances -----------------------------
 
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    price_scale: uint256[N_COINS-1] = self._unpack_prices(
+        self.price_scale_packed
+    )
+
+    # -------------------------------------- Update balances and calculate xp.
     xp_old: uint256[N_COINS] = xp
     for i in range(N_COINS):
         bal: uint256 = xp[i] + amounts[i]
@@ -487,37 +494,42 @@ def add_liquidity(
         self.balances[i] = bal
     xx = xp
 
-    packed_prices: uint256 = self.price_scale_packed
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
-
     xp[0] *= precisions[0]
     xp_old[0] *= precisions[0]
     for i in range(1, N_COINS):
-        price_scale: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
-        xp[i] = xp[i] * price_scale / PRECISION
-        xp_old[i] = xp_old[i] * price_scale / PRECISION
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
+        xp[i] = xp[i] * price_scale[i-1] * precisions[i] / PRECISION
+        xp_old[i] = xp_old[i] * price_scale[i-1] * precisions[i] / PRECISION
 
     # ---------------------- transferFrom token ------------------------------
 
-    if not use_eth:
-        assert msg.value == 0  # dev: nonzero eth amount
-
     for i in range(N_COINS):
-
-        if use_eth and self.coins[i] == WETH20:
-            assert msg.value == amounts[i]  # dev: incorrect eth amount
 
         if amounts[i] > 0:
 
-            if not use_eth or self.coins[i] != WETH20:
-
-                assert ERC20(self.coins[i]).transferFrom(
-                    msg.sender, self, amounts[i], default_return_value=True
+            if self.coins[i] == WETH20:
+                self._transfer_in(
+                    self.coins[i],
+                    amounts[i],
+                    0,  # <-----------------------------------
+                    msg.value,  #                             | No callbacks
+                    empty(address),  # <----------------------| for
+                    empty(bytes32),  # <----------------------| add_liquidity.
+                    msg.sender,  #                            |
+                    empty(address),  # <-----------------------
+                    use_eth
                 )
-
-                if self.coins[i] == WETH20:
-                    WETH(WETH20).withdraw(amounts[i])
+            else:
+                self._transfer_in(
+                    self.coins[i],
+                    amounts[i],
+                    0,
+                    0,  # <----------------- mvalue = 0 if coin is not WETH20.
+                    empty(address),
+                    empty(bytes32),
+                    msg.sender,
+                    empty(address),
+                    False  # <-------- use_eth is False if coin is not WETH20.
+                )
 
             amountsp[i] = xp[i] - xp_old[i]
 
@@ -548,6 +560,7 @@ def add_liquidity(
         old_D = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
 
     else:
+
         old_D = self.D
 
     D: uint256 = Math(self.math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
@@ -1725,8 +1738,14 @@ def calc_token_fee(
 
 @view
 @external
-def A_gamma() -> uint256[2]:  # <- A and gamma in view to save bytecode space.
-    return self._A_gamma()
+def A() -> uint256:
+    return self._A_gamma()[0]
+
+
+@view
+@external
+def gamma() -> uint256:
+    return self._A_gamma()[1]
 
 
 @view

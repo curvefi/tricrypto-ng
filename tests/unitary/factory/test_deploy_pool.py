@@ -43,9 +43,10 @@ def test_check_packed_params_on_deployment(swap, params, coins):
     assert params["ma_time"] == unpacked_rebalancing_params[2]
 
     # check packed A_gamma
-    A_gamma = swap.A_gamma()
-    assert params["A"] == A_gamma[0]
-    assert params["gamma"] == A_gamma[1]
+    A = swap.A()
+    gamma = swap.gamma()
+    assert params["A"] == A
+    assert params["gamma"] == gamma
 
     # check packed_prices
     price_oracle = [swap.price_oracle(i) for i in range(2)]

@@ -9,7 +9,8 @@ from vyper.interfaces import ERC20
 
 
 interface Curve:
-    def A_gamma() -> uint256[2]: view
+    def A() -> uint256: view
+    def gamma() -> uint256: view
     def price_scale(i: uint256) -> uint256: view
     def price_oracle(i: uint256) -> uint256: view
     def get_virtual_price() -> uint256: view
@@ -87,9 +88,10 @@ def get_dy(
     for k in range(N_COINS):
         xp[k] = Curve(swap).balances(k)
 
-    A_gamma: uint256[2] = Curve(swap).A_gamma()
+    A: uint256 = Curve(swap).A()
+    gamma: uint256 = Curve(swap).gamma()
     D: uint256 = self._calc_D_ramp(
-        A_gamma[0], A_gamma[1], xp, precisions, price_scale, swap
+        A, gamma, xp, precisions, price_scale, swap
     )
 
     xp[i] += dx
@@ -97,7 +99,7 @@ def get_dy(
     for k in range(N_COINS - 1):
         xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
 
-    y_out: uint256[2] = Math(math).get_y(A_gamma[0], A_gamma[1], xp, D, j)
+    y_out: uint256[2] = Math(math).get_y(A, gamma, xp, D, j)
     dy: uint256 = xp[j] - y_out[0] - 1
     xp[j] = y_out[0]
     if j > 0:
@@ -132,9 +134,10 @@ def calc_token_amount(
     for k in range(N_COINS - 1):
         price_scale[k] = Curve(swap).price_scale(k)
 
-    A_gamma: uint256[2] = Curve(swap).A_gamma()
+    A: uint256 = Curve(swap).A()
+    gamma: uint256 = Curve(swap).gamma()
     D0: uint256 = self._calc_D_ramp(
-        A_gamma[0], A_gamma[1], xp, precisions, price_scale, swap
+        A, gamma, xp, precisions, price_scale, swap
     )
 
     amountsp: uint256[N_COINS] = amounts
@@ -152,7 +155,7 @@ def calc_token_amount(
         xp[k + 1] = xp[k + 1] * p / PRECISION
         amountsp[k + 1] = amountsp[k + 1] * p / PRECISION
 
-    D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp, 0)
+    D: uint256 = Math(math).newton_D(A, gamma, xp, 0)
     d_token: uint256 = token_supply * D / D0
 
     if deposit:

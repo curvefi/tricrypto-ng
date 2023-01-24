@@ -42,7 +42,7 @@ class StatefulSimulation(StatefulBase):
             self.total_supply += self.token.balanceOf(u)
 
         self.virtual_price = self.swap.get_virtual_price()
-        A_gamma = self.swap.A_gamma()
+        A_gamma = [self.swap.A(), self.swap.gamma()]
         fee_params = self.swap.internal._unpack(
             self.swap._storage.packed_fee_params.get()
         )

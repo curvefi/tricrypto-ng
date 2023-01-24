@@ -3,7 +3,8 @@ import boa
 
 def test_A_gamma(swap):
 
-    A, gamma = swap.A_gamma()
+    A = swap.A()
+    gamma = swap.gamma()
 
     assert A == 135 * 3**3 * 10000
     assert gamma == int(7e-5 * 1e18)
@@ -12,7 +13,9 @@ def test_A_gamma(swap):
 # https://github.com/curvefi/curve-factory-crypto/blob/master/tests/test_a_gamma.py
 def test_ramp_A_gamma(swap, factory_admin):
 
-    A_gamma_initial = swap.A_gamma()
+    A = swap.A()
+    gamma = swap.gamma()
+    A_gamma_initial = [A, gamma]
 
     future_A = 180 * 2**2 * 10000
     future_gamma = int(5e-4 * 1e18)
@@ -24,7 +27,7 @@ def test_ramp_A_gamma(swap, factory_admin):
 
     for i in range(1, 8):
         boa.env.time_travel(86400)
-        A_gamma = swap.A_gamma()
+        A_gamma = [swap.A(), swap.gamma()]
         assert (
             abs(
                 A_gamma[0]

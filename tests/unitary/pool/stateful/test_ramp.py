@@ -27,7 +27,7 @@ class RampTest(ProfitableState):
 
     def setup(self, user_id=0):
         super().setup(user_id)
-        A_gamma = self.swap.A_gamma()
+        A_gamma = [self.swap.A(), self.swap.gamma()]
         new_A = A_gamma[0] * 2
         new_gamma = A_gamma[1] * 2
 
