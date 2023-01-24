@@ -292,9 +292,7 @@ def _newton_y(
 
         if diff < max(convergence_limit, y / 10**14):
             frac: uint256 = y * 10**18 / D
-            assert (
-                frac > 10**16 - 1 and frac < 10**20 + 1
-            ), "dev: unsafe value for y"
+            assert (frac > 10**16 - 1) and (frac < 10**20 + 1), "dev: unsafe value for y"
             return y
 
     raise "Did not converge"
