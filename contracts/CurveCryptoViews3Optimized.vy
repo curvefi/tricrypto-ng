@@ -55,23 +55,6 @@ def __init__(_math: address):
 
 @external
 @view
-@nonreentrant("lock")
-def lp_price(swap: address) -> uint256:
-
-    price_oracle: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
-    for k in range(N_COINS - 1):
-        price_oracle[k] = Curve(swap).price_oracle(k)
-
-    virtual_price: uint256 = Curve(swap).get_virtual_price()
-
-    return (
-        3 * virtual_price *
-        Math(math).cbrt(price_oracle[0] * price_oracle[1]) / 10**18
-    )
-
-
-@external
-@view
 def get_dy(
     i: uint256, j: uint256, dx: uint256, swap: address
 ) -> uint256:

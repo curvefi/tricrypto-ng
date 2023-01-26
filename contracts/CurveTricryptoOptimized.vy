@@ -659,7 +659,7 @@ def remove_liquidity(
     min_amounts: uint256[N_COINS],
     use_eth: bool = False,
     receiver: address = msg.sender
-):
+) -> uint256[3]:
     """
     @notice This withdrawal method is very safe, does no complex math since
             tokens are withdrawn in balanced proportions. No fees are charged.
@@ -667,6 +667,7 @@ def remove_liquidity(
     @param min_amounts Minimum amounts of tokens to withdraw
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
+    @return Amounts of tokens withdrawn
     """
     amount: uint256 = _amount
     balances: uint256[N_COINS] = self.balances
@@ -714,6 +715,8 @@ def remove_liquidity(
         self._transfer_out(self.coins[i], d_balances[i], use_eth, receiver)
 
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
+
+    return d_balances
 
 
 @external
@@ -910,7 +913,7 @@ def _exchange(
     dy = xp[j] - y_out[0]  # <------------------------- y_out[0] is the new y.
 
     xp[j] -= dy  # <----------------------------- Not defining new "y" here to
-    # ------------------- have less variables / make subsequent calls cheaper.
+    #                     have less variables / make subsequent calls cheaper.
     dy -= 1
 
     if j > 0:
@@ -922,9 +925,8 @@ def _exchange(
     dy -= fee  # <--------------------- Subtract fee from the outgoing amount.
     assert dy >= min_dy, "Slippage"
 
-    # ---------------------------- Update pool balance at outgoing coin index.
     y -= dy
-    self.balances[j] = y
+    self.balances[j] = y  # <----------- Update pool balance of outgoing coin.
 
     # ---------------------- Do Transfers in and out -------------------------
 
@@ -1682,6 +1684,20 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 
 
 # ------------------------- AMM View Functions -------------------------------
+
+
+@external
+@view
+@nonreentrant("lock")
+def lp_price() -> uint256:
+
+    price_oracle: uint256[N_COINS-1] = self._unpack_prices(
+        self.price_oracle_packed
+    )
+    return (
+        3 * self.virtual_price *
+        MATH.geometric_mean([10**18, price_oracle[0], price_oracle[1]])
+    ) / 10**18
 
 
 @external

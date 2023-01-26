@@ -1,5 +1,3 @@
-# TODO: update tests for upcoming get_p, _save_p, lp_price, etc.
-
 from math import exp, log, log2, sqrt
 
 import boa
@@ -238,6 +236,20 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
         swap_with_deposit.get_virtual_price(),
         1e-10,
     )
+
+
+def test_lp_price(swap_with_deposit):
+    tvl = (
+        swap_with_deposit.balances(0)
+        + swap_with_deposit.balances(1)
+        * swap_with_deposit.price_scale(0)
+        // 10**18
+        + swap_with_deposit.balances(2)
+        * swap_with_deposit.price_scale(1)
+        // 10**18
+    )
+    naive_price = tvl * 10**18 // swap_with_deposit.totalSupply()
+    assert abs(swap_with_deposit.lp_price() / naive_price - 1) < 2e-3
 
 
 def test_last_prices():
