@@ -60,7 +60,6 @@ def test_get_y(math_unoptimized, math_optimized, A, D, xD, yD, zD, gamma, j):
         result_original = math_unoptimized.newton_y(A, gamma, X, D, j)
         pytest.gas_original += math_unoptimized._computation.get_gas_used()
     except:
-        (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
         return
 
     (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
