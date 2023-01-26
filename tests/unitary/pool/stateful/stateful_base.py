@@ -5,8 +5,10 @@ from boa.test import strategy
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
 from tests.fixtures.pool import INITIAL_PRICES
-from tests.utils.checks import check_limits
 from tests.utils.tokens import mint_for_testing
+
+MIN_XD = 10**16
+MAX_XD = 10**20
 
 
 class StatefulBase(RuleBasedStateMachine):
@@ -37,7 +39,9 @@ class StatefulBase(RuleBasedStateMachine):
         self.user_balances = {u: [0] * 3 for u in self.accounts}
         self.balances = self.initial_deposit[:]
         self.xcp_profit = 10**18
+
         self.total_supply = 0
+        self.previous_pool_profit = 0
 
         for user in self.accounts:
             for coin in self.coins:
@@ -57,21 +61,6 @@ class StatefulBase(RuleBasedStateMachine):
         assert self.token.totalSupply() > 0
         self.total_supply = self.token.balanceOf(user)
 
-    def state_dump(self):
-        amm_balances = []
-        for i in range(len(self.coins)):
-            amm_balances.append(self.swap.balances(i))
-
-        price_oracle = [self.swap.price_oracle(0), self.swap.price_oracle(1)]
-        price_scale = [self.swap.price_scale(0), self.swap.price_scale(1)]
-
-        return {
-            "balances": amm_balances,
-            "price_oracle": price_oracle,
-            "price_scale": price_scale,
-            "fee": self.swap.fee(),
-        }
-
     def get_coin_balance(self, user, coin):
         if coin.symbol() == "WETH":
             return boa.env.get_balance(user)
@@ -84,11 +73,50 @@ class StatefulBase(RuleBasedStateMachine):
             for p, a, d in zip(prices, amounts, self.decimals)
         ]
 
+    def calculate_up_only_profit(self):
+
+        xcp_profit = self.swap.xcp_profit()
+        xcp_profit_a = self.swap.xcp_profit_a()
+
+        uponly_profit = (xcp_profit + xcp_profit_a + 1) // 2
+        return uponly_profit
+
     def check_limits(self, amounts, D=True, y=True):
+        """
+        Should be good if within limits, but if outside - can be either
+        """
         _D = self.swap.D()
         prices = [10**18] + [self.swap.price_scale(i) for i in range(2)]
         xp_0 = [self.swap.balances(i) for i in range(3)]
-        return check_limits(_D, prices, xp_0, self.decimals, amounts, D, y)
+        xp = xp_0
+        xp_0 = [
+            x * p // 10**d for x, p, d in zip(xp_0, prices, self.decimals)
+        ]
+        xp = [
+            (x + a) * p // 10**d
+            for a, x, p, d in zip(amounts, xp, prices, self.decimals)
+        ]
+
+        if D:
+            for _xp in [xp_0, xp]:
+                if (
+                    (min(_xp) * 10**18 // max(_xp) < 10**14)
+                    or (max(_xp) < 10**9 * 10**18)
+                    or (max(_xp) > 10**15 * 10**18)
+                ):
+                    return False
+
+        if y:
+            for _xp in [xp_0, xp]:
+                if (
+                    (_D < 10**17)
+                    or (_D > 10**15 * 10**18)
+                    or (min(_xp) * 10**18 // _D < MIN_XD)
+                    or (max(_xp) * 10**18 // _D > MAX_XD)
+                ):
+                    return False
+
+        return True
 
     @rule(
         exchange_amount_in=exchange_amount_in,
@@ -107,23 +135,20 @@ class StatefulBase(RuleBasedStateMachine):
         user,
         check_out_amount=True,
     ):
+
         if exchange_i == exchange_j:
-            return False
+            return None
+
         try:
-            if not self.optimized:
-                calc_amount = self.swap.get_dy(
-                    exchange_i, exchange_j, exchange_amount_in
-                )
-            else:
-                calc_amount = self.views.get_dy(
-                    exchange_i, exchange_j, exchange_amount_in, self.swap
-                )
+            calc_amount = self.views.get_dy(
+                exchange_i, exchange_j, exchange_amount_in, self.swap
+            )
         except Exception:
             _amounts = [0] * 3
             _amounts[exchange_i] = exchange_amount_in
             if self.check_limits(_amounts):
                 raise
-            return False
+            return None
 
         mint_for_testing(self.coins[exchange_i], user, exchange_amount_in)
 
@@ -132,7 +157,7 @@ class StatefulBase(RuleBasedStateMachine):
         try:
             with boa.env.prank(user):
                 self.coins[exchange_i].approve(self.swap, 2**256 - 1)
-                self.swap.exchange(
+                out = self.swap.exchange(
                     exchange_i, exchange_j, exchange_amount_in, 0
                 )
         except Exception:
@@ -149,27 +174,19 @@ class StatefulBase(RuleBasedStateMachine):
                 and self.check_limits(_amounts)
             ):
                 raise
-            return False
+
+            return None
 
         # This is to check that we didn't end up in a borked state after
         # an exchange succeeded
-        if not self.optimized:
-            self.swap.get_dy(
-                exchange_j,
-                exchange_i,
-                10**16
-                * 10 ** self.decimals[exchange_j]
-                // ([10**18] + INITIAL_PRICES)[exchange_j],
-            )
-        else:
-            self.views.get_dy(
-                exchange_j,
-                exchange_i,
-                10**16
-                * 10 ** self.decimals[exchange_j]
-                // ([10**18] + INITIAL_PRICES)[exchange_j],
-                self.swap,
-            )
+        self.views.get_dy(
+            exchange_j,
+            exchange_i,
+            10**16
+            * 10 ** self.decimals[exchange_j]
+            // INITIAL_PRICES[exchange_j],
+            self.swap,
+        )
 
         d_balance_i -= self.coins[exchange_i].balanceOf(user)
         d_balance_j -= self.coins[exchange_j].balanceOf(user)
@@ -188,7 +205,7 @@ class StatefulBase(RuleBasedStateMachine):
         self.balances[exchange_i] += d_balance_i
         self.balances[exchange_j] += d_balance_j
 
-        return True
+        return out
 
     @rule(sleep_time=sleep_time)
     def sleep(self, sleep_time):
@@ -210,7 +227,8 @@ class StatefulBase(RuleBasedStateMachine):
 
     @invariant()
     def virtual_price(self):
-        virtual_price = self.swap._storage.virtual_price.get()
+
+        virtual_price = self.swap.virtual_price()
         xcp_profit = self.swap.xcp_profit()
         get_virtual_price = self.swap.get_virtual_price()
 
@@ -221,9 +239,18 @@ class StatefulBase(RuleBasedStateMachine):
         assert (
             xcp_profit - self.xcp_profit > -3
         ), f"{xcp_profit} vs {self.xcp_profit}"
+
         assert (virtual_price - 10**18) * 2 - (
             xcp_profit - 10**18
         ) >= -5, f"vprice={virtual_price}, xcp_profit={xcp_profit}"
+
         assert abs(log(virtual_price / get_virtual_price)) < 1e-10
 
         self.xcp_profit = xcp_profit
+
+    @invariant()
+    def up_only_profit(self):
+
+        current_profit = self.calculate_up_only_profit()
+        assert current_profit >= self.previous_pool_profit
+        self.previous_pool_profit = current_profit

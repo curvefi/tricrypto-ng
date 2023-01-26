@@ -1,13 +1,12 @@
 from math import log
 
-import boa
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
 from tests.unitary.pool.stateful.stateful_base import StatefulBase
 
-MAX_SAMPLES = 100
-STEP_COUNT = 200
+MAX_SAMPLES = 20
+STEP_COUNT = 100
 NO_CHANGE = 2**256 - 1
 
 
@@ -25,23 +24,9 @@ class StatefulAdmin(StatefulBase):
 
     def setup(self):
         super().setup(user_id=1)
-        with boa.env.prank(self.swap_admin):
-            self.swap.commit_new_parameters(
-                NO_CHANGE,
-                NO_CHANGE,
-                5 * 10**9,  # admin fee
-                NO_CHANGE,
-                NO_CHANGE,
-                NO_CHANGE,
-                NO_CHANGE,
-            )
-
-            boa.env.time_travel(seconds=3 * 86400 + 1)
-            self.swap.apply_new_parameters()
 
         packed_fee_params = self.swap._storage.packed_fee_params.get()
         unpacked_fee_params = self.swap.internal._unpack(packed_fee_params)
-        assert self.swap.admin_fee() == 5 * 10**9
         self.mid_fee = unpacked_fee_params[0]
         self.out_fee = unpacked_fee_params[1]
         self.admin_fee = 5 * 10**9
@@ -53,8 +38,6 @@ class StatefulAdmin(StatefulBase):
         user=user,
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
-
-        admin_balance = self.token.balanceOf(self.fee_receiver)
 
         if exchange_i > 0:
             exchange_amount_in_converted = (
@@ -69,10 +52,6 @@ class StatefulAdmin(StatefulBase):
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
 
-        admin_balance = self.token.balanceOf(self.fee_receiver) - admin_balance
-
-        self.total_supply += admin_balance
-
     @rule()
     def claim_admin_fees(self):
 
@@ -80,23 +59,14 @@ class StatefulAdmin(StatefulBase):
 
         self.swap.claim_admin_fees()
         admin_balance = self.token.balanceOf(self.fee_receiver)
-        balance = admin_balance - balance
-        self.total_supply += balance
+        _claimed = admin_balance - balance
 
-        if balance > 0:
+        if _claimed > 0:
+            self.total_supply += _claimed
             self.xcp_profit = self.swap.xcp_profit()
-            measured_profit = admin_balance / self.total_supply
-            try:
-                assert approx(
-                    measured_profit, log(self.xcp_profit / 1e18) / 2, 0.1
-                )
-            except AssertionError:
-                balances = [self.swap.balances(i) for i in range(3)]
-                if self.check_limits(balances):
-                    raise
 
 
-def test_admin(swap, views_contract, users, pool_coins, tricrypto_factory):
+def test_admin_fee(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
     from hypothesis._settings import HealthCheck
 

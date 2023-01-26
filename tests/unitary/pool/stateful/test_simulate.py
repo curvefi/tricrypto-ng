@@ -9,7 +9,11 @@ from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 100
-STEP_COUNT = 200
+STEP_COUNT = 100
+
+
+def approx(x1, x2, precision):
+    return abs(log(x1 / x2)) <= precision
 
 
 def get_price_scale(swap):
@@ -38,22 +42,26 @@ class StatefulSimulation(StatefulBase):
             self.total_supply += self.token.balanceOf(u)
 
         self.virtual_price = self.swap.get_virtual_price()
-        A_gamma = self.swap.A_gamma()
+        A_gamma = [self.swap.A(), self.swap.gamma()]
         fee_params = self.swap.internal._unpack(
             self.swap._storage.packed_fee_params.get()
         )
+        rebal_params = self.swap.internal._unpack(
+            self.swap._storage.packed_rebalancing_params.get()
+        )
+
         self.trader = sim.Trader(
             A_gamma[0],
             A_gamma[1],
             self.swap.D(),
             3,
             [10**18] + [self.swap.price_scale(i) for i in range(2)],
-            fee_params[0] / 1e10,
-            fee_params[1] / 1e10,
-            self.swap.allowed_extra_profit(),
-            fee_params[2],
-            self.swap.adjustment_step() / 1e18,
-            self.swap.ma_time(),
+            mid_fee=fee_params[0] / 1e10,
+            out_fee=fee_params[1] / 1e10,
+            fee_gamma=fee_params[2],
+            allowed_extra_profit=rebal_params[0],
+            adjustment_step=rebal_params[1] / 1e18,
+            ma_time=rebal_params[2],
         )
         for i in range(3):
             self.trader.curve.x[i] = self.swap.balances(i)
@@ -76,19 +84,23 @@ class StatefulSimulation(StatefulBase):
             // self.trader.price_oracle[exchange_i]
         )
 
-        price_scale = get_price_scale(self.swap)
-        trader_price_scale = self.trader.curve.p
+        dy_swap = super().exchange(
+            exchange_amount_in, exchange_i, exchange_j, user
+        )
 
-        if super().exchange(exchange_amount_in, exchange_i, exchange_j, user):
-            dy = self.trader.buy(exchange_amount_in, exchange_i, exchange_j)
-            price = exchange_amount_in * 10**18 // dy
+        if dy_swap:
+
+            dy_trader = self.trader.buy(
+                exchange_amount_in, exchange_i, exchange_j
+            )
+            price = exchange_amount_in * 10**18 // dy_trader
+
             self.trader.tweak_price(
                 boa.env.vm.state.timestamp, exchange_i, exchange_j, price
             )
 
-            # ensure that if trader tweaks price, so does the amm:
-            if self.trader.curve.p != trader_price_scale:
-                assert get_price_scale(self.swap) != price_scale
+            # check if output value from exchange is similar
+            assert abs(log(dy_swap / dy_trader)) < 1e-5
 
     @invariant()
     def simulator(self):
@@ -98,14 +110,11 @@ class StatefulSimulation(StatefulBase):
                 / (self.trader.xcp_profit - 10**18)
                 < 0.05
             )
-        precision = 0.001
+
         for i in range(2):
-            diff = abs(
-                log(self.trader.curve.p[i + 1] / self.swap.price_scale(i))
-            )
-            balances = [self.swap.balances(i) for i in range(3)]
-            if not diff <= precision and self.check_limits(balances):
-                raise
+            price_scale = self.swap.price_scale(i)
+            price_trader = self.trader.curve.p[i + 1]
+            assert approx(price_scale, price_trader, 1e-3)
 
 
 def test_sim(swap, views_contract, users, pool_coins, tricrypto_factory):

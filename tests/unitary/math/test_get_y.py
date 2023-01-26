@@ -7,11 +7,10 @@ import pytest
 from hypothesis import given, note, settings
 from hypothesis import strategies as st
 
-from tests.utils.checks import check_limits
 from tests.utils.simulation_ma_4 import inv_target_decimal as inv_target
 
 N_COINS = 3
-MAX_SAMPLES = 1000  # Increase for fuzzing
+MAX_SAMPLES = 10000  # Increase for fuzzing
 
 A_MUL = 10000 * 3**3
 MIN_A = int(0.01 * A_MUL)
@@ -44,13 +43,9 @@ pytest.t_start = time.time()
     ),  # <- ratio 1e18 * z/D, typically 1e18 * 1
     gamma=st.integers(min_value=MIN_GAMMA, max_value=MAX_GAMMA),
     j=st.integers(min_value=0, max_value=2),
-    btc_p=st.integers(min_value=10**2, max_value=10**7),
-    eth_p=st.integers(min_value=10, max_value=10**5),
 )
 @settings(max_examples=MAX_SAMPLES, deadline=timedelta(seconds=1000))
-def test_get_y(
-    math_unoptimized, math_optimized, A, D, xD, yD, zD, gamma, j, btc_p, eth_p
-):
+def test_get_y(math_unoptimized, math_optimized, A, D, xD, yD, zD, gamma, j):
     pytest.current_case_id += 1
     X = [D * xD // 10**18, D * yD // 10**18, D * zD // 10**18]
 
@@ -63,25 +58,11 @@ def test_get_y(
 
     try:
         result_original = math_unoptimized.newton_y(A, gamma, X, D, j)
+        pytest.gas_original += math_unoptimized._computation.get_gas_used()
     except:
-        decimals = [18, 18, 18]
-        prices = [10**18, btc_p, eth_p]
-        if check_limits(D, prices, X, decimals, X):
-            raise
-        else:
-            return  # expected behavior
+        return
 
-    pytest.gas_original += math_unoptimized._computation.get_gas_used()
-
-    try:
-        (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
-    except:
-        decimals = [18, 18, 18]
-        prices = [10**18, btc_p, eth_p]
-        if check_limits(D, prices, X, decimals, X):
-            raise
-        else:
-            return  # expected behavior
+    (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
 
     pytest.gas_new += math_optimized._computation.get_gas_used()
     note(

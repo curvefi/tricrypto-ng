@@ -1,4 +1,5 @@
 import boa
+import pytest
 from boa.test import strategy
 from hypothesis import given, settings
 
@@ -9,6 +10,7 @@ from tests.utils.tokens import mint_for_testing
 SETTINGS = {"max_examples": 100, "deadline": None}
 
 
+@pytest.fixture(scope="module")
 def test_1st_deposit_and_last_withdraw(swap, coins, user):
 
     quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
@@ -35,8 +37,43 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user):
 
     assert swap.balanceOf(user) == swap.totalSupply() == 0
 
-    # check eth balance. 1 wei should always be left over:
-    assert boa.env.get_balance(swap.address) == 1
+    # check balances. nothing should be left over
+    assert boa.env.get_balance(swap.address) == 0
+    for i in range(len(coins)):
+        assert swap.balances(i) == 0
+
+    return swap
+
+
+def test_first_deposit_full_withdraw_second_deposit(
+    test_1st_deposit_and_last_withdraw, user, coins
+):
+    swap = test_1st_deposit_and_last_withdraw
+
+    # check balances. pool should be completely empty
+    assert boa.env.get_balance(swap.address) == 0
+    for i in range(len(coins)):
+        assert swap.balances(i) == 0
+
+    quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
+
+    for coin, q in zip(coins, quantities):
+        mint_for_testing(coin, user, q)
+        with boa.env.prank(user):
+            coin.approve(swap, 2**256 - 1)
+
+    # Second deposit
+    with boa.env.prank(user):
+        swap.add_liquidity(quantities, 0)
+
+    # test if eth was deposited:
+    assert boa.env.get_balance(swap.address) == quantities[2] + 0
+    for i in range(len(coins)):
+        assert swap.balances(i) == quantities[i] + 0
+
+    token_balance = swap.balanceOf(user)
+    assert token_balance == swap.totalSupply() > 0
+    assert abs(swap.get_virtual_price() / 1e18 - 1) < 1e-3
 
 
 @given(
@@ -62,7 +99,7 @@ def test_second_deposit(
     for i in range(3):
         xp[i] += int(values[i] * 10**18)
 
-    _A, _gamma = swap_with_deposit.A_gamma()
+    _A, _gamma = [swap_with_deposit.A(), swap_with_deposit.gamma()]
     _D = sim.solve_D(_A, _gamma, xp)
 
     safe = all(
@@ -210,7 +247,7 @@ def test_immediate_withdraw_one(
         # Test if we are safe
         xp = [10**6 * 10**18] * 3
         _supply = swap_with_deposit.totalSupply()
-        _A, _gamma = swap_with_deposit.A_gamma()
+        _A, _gamma = [swap_with_deposit.A(), swap_with_deposit.gamma()]
         _D = swap_with_deposit.D() * (_supply - token_amount) // _supply
 
         xp[i] = sim.solve_x(_A, _gamma, xp, _D, i)

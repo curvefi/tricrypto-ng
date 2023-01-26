@@ -18,7 +18,6 @@ def params():
         "allowed_extra_profit": 2 * 10**12,
         "fee_gamma": int(0.01 * 1e18),
         "adjustment_step": int(0.0015 * 1e18),
-        "admin_fee": 0,
         "ma_time": ma_time,
         "initial_prices": INITIAL_PRICES[1:],
     }
@@ -41,11 +40,10 @@ def swap(
             params["gamma"],
             params["mid_fee"],
             params["out_fee"],
-            params["allowed_extra_profit"],
             params["fee_gamma"],
+            params["allowed_extra_profit"],
             params["adjustment_step"],
-            params["admin_fee"],
-            params["ma_time"],
+            params["ma_time"],  # <--- no admin_fee needed
             params["initial_prices"],
         )
 
@@ -70,8 +68,9 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap, initial_prices):
 
     for coin, quantity in zip(coins, quantities):
         # mint coins for user:
+        user_balance = coin.balanceOf(user)
         mint_for_testing(coin, user, quantity)
-        assert coin.balanceOf(user) == quantity
+        assert coin.balanceOf(user) == user_balance + quantity
 
         # approve crypto_swap to trade coin for user:
         with boa.env.prank(user):

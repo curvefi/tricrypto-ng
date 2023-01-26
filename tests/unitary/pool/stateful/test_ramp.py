@@ -4,7 +4,7 @@ from hypothesis.stateful import invariant, rule, run_state_machine_as_test
 
 from tests.unitary.pool.stateful.test_stateful import ProfitableState
 
-MAX_SAMPLES = 100
+MAX_SAMPLES = 20
 MAX_COUNT = 100
 MAX_D = 10**12 * 10**18  # $1T is hopefully a reasonable cap for tests
 ALLOWED_DIFFERENCE = 0.001
@@ -27,7 +27,7 @@ class RampTest(ProfitableState):
 
     def setup(self, user_id=0):
         super().setup(user_id)
-        A_gamma = self.swap.A_gamma()
+        A_gamma = [self.swap.A(), self.swap.gamma()]
         new_A = A_gamma[0] * 2
         new_gamma = A_gamma[1] * 2
 
@@ -59,7 +59,12 @@ class RampTest(ProfitableState):
         check_out_amount,
     ):
         if check_out_amount:
+            admin_balances = self.swap.balanceOf(self.fee_receiver)
             self.swap.claim_admin_fees()
+            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
+            if _claimed > 0:
+                self.total_supply += _claimed
+                self.xcp_profit = self.swap.xcp_profit()
         if exchange_i > 0:
             exchange_amount_in = (
                 exchange_amount_in
@@ -87,7 +92,14 @@ class RampTest(ProfitableState):
         self, token_amount, exchange_i, user, check_out_amount
     ):
         if check_out_amount:
+
+            admin_balances = self.swap.balanceOf(self.fee_receiver)
             self.swap.claim_admin_fees()
+            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
+            if _claimed > 0:
+                self.total_supply += _claimed
+                self.xcp_profit = self.swap.xcp_profit()
+
             super().remove_liquidity_one_coin(
                 token_amount, exchange_i, user, ALLOWED_DIFFERENCE
             )

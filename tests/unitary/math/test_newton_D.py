@@ -8,7 +8,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import tests.utils.simulation_int_many as sim
-from tests.utils.checks import check_limits
 
 sys.stdout = sys.stderr
 
@@ -22,6 +21,9 @@ MAX_A = 1000 * A_MUL
 # gamma from 1e-8 up to 0.05
 MIN_GAMMA = 10**10
 MAX_GAMMA = 5 * 10**16
+
+MIN_XD = 10**17
+MAX_XD = 10**19
 
 pytest.progress = 0
 pytest.positive_dy = 0
@@ -62,7 +64,7 @@ pytest.gas_new = 0
 @settings(max_examples=MAX_SAMPLES, deadline=timedelta(seconds=1000))
 def test_newton_D(
     math_optimized,
-    coins,
+    math_unoptimized,
     A,
     D,
     xD,
@@ -78,7 +80,7 @@ def test_newton_D(
 ):
     _test_newton_D(
         math_optimized,
-        coins,
+        math_unoptimized,
         A,
         D,
         xD,
@@ -95,8 +97,8 @@ def test_newton_D(
 
 
 def _test_newton_D(
-    tricrypto_math,
-    coins,
+    math_optimized,
+    math_unoptimized,
     A,
     D,
     xD,
@@ -110,6 +112,12 @@ def _test_newton_D(
     out_fee,
     fee_gamma,
 ):
+
+    is_safe = all(
+        f >= MIN_XD and f <= MAX_XD
+        for f in [xx * 10**18 // D for xx in [xD, yD, zD]]
+    )
+
     pytest.progress += 1
     if pytest.progress % 100 == 0 and pytest.positive_dy != 0:
         print(
@@ -118,15 +126,12 @@ def _test_newton_D(
         )
     X = [D * xD // 10**18, D * yD // 10**18, D * zD // 10**18]
 
+    result_get_y = 0
     try:
-        (result_get_y, K0) = tricrypto_math.get_y(A, gamma, X, D, j)
+        (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
     except:
-        decimals = [c.decimals() for c in coins]
-        prices = [10**18, btcScalePrice, ethScalePrice]
-        if check_limits(D, prices, X, decimals, X):
+        if is_safe:
             raise
-        else:
-            return  # expected behavior
 
     # dy should be positive
     if result_get_y < X[j]:
@@ -144,32 +149,21 @@ def _test_newton_D(
         y -= dy
 
         if dy / X[j] <= 0.95:
+
             pytest.positive_dy += 1
             X[j] = y
 
             try:
-                result_sim = tricrypto_math.newton_D(A, gamma, X)
+                result_sim = math_unoptimized.newton_D(A, gamma, X)
+                pytest.gas_original += (
+                    math_unoptimized._computation.get_gas_used()
+                )
+                result_contract = math_optimized.newton_D(A, gamma, X, K0)
+                pytest.gas_new += math_optimized._computation.get_gas_used()
+
+                assert abs(result_sim - result_contract) <= max(
+                    10000, result_sim / 1e12
+                )
             except:
-                decimals = [c.decimals() for c in coins]
-                prices = [10**18, btcScalePrice, ethScalePrice]
-                if check_limits(D, prices, X, decimals, X):
+                if is_safe:
                     raise
-                else:
-                    return  # expected behavior
-
-            pytest.gas_original += tricrypto_math._computation.get_gas_used()
-
-            try:
-                result_contract = tricrypto_math.newton_D(A, gamma, X, K0)
-            except:
-                decimals = [c.decimals() for c in coins]
-                prices = [10**18, btcScalePrice, ethScalePrice]
-                if check_limits(D, prices, X, decimals, X):
-                    raise
-                else:
-                    return  # expected behavior
-
-            pytest.gas_new += tricrypto_math._computation.get_gas_used()
-            assert abs(result_sim - result_contract) <= max(
-                10000, result_sim / 1e12
-            )

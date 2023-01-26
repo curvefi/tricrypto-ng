@@ -26,7 +26,6 @@ event TricryptoPoolDeployed:
     allowed_extra_profit: uint256
     fee_gamma: uint256
     adjustment_step: uint256
-    admin_fee: uint256
     ma_exp_time: uint256
     initial_prices: uint256[N_COINS-1]
     deployer: address
@@ -67,11 +66,10 @@ struct PoolArray:
     decimals: uint256[N_COINS]
 
 
-N_COINS: constant(int128) = 3
+N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 # Limits
-MAX_ADMIN_FEE: constant(uint256) = 10 * 10 ** 9
 MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
 
@@ -85,16 +83,16 @@ PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
 WETH: immutable(address)
+math: public(immutable(address))
 
 admin: public(address)
 future_admin: public(address)
 
-# fee receiver for plain pools
+# fee receiver for all pools:
 fee_receiver: public(address)
 
 pool_implementation: public(address)
 gauge_implementation: public(address)
-math_implementation: public(address)
 views_implementation: public(address)
 
 # mapping of coins -> pools for trading
@@ -113,8 +111,10 @@ def __init__(
     _fee_receiver: address,
     _admin: address,
     _weth: address,
+    _math: address,
 ):
     WETH = _weth
+    math = _math
 
     self.fee_receiver = _fee_receiver
     self.admin = _admin
@@ -126,6 +126,11 @@ def __init__(
 @internal
 @view
 def _pack(x: uint256[3]) -> uint256:
+    """
+    @notice Packs 3 integers with values <= 10**18 into a uint256
+    @param x The uint256[3] to pack
+    @return The packed uint256
+    """
     return shift(x[0], 128) | shift(x[1], 64) | x[2]
 
 
@@ -141,10 +146,9 @@ def deploy_pool(
     gamma: uint256,
     mid_fee: uint256,
     out_fee: uint256,
-    allowed_extra_profit: uint256,
     fee_gamma: uint256,
+    allowed_extra_profit: uint256,
     adjustment_step: uint256,
-    admin_fee: uint256,
     ma_exp_time: uint256,
     initial_prices: uint256[N_COINS-1],
 ) -> address:
@@ -166,19 +170,16 @@ def deploy_pool(
     assert mid_fee < MAX_FEE-1
     assert out_fee >= mid_fee
     assert out_fee < MAX_FEE-1
-    assert admin_fee < 10**18+1
     assert allowed_extra_profit < 10**16+1
     assert fee_gamma < 10**18+1
     assert fee_gamma > 0
     assert adjustment_step < 10**18+1
     assert adjustment_step > 0
     assert ma_exp_time < 872542  # 7 * 24 * 60 * 60 / ln(2)
-    assert ma_exp_time > 0
+    assert ma_exp_time > 86  # 60 / ln(2)
     assert min(initial_prices[0], initial_prices[1]) > 10**6
     assert max(initial_prices[0], initial_prices[1]) < 10**30
-    assert _coins[0] != _coins[1], "Duplicate coins"
-    assert _coins[1] != _coins[2], "Duplicate coins"
-    assert _coins[0] != _coins[2], "Duplicate coins"
+    assert _coins[0] != _coins[1] and _coins[1] != _coins[2], "Duplicate coins"
 
     name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
     symbol: String[32] = concat(_symbol, "-f")
@@ -199,6 +200,11 @@ def deploy_pool(
         [mid_fee, out_fee, fee_gamma]
     )
 
+    # pack liquidity rebalancing params
+    packed_rebalancing_params: uint256 = self._pack(
+        [allowed_extra_profit, adjustment_step, ma_exp_time]
+    )
+
     # pack A_gamma
     packed_A_gamma: uint256 = shift(A, 128)
     packed_A_gamma = packed_A_gamma | gamma
@@ -217,15 +223,12 @@ def deploy_pool(
         _name,
         _symbol,
         _coins,
-        self.math_implementation,
+        math,
         WETH,
         packed_precisions,
         packed_A_gamma,
         packed_fee_params,
-        allowed_extra_profit,
-        adjustment_step,
-        admin_fee,
-        ma_exp_time,
+        packed_rebalancing_params,
         packed_prices,
         code_offset=3
     )
@@ -261,7 +264,6 @@ def deploy_pool(
         allowed_extra_profit,
         fee_gamma,
         adjustment_step,
-        admin_fee,
         ma_exp_time,
         initial_prices,
         msg.sender
@@ -281,9 +283,7 @@ def deploy_gauge(_pool: address) -> address:
     assert self.pool_data[_pool].liquidity_gauge == empty(address), "Gauge already deployed"
     assert self.gauge_implementation != empty(address), "Gauge implementation not set"
 
-    gauge: address = create_from_blueprint(
-        self.gauge_implementation, _pool, code_offset=3
-    )
+    gauge: address = create_from_blueprint(self.gauge_implementation, _pool, code_offset=3)
 
     token: address = self.pool_data[_pool].token
     LiquidityGauge(gauge).initialize(token)
@@ -328,22 +328,10 @@ def set_gauge_implementation(_gauge_implementation: address):
     @dev Set to empty(address) to prevent deployment of new gauges
     @param _gauge_implementation Address of the new token implementation
     """
-    assert msg.sender == self.admin  # dev: admin-only function
+    assert msg.sender == self.admin  # dev: admin only
 
     log UpdateGaugeImplementation(self.gauge_implementation, _gauge_implementation)
     self.gauge_implementation = _gauge_implementation
-
-
-@external
-def set_math_implementation(_math_implementation: address):
-    """
-    @notice Set math implementation
-    @param _math_implementation Address of the new math contract
-    """
-    assert msg.sender == self.admin  # dev: admin only
-
-    log UpdateMathImplementation(self.math_implementation, _math_implementation)
-    self.math_implementation = _math_implementation
 
 
 @external
@@ -457,12 +445,15 @@ def get_coin_indices(
     """
     coins: address[N_COINS] = self.pool_data[_pool].coins
 
-    if _from == coins[0] and _to == coins[1]:
-        return 0, 1
-    elif _from == coins[1] and _to == coins[0]:
-        return 1, 0
-    else:
-        raise "Coins not found"
+    for i in range(N_COINS):
+        for j in range(N_COINS):
+            if i == j:
+                continue
+
+            if coins[i] == _from and coins[j] == _to:
+                return i, j
+
+    raise "Coins not found"
 
 
 @view
@@ -484,7 +475,7 @@ def get_eth_index(_pool: address) -> uint256:
     @notice Get the index of WETH for a pool
     @dev Returns max_value(uint256) if WETH is not a coin in the pool
     """
-    for i in range(2):
+    for i in range(N_COINS):
         if self.pool_data[_pool].coins[i] == WETH:
             return i
     a: uint256 = max_value(uint256)

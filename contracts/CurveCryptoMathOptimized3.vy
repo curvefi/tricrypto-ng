@@ -2,6 +2,9 @@
 
 # (c) Curve.Fi, 2022
 # Math for 3-coin Curve cryptoswap pools
+#
+# Unless otherwise agreed on, only contracts owned by Curve DAO or
+# Swiss Stake GmbH are allowed to call this contract.
 
 
 N_COINS: constant(uint256) = 3
@@ -12,6 +15,8 @@ MAX_GAMMA: constant(uint256) = 5 * 10**16
 
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
+
+version: public(constant(String[8])) = "v1.0.0"
 
 
 # ------------------------ AMM math functions --------------------------------
@@ -287,9 +292,7 @@ def _newton_y(
 
         if diff < max(convergence_limit, y / 10**14):
             frac: uint256 = y * 10**18 / D
-            assert (
-                frac > 10**16 - 1 and frac < 10**20 + 1
-            ), "dev: unsafe value for y"
+            assert (frac > 10**16 - 1) and (frac < 10**20 + 1), "dev: unsafe value for y"
             return y
 
     raise "Did not converge"
@@ -492,6 +495,7 @@ def newton_D(
             for _x in x:
                 frac: uint256 = unsafe_div(unsafe_mul(_x, 10**18), D)
                 assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
+
             return D
 
     raise "Did not converge"
