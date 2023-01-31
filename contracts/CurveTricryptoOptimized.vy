@@ -884,11 +884,8 @@ def _exchange(
 
     D: uint256 = self.D
     prec_j: uint256 = precisions[j]
-    y_out: uint256[2] = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
-    dy = xp[j] - y_out[0]  # <------------------------- y_out[0] is the new y.
-
-    xp[j] -= dy  # <----------------------------- Not defining new "y" here to
-    #                     have less variables / make subsequent calls cheaper.
+    dy = xp[j] - MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[0]
+    xp[j] -= dy
     dy -= 1
 
     if j > 0:
@@ -903,6 +900,11 @@ def _exchange(
     y -= dy
     self.balances[j] = y  # <----------- Update pool balance of outgoing coin.
 
+    y *= prec_j
+    if j > 0:
+        y = y * price_scale[j - 1] / PRECISION
+    xp[j] = y  # <------------------------------------------------- Update xp.
+
     # ---------------------- Do Transfers in and out -------------------------
 
     ########################## TRANSFER IN <-------
@@ -915,14 +917,8 @@ def _exchange(
     ########################## -------> TRANSFER OUT
     self._transfer_out(self.coins[j], dy, use_eth, receiver)
 
-    # --------------------- Calculate and adjust prices ----------------------
+    # -------------------------- Calculate prices ----------------------------
 
-    y *= prec_j
-    if j > 0:
-        y = y * price_scale[j - 1] / PRECISION
-    xp[j] = y  # <------------------------------------------------- Update xp.
-
-    # ------------------------------------------------------ Calculate prices.
     p: uint256 = 0
     ix: uint256 = j
 
@@ -956,22 +952,11 @@ def _exchange(
 
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
-    y_out = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)  # <-- We recalculate
-    #      y_out post-adjustment of pool balances, to get the initial estimate
-    #     for newton_D. This is an extra operation that allows faster newton_D
-    #           convergence, and ends up saving between 10-20k gas on average.
-
-    #       y_out needs to be recalculated again since the initial estimate is
-    #           sensitive to pool balances. If pool balances are updated after
-    #                a get_y call, K0_prev (the input to calculate the initial
-    #           estimate for D) becomes stale. While some error is acceptable,
-    #           we re-calculate to stay on the safe side. This is not repeated
-    #        for add_liquidity and remove_liquidity_one_coin since gas savings
-    #          there were not interesting enough to introduce this complexity.
-
-    self.tweak_price(A_gamma, xp, ix, p, 0, y_out[1])
+    K0_prev: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[1]
+    self.tweak_price(A_gamma, xp, ix, p, 0, K0_prev)
+    #                                 ^  ^  ^------ newton_D converges faster.
     #                                 ^  ^--------- recalculate invariant (D).
-    #                                 ^------- p > 0 since 1 coin is involved.
+    #                                 ^------ p != 0, so no get_y in newton_D.
 
     log TokenExchange(sender, i, dx, j, dy, fee)
 
