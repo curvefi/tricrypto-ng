@@ -1663,12 +1663,10 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 @external
 @view
 @nonreentrant("lock")
-def lp_price(p0: uint256 = 10**18) -> uint256:
+def lp_price() -> uint256:
     """
     @notice Calculates the current price of the LP token.
-    @dev This method always quotes prices with respect to the first coin (p0),
-         which is 10**18 (or 1 since 10**18 == 1 in the contract).
-    @param p0 The price of the first coin in the pool. Defaults to 10**18.
+    @dev The price of the LP token is w.r.t the coin at 0th index.
     """
 
     price_oracle: uint256[N_COINS-1] = self._unpack_prices(
@@ -1676,7 +1674,7 @@ def lp_price(p0: uint256 = 10**18) -> uint256:
     )
     return (
         3 * self.virtual_price *
-        MATH.cbrt(p0 * price_oracle[0] / 10**18 * price_oracle[1])
+        MATH.cbrt(price_oracle[0] * price_oracle[1])
     ) / 10**24
 
 
