@@ -1,10 +1,17 @@
 # @version 0.3.7
 
-# (c) Curve.Fi, 2022
+# (c) Curve.Fi, 2023
 # Math for 3-coin Curve cryptoswap pools
 #
 # Unless otherwise agreed on, only contracts owned by Curve DAO or
 # Swiss Stake GmbH are allowed to call this contract.
+
+"""
+@title CurveTricryptoMathOptimized
+@license MIT
+@author Curve.Fi
+@notice Curve AMM Math for 3 unpegged assets (e.g. ETH, BTC, USD).
+"""
 
 
 N_COINS: constant(uint256) = 3

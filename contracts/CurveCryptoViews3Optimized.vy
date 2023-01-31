@@ -1,6 +1,6 @@
 # @version 0.3.7
 
-# (c) Curve.Fi, 2021
+# (c) Curve.Fi, 2023
 
 # This contract contains view-only external methods which can be
 # gas-inefficient when called from smart contracts.
@@ -86,7 +86,7 @@ def calc_token_amount(
     d_token: uint256 = 0
     amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    
+
     d_token, amountsp, xp = self._calc_dtoken_nofee(amounts, deposit, swap)
     d_token -= (
         Curve(swap).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
