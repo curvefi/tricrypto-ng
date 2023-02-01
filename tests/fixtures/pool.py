@@ -117,5 +117,16 @@ def swap_with_deposit(swap, coins, user):
 
 
 @pytest.fixture(scope="module")
-def swap_nofee_with_deposit(swap_nofee, coins, user):
-    yield _crypto_swap_with_deposit(coins, user, swap_nofee, INITIAL_PRICES)
+def swap_nofee_with_deposit(swap_nofee, coins, user, factory_admin):
+    swap = _crypto_swap_with_deposit(coins, user, swap_nofee, INITIAL_PRICES)
+
+    # ramp A (but not really) to disable loss check for nofee pool:
+    with boa.env.prank(factory_admin):
+
+        swap.ramp_A_gamma(
+            swap.A(),
+            swap.gamma(),
+            boa.env.vm.state.timestamp + 60 * 60 * 24 * 7 + 1,
+        )
+
+    return swap
