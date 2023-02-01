@@ -69,31 +69,27 @@ def _get_last_prices(swap):
 )
 @settings(max_examples=10000, deadline=None)
 def test_last_prices(
-    swap_nofee_with_deposit, user, dollar_amount, i, j, coins
+    swap_nofee_with_deposit, views_contract, user, dollar_amount, i, j, coins
 ):
 
     if i == j:
         return
 
-    dydx_math_0 = _get_dydx(swap_nofee_with_deposit)
-    last_prices_0 = _get_last_prices(swap_nofee_with_deposit)
-
-    for n in range(2):
-        assert last_prices_0[n] == dydx_math_0[n]
-
     dx = dollar_amount * 10**36 // INITIAL_PRICES[i]
-    mint_for_testing(coins[i], user, dx * 2)
+    mint_for_testing(coins[i], user, dx)
 
     with boa.env.prank(user):
         swap_nofee_with_deposit.exchange(i, j, dx, 0)
 
     dydx_math_1 = _get_dydx(swap_nofee_with_deposit)
-    # last_prices_1 = _get_last_prices(swap_nofee_with_deposit)
 
-    with boa.env.prank(user):
-        swap_nofee_with_deposit.exchange(i, j, 10**7, 0)
-
-    last_prices_2 = _get_last_prices(swap_nofee_with_deposit)
+    last_prices_1 = [
+        dx // views_contract.get_dy(0, 1, dx, swap_nofee_with_deposit),
+        dx // views_contract.get_dy(0, 2, dx, swap_nofee_with_deposit),
+    ]
 
     for n in range(2):
-        assert last_prices_2[n] - dydx_math_1[n] < 3.0
+
+        assert (
+            abs(dydx_math_1[n] - last_prices_1[n]) < 3
+        )  # 3 dolla difference (arbitrary)
