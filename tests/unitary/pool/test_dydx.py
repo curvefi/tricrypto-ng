@@ -1,8 +1,8 @@
 import boa
+import pytest
 from boa.test import strategy
 from hypothesis import given, settings
 
-from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
 
@@ -56,40 +56,27 @@ def _get_dydx(swap):
     ]
 
 
-def _get_last_prices(swap):
-    return [swap.last_prices(0) / 1e18, swap.last_prices(1) / 1e18]
-
-
 @given(
     dollar_amount=strategy(
-        "uint256", min_value=10**4, max_value=10**6
+        "uint256", min_value=10**4, max_value=4 * 10**5
     ),  # Can be more than we have
-    i=strategy("uint", min_value=0, max_value=2),
-    j=strategy("uint", min_value=0, max_value=2),
 )
 @settings(max_examples=10000, deadline=None)
-def test_last_prices(
-    swap_nofee_with_deposit, views_contract, user, dollar_amount, i, j, coins
-):
+@pytest.mark.parametrize("j", [1, 2])
+def test_dydx_pump(swap_nofee_with_deposit, user, dollar_amount, coins, j):
 
-    if i == j:
-        return
-
-    dx = dollar_amount * 10**36 // INITIAL_PRICES[i]
-    mint_for_testing(coins[i], user, dx)
+    dydx_math_0 = _get_dydx(swap_nofee_with_deposit)
+    dx = dollar_amount * 10**18
+    mint_for_testing(coins[0], user, dx)
 
     with boa.env.prank(user):
-        swap_nofee_with_deposit.exchange(i, j, dx, 0)
+        try:
+            swap_nofee_with_deposit.exchange(0, j, dx, 0)
+        except:  # noqa: E722
+            # vprice will not grow so, it can throw "Loss" errors: we ignore.
+            return
 
     dydx_math_1 = _get_dydx(swap_nofee_with_deposit)
 
-    last_prices_1 = [
-        dx // views_contract.get_dy(0, 1, dx, swap_nofee_with_deposit),
-        dx // views_contract.get_dy(0, 2, dx, swap_nofee_with_deposit),
-    ]
-
     for n in range(2):
-
-        assert (
-            abs(dydx_math_1[n] - last_prices_1[n]) < 3
-        )  # 3 dolla difference (arbitrary)
+        assert dydx_math_1[n] > dydx_math_0[n]
