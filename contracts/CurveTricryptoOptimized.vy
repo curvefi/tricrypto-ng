@@ -1,14 +1,14 @@
 # @version 0.3.7
 # (c) Curve.Fi, 2023
-# Pool for 3 coin unpegged assets (e.g. ETH, BTC, USD)
-# note: View methods for `get_dy`, `get_dx`, `calc_token_amounts`
-#       etc. are available in the `views_implementation` of the Factory.
-# note: All prices in the are with respect to the first token in the pool.
+
 """
 @title CurveTricryptoNG
 @license MIT
 @author Curve.Fi
 @notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
+@dev View methods for `get_dy`, `get_dx`, `calc_token_amounts` etc. are available
+     in the `views_implementation` of the Factory.
+@dev All prices in the are with respect to the first token in the pool.
 """
 
 from vyper.interfaces import ERC20
@@ -203,7 +203,7 @@ INF_COINS: constant(uint256) = 15
 name: public(immutable(String[64]))
 symbol: public(immutable(String[32]))
 decimals: public(constant(uint8)) = 18
-version: public(constant(String[8])) = "1"
+version: public(constant(String[8])) = "v2.0.0"
 
 balanceOf: public(HashMap[address, uint256])
 allowance: public(HashMap[address, HashMap[address, uint256]])

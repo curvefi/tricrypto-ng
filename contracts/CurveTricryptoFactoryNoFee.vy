@@ -71,7 +71,7 @@ N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 # Limits
-MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
+MIN_FEE: constant(uint256) = 0
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
 
 MIN_GAMMA: constant(uint256) = 10 ** 10
@@ -167,13 +167,7 @@ def deploy_pool(
     assert A < MAX_A+1
     assert gamma > MIN_GAMMA-1
     assert gamma < MAX_GAMMA+1
-    assert mid_fee > MIN_FEE-1
-    assert mid_fee < MAX_FEE-1
-    assert out_fee >= mid_fee
-    assert out_fee < MAX_FEE-1
     assert allowed_extra_profit < 10**16+1
-    assert fee_gamma < 10**18+1
-    assert fee_gamma > 0
     assert adjustment_step < 10**18+1
     assert adjustment_step > 0
     assert ma_exp_time < 872542  # 7 * 24 * 60 * 60 / ln(2)

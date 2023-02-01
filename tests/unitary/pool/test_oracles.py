@@ -250,8 +250,3 @@ def test_lp_price(swap_with_deposit):
     )
     naive_price = tvl * 10**18 // swap_with_deposit.totalSupply()
     assert abs(swap_with_deposit.lp_price() / naive_price - 1) < 2e-3
-
-
-def test_last_prices():
-    # TODO: check last prices after analytical dy/dx implementation!
-    pass

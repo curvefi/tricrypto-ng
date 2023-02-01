@@ -1,9 +1,13 @@
 # @version 0.3.7
-
 # (c) Curve.Fi, 2023
 
-# This contract contains view-only external methods which can be
-# gas-inefficient when called from smart contracts.
+"""
+@title CurveCryptoViews3Optimized
+@license MIT
+@author Curve.Fi
+@notice This contract contains view-only external methods which can be
+        gas-inefficient when called from smart contracts.
+"""
 
 from vyper.interfaces import ERC20
 

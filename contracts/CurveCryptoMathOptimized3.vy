@@ -1,5 +1,4 @@
 # @version 0.3.7
-
 # (c) Curve.Fi, 2023
 # Math for 3-coin Curve cryptoswap pools
 #
@@ -12,7 +11,6 @@
 @author Curve.Fi
 @notice Curve AMM Math for 3 unpegged assets (e.g. ETH, BTC, USD).
 """
-
 
 N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000

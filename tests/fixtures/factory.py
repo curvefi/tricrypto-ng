@@ -65,3 +65,31 @@ def tricrypto_factory(
         factory.set_views_implementation(views_contract)
 
     return factory
+
+
+@pytest.fixture(scope="module")
+def tricrypto_factory_nofee(
+    deployer,
+    fee_receiver,
+    owner,
+    amm_implementation,
+    gauge_implementation,
+    math_contract,
+    views_contract,
+    weth,
+):
+    with boa.env.prank(deployer):
+        factory = boa.load(
+            "contracts/CurveTricryptoFactoryNoFee.vy",
+            fee_receiver,
+            owner,
+            weth,
+            math_contract,
+        )
+
+    with boa.env.prank(owner):
+        factory.set_pool_implementation(amm_implementation)
+        factory.set_gauge_implementation(gauge_implementation)
+        factory.set_views_implementation(views_contract)
+
+    return factory

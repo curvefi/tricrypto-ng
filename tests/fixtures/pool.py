@@ -50,6 +50,34 @@ def swap(
     return amm_interface.at(swap)
 
 
+@pytest.fixture(scope="module")
+def swap_nofee(
+    tricrypto_factory_nofee,
+    amm_interface,
+    coins,
+    params,
+    deployer,
+):
+
+    with boa.env.prank(deployer):
+        swap = tricrypto_factory_nofee.deploy_pool(
+            "Curve.fi USDC-BTC-ETH",
+            "USDCBTCETH",
+            [coin.address for coin in coins],
+            params["A"],
+            params["gamma"],
+            0,
+            0,
+            0,
+            params["allowed_extra_profit"],
+            params["adjustment_step"],
+            params["ma_time"],
+            params["initial_prices"],
+        )
+
+    return amm_interface.at(swap)
+
+
 def _get_deposit_amounts(amount_per_token_usd, initial_prices, coins):
 
     precisions = [10 ** coin.decimals() for coin in coins]
@@ -86,3 +114,8 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap, initial_prices):
 @pytest.fixture(scope="module")
 def swap_with_deposit(swap, coins, user):
     yield _crypto_swap_with_deposit(coins, user, swap, INITIAL_PRICES)
+
+
+@pytest.fixture(scope="module")
+def swap_nofee_with_deposit(swap_nofee, coins, user):
+    yield _crypto_swap_with_deposit(coins, user, swap_nofee, INITIAL_PRICES)
