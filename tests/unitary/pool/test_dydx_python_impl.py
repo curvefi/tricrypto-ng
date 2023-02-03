@@ -71,8 +71,8 @@ def _get_prices_numeric_nofee(swap, views):
 
     smol_dx = 10**18
     return [
-        smol_dx / views.get_dy_nofee(0, 1, smol_dx, swap),
-        smol_dx / views.get_dy_nofee(0, 2, smol_dx, swap),
+        smol_dx / views.internal._get_dy_nofee(0, 1, smol_dx, swap)[0],
+        smol_dx / views.internal._get_dy_nofee(0, 2, smol_dx, swap)[0],
     ]
 
 

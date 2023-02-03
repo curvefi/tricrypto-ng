@@ -72,20 +72,6 @@ def get_dy(
     return dy
 
 
-@external
-@view
-def get_dy_nofee(
-    i: uint256, j: uint256, dx: uint256, swap: address
-) -> uint256:
-
-    dy: uint256 = 0
-    xp: uint256[N_COINS] = empty(uint256[N_COINS])
-
-    dy, xp = self._get_dy_nofee(i, j, dx, swap)
-
-    return dy
-
-
 @view
 @external
 def get_dx(
@@ -109,21 +95,6 @@ def calc_token_amount(
     d_token -= (
         Curve(swap).calc_token_fee(amountsp, xp) * d_token / 10**10 + 1
     )
-
-    return d_token
-
-
-@view
-@external
-def calc_token_amount_nofee(
-    amounts: uint256[N_COINS], deposit: bool, swap: address
-) -> uint256:
-
-    d_token: uint256 = 0
-    amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
-    xp: uint256[N_COINS] = empty(uint256[N_COINS])
-
-    d_token, amountsp, xp = self._calc_dtoken_nofee(amounts, deposit, swap)
 
     return d_token
 

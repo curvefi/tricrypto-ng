@@ -56,14 +56,20 @@ def get_y(
 
     a: int256 = 10**36 / 27
     b: int256 = unsafe_sub(
-        unsafe_add(10**36 / 9, unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)),
+        unsafe_add(
+            10**36 / 9,
+            unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)
+        ),
         unsafe_div(
             unsafe_div(unsafe_div(unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN), 27**2), convert(A_MULTIPLIER, int256)),
             x_k,
         ),
     )
     c: int256 = unsafe_add(
-        unsafe_add(10**36 / 9, unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27)),
+        unsafe_add(
+            10**36 / 9,
+            unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27)
+        ),
         unsafe_div(
             unsafe_div(unsafe_mul(unsafe_div(gamma**2 * (unsafe_sub(unsafe_add(x_j, x_k), D)), D), ANN), 27),
             convert(A_MULTIPLIER, int256),
@@ -71,9 +77,8 @@ def get_y(
     )
     d: int256 = unsafe_div(unsafe_add(10**18, gamma)**2, 27)
 
-    d0: int256 = abs(
-        unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b)
-    )
+    d0: int256 = abs(unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b))
+
     divider: int256 = 0
     if d0 > 10**48:
         divider = 10**30
