@@ -348,6 +348,9 @@ def _transfer_in(
 
         else:
 
+            # --------- This part of the _transfer_in logic is only accessible
+            #                                                    by _exchange.
+
             #                 First call callback logic and then check if pool
             #                  gets dx amounts of _coins[i], revert otherwise.
             b: uint256 = ERC20(_coin).balanceOf(self)
@@ -359,6 +362,8 @@ def _transfer_in(
                 )
             )
             assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+            #                                          ^------ note: dx cannot
+            #                   be 0, so the contract MUST receive some _coin.
 
         if _coin == WETH20:
             WETH(WETH20).withdraw(dx)  # <--------- if WETH was transferred in
@@ -491,7 +496,7 @@ def exchange_extended(
     assert cb != empty(bytes32)  # dev: No callback specified
     return self._exchange(
         sender, 0, i, j, dx, min_dy, use_eth, receiver, msg.sender, cb
-    )
+    )  # callbacker should never be self ------------------^
 
 
 @payable

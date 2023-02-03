@@ -72,6 +72,20 @@ def get_dy(
     return dy
 
 
+@external
+@view
+def get_dy_nofee(
+    i: uint256, j: uint256, dx: uint256, swap: address
+) -> uint256:
+
+    dy: uint256 = 0
+    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+
+    dy, xp = self._get_dy_nofee(i, j, dx, swap)
+
+    return dy
+
+
 @view
 @external
 def get_dx(

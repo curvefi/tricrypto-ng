@@ -603,39 +603,18 @@ def _exp(_power: int256) -> uint256:
         unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442
     )
     p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
-    p = unsafe_add(
-        unsafe_div(unsafe_mul(p, y), 2**96),
-        28719021644029726153956944680412240,
-    )
-    p = unsafe_add(
-        unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96)
-    )
+    p = unsafe_add(unsafe_div(unsafe_mul(p, y), 2**96), 28719021644029726153956944680412240)
+    p = unsafe_add(unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96))
 
     q: int256 = x - 2855989394907223263936484059900
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945
-    )
-    q = unsafe_sub(
-        unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380
-    )
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        3604857256930695427073651918091429,
-    )
-    q = unsafe_sub(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        14423608567350463180887372962807573,
-    )
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        26449188498355588339934803723976023,
-    )
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 3604857256930695427073651918091429)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 14423608567350463180887372962807573)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 26449188498355588339934803723976023)
 
     return shift(
-        unsafe_mul(
-            convert(unsafe_div(p, q), uint256),
-            3822833074963236453042738258902158003155416615667,
-        ),
+        unsafe_mul(convert(unsafe_div(p, q), uint256), 3822833074963236453042738258902158003155416615667),
         unsafe_sub(k, 195),
     )
 
@@ -721,27 +700,13 @@ def _cbrt(x: uint256) -> uint256:
     # would be one too many iterations. Without initial values, the iteration count
     # can go up to 20 or greater. The iterations are unrolled. This reduces gas costs
     # but takes up more bytecode:
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
 
     if x >= 115792089237316195423570985008687907853269 * 10**18:
         return a * 10**12
