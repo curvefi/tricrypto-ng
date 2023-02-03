@@ -113,6 +113,21 @@ def calc_token_amount(
     return d_token
 
 
+@view
+@external
+def calc_token_amount_nofee(
+    amounts: uint256[N_COINS], deposit: bool, swap: address
+) -> uint256:
+
+    d_token: uint256 = 0
+    amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
+    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+
+    d_token, amountsp, xp = self._calc_dtoken_nofee(amounts, deposit, swap)
+
+    return d_token
+
+
 @external
 @view
 def calc_fee_get_dy(i: uint256, j: uint256, dx: uint256, swap: address

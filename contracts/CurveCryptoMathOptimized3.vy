@@ -56,37 +56,16 @@ def get_y(
 
     a: int256 = 10**36 / 27
     b: int256 = unsafe_sub(
-        unsafe_add(
-            10**36 / 9, unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)
-        ),
+        unsafe_add(10**36 / 9, unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)),
         unsafe_div(
-            unsafe_div(
-                unsafe_div(
-                    unsafe_mul(
-                        unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN
-                    ),
-                    27**2,
-                ),
-                convert(A_MULTIPLIER, int256),
-            ),
+            unsafe_div(unsafe_div(unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN), 27**2), convert(A_MULTIPLIER, int256)),
             x_k,
         ),
     )
     c: int256 = unsafe_add(
-        unsafe_add(
-            10**36 / 9,
-            unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27),
-        ),
+        unsafe_add(10**36 / 9, unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27)),
         unsafe_div(
-            unsafe_div(
-                unsafe_mul(
-                    unsafe_div(
-                        gamma**2 * (unsafe_sub(unsafe_add(x_j, x_k), D)), D
-                    ),
-                    ANN,
-                ),
-                27,
-            ),
+            unsafe_div(unsafe_mul(unsafe_div(gamma**2 * (unsafe_sub(unsafe_add(x_j, x_k), D)), D), ANN), 27),
             convert(A_MULTIPLIER, int256),
         ),
     )
@@ -129,13 +108,9 @@ def get_y(
         c = unsafe_div(unsafe_div(c, additional_prec), divider)
         d = unsafe_div(unsafe_div(d, additional_prec), divider)
 
-    delta0: int256 = unsafe_sub(
-        unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b
-    )
+    delta0: int256 = unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b)
     delta1: int256 = unsafe_sub(
-        unsafe_sub(
-            unsafe_div(unsafe_mul(unsafe_mul(9, a), c), b), unsafe_mul(2, b)
-        ),
+        unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(9, a), c), b), unsafe_mul(2, b)),
         unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(27, a**2), b), d), b),
     )
 
@@ -158,42 +133,26 @@ def get_y(
     second_cbrt: int256 = 0
     if delta1 > 0:
         second_cbrt = convert(
-            self._cbrt(
-                unsafe_div(convert((unsafe_add(delta1, sqrt_val)), uint256), 2)
-            ),
+            self._cbrt(unsafe_div(convert((unsafe_add(delta1, sqrt_val)), uint256), 2)),
             int256,
         )
     else:
         second_cbrt = -convert(
-            self._cbrt(
-                unsafe_div(convert(-unsafe_sub(delta1, sqrt_val), uint256), 2)
-            ),
+            self._cbrt(unsafe_div(convert(-unsafe_sub(delta1, sqrt_val), uint256), 2)),
             int256,
         )
 
-    C1: int256 = unsafe_div(
-        unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18
-    )
+    C1: int256 = unsafe_div(unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18)
 
-    root_K0: int256 = unsafe_div(
-        unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1), 3
-    )
+    root_K0: int256 = unsafe_div(unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1), 3)
     root: uint256 = convert(
-        unsafe_div(
-            unsafe_mul(
-                unsafe_div(
-                    unsafe_mul(unsafe_div(unsafe_div(D**2, 27), x_k), D), x_j
-                ),
-                root_K0,
-            ),
+        unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_div(D**2, 27), x_k), D), x_j), root_K0,),
             a,
         ),
         uint256,
     )
 
-    return [
-        root, convert(unsafe_div(unsafe_mul(10**18, root_K0), a), uint256)
-    ]
+    return [root, convert(unsafe_div(unsafe_mul(10**18, root_K0), a), uint256)]
 
 
 @internal
@@ -204,19 +163,14 @@ def _newton_y(
 
     # Safety checks
     assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"
-    assert (
-        gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1
-    ), "dev: unsafe values gamma"
-    assert (
-        D > 10**17 - 1 and D < 10**15 * 10**18 + 1
-    ), "dev: unsafe values D"
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
+    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1, "dev: unsafe values D"
 
     for k in range(3):
         if k != i:
             frac: uint256 = x[k] * 10**18 / D
-            assert (
-                frac > 10**16 - 1 and frac < 10**20 + 1
-            ), "dev: unsafe values x[i]"
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+
     y: uint256 = D / N_COINS
     K0_i: uint256 = 10**18
     S_i: uint256 = 0
@@ -225,9 +179,7 @@ def _newton_y(
     x_sorted[i] = 0
     x_sorted = self._sort(x_sorted)  # From high to low
 
-    convergence_limit: uint256 = max(
-        max(x_sorted[0] / 10**14, D / 10**14), 100
-    )
+    convergence_limit: uint256 = max(max(x_sorted[0] / 10**14, D / 10**14), 100)
     for j in range(2, N_COINS + 1):
         _x: uint256 = x_sorted[N_COINS - j]
         y = y * D / (_x * N_COINS)  # Small _x first
@@ -336,46 +288,20 @@ def newton_D(
         if S > 10**36:
             D = self._cbrt(
                 unsafe_mul(
-                    unsafe_mul(
-                        unsafe_div(
-                            unsafe_mul(
-                                unsafe_div(unsafe_mul(x[0], x[1]), 10**36),
-                                x[2],
-                            ),
-                            K0_prev,
-                        ),
-                        27,
-                    ),
-                    10**12,
+                    unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**36), x[2]), K0_prev), 27),
+                    10**12
                 )
             )
         elif S > 10**24:
             D = self._cbrt(
                 unsafe_mul(
-                    unsafe_mul(
-                        unsafe_div(
-                            unsafe_mul(
-                                unsafe_div(unsafe_mul(x[0], x[1]), 10**24),
-                                x[2],
-                            ),
-                            K0_prev,
-                        ),
-                        27,
-                    ),
+                    unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**24), x[2]), K0_prev), 27),
                     10**6,
                 )
             )
         else:
             D = self._cbrt(
-                unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(
-                            unsafe_div(unsafe_mul(x[0], x[1]), 10**18), x[2]
-                        ),
-                        K0_prev,
-                    ),
-                    27,
-                )
+                unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**18), x[2]), K0_prev), 27)
             )
 
     # initialise variables:
@@ -395,23 +321,11 @@ def newton_D(
         # one safediv so D = 0 is handled.
         K0 = unsafe_div(
             unsafe_mul(
-                unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(
-                            unsafe_mul(
-                                unsafe_mul(unsafe_mul(10**18, x[0]), N_COINS) / D,
-                                x[1],
-                            ),
-                            N_COINS,
-                        ),
-                        D,
-                    ),
-                    x[2],
-                ),
-                N_COINS,
-            ),
-            D,
-        )
+                unsafe_mul(unsafe_div(unsafe_mul(unsafe_mul(unsafe_mul(unsafe_mul(10**18, x[0]), N_COINS) / D, x[1]), N_COINS), D), x[2]),
+                N_COINS,  #                                                                                 ^
+            ),  #                                                                                           ^
+            D,  #                                                                                           ^
+        )  # one safediv so D = 0 is handled ---------------------------------------------------------------^
 
         _g1k0 = gamma + 10**18
         if _g1k0 > K0:
@@ -424,15 +338,7 @@ def newton_D(
         # 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
         mul1 = unsafe_div(
             unsafe_mul(
-                unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(
-                            unsafe_div(unsafe_mul(10**18, D), gamma), _g1k0
-                        ),
-                        gamma,
-                    ),
-                    _g1k0,
-                ),
+                unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(10**18, D), gamma), _g1k0), gamma), _g1k0),
                 A_MULTIPLIER,
             ),
             ANN,
@@ -441,7 +347,8 @@ def newton_D(
         # 2*N*K0 / _g1k0
         # (2 * 10**18) * N_COINS * K0 / _g1k0
         mul2 = unsafe_div(
-            unsafe_mul(unsafe_mul(2 * 10**18, N_COINS), K0), _g1k0
+            unsafe_mul(unsafe_mul(2 * 10**18, N_COINS), K0),
+            _g1k0
         )
 
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
@@ -456,7 +363,8 @@ def newton_D(
         # D -= f / fprime
         # D * (neg_fprime + S) / neg_fprime
         D_plus = unsafe_div(
-            unsafe_mul(D, unsafe_add(neg_fprime, S)), neg_fprime
+            unsafe_mul(D, unsafe_add(neg_fprime, S)),
+            neg_fprime
         )
         # D*D / neg_fprime
         D_minus = unsafe_div(unsafe_mul(D, D), neg_fprime)
@@ -464,9 +372,7 @@ def newton_D(
             # D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
             D_minus += unsafe_div(
                 unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18
-                    ),
+                    unsafe_div(unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18),
                     unsafe_sub(10**18, K0),
                 ),
                 K0,
@@ -475,9 +381,7 @@ def newton_D(
             # D_minus -= D * (mul1 / neg_fprime) / 10**18 * (K0 - 10**18) / K0
             D_minus -= unsafe_div(
                 unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18
-                    ),
+                    unsafe_div(unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18),
                     unsafe_sub(K0, 10**18),
                 ),
                 K0,
@@ -561,9 +465,7 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
     K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[2]), S)
 
     if fee_gamma > 0:
-        K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(
-            unsafe_add(fee_gamma, 10**18), K
-        )
+        K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(unsafe_add(fee_gamma, 10**18), K)
 
     return K
 

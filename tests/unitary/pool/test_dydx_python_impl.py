@@ -3,8 +3,8 @@ import pytest
 from boa.test import strategy
 from hypothesis import given, settings
 
-from tests.utils.tokens import mint_for_testing
 from tests.fixtures.pool import INITIAL_PRICES
+from tests.utils.tokens import mint_for_testing
 
 
 def _get_price(x1, x2, x3, D, gamma, A):
@@ -65,7 +65,7 @@ def _get_prices_numeric(swap, views):
         smol_dx / views.get_dy(0, 1, smol_dx, swap),
         smol_dx / views.get_dy(0, 2, smol_dx, swap),
     ]
-    
+
 
 def _get_prices_numeric_nofee(swap, views):
 
@@ -96,7 +96,7 @@ def test_dydx_pump(swap_nofee_with_deposit, user, dollar_amount, coins, j):
 
     for n in range(2):
         assert dydx_math_1[n] > dydx_math_0[n]
-        
+
 
 @given(
     dollar_amount=strategy(
@@ -118,8 +118,8 @@ def test_dydx_pump_withfee(swap_with_deposit, user, dollar_amount, coins, j):
 
     for n in range(2):
         assert dydx_math_1[n] > dydx_math_0[n]
-        
-        
+
+
 @given(
     dollar_amount=strategy(
         "uint256", min_value=10**4, max_value=4 * 10**5
@@ -130,7 +130,7 @@ def test_dydx_pump_withfee(swap_with_deposit, user, dollar_amount, coins, j):
 def test_dydx_dump(swap_nofee_with_deposit, user, dollar_amount, coins, j):
 
     dydx_math_0 = _get_prices_math(swap_nofee_with_deposit)
-    
+
     dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
     mint_for_testing(coins[j], user, dx)
 
@@ -141,7 +141,7 @@ def test_dydx_dump(swap_nofee_with_deposit, user, dollar_amount, coins, j):
 
     for n in range(2):
         assert dydx_math_1[n] < dydx_math_0[n]
-        
+
 
 @given(
     dollar_amount=strategy(
@@ -153,7 +153,7 @@ def test_dydx_dump(swap_nofee_with_deposit, user, dollar_amount, coins, j):
 def test_dydx_dump_withfee(swap_with_deposit, user, dollar_amount, coins, j):
 
     dydx_math_0 = _get_prices_math(swap_with_deposit)
-    
+
     dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
     mint_for_testing(coins[j], user, dx)
 
@@ -209,7 +209,9 @@ def test_dydx_similar_withfee(
         swap_with_deposit.exchange(0, j, dx, 0)
 
     dydx_math = _get_prices_math(swap_with_deposit)
-    dydx_numeric_nofee = _get_prices_numeric_nofee(swap_with_deposit, views_contract)
+    dydx_numeric_nofee = _get_prices_numeric_nofee(
+        swap_with_deposit, views_contract
+    )
 
     for n in range(2):
         diff = dydx_math[n] - dydx_numeric_nofee[n]
