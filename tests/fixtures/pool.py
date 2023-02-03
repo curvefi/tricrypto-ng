@@ -36,6 +36,7 @@ def swap(
             "Curve.fi USDC-BTC-ETH",
             "USDCBTCETH",
             [coin.address for coin in coins],
+            0,  # <-------- 0th implementation index
             params["A"],
             params["gamma"],
             params["mid_fee"],
@@ -44,34 +45,6 @@ def swap(
             params["allowed_extra_profit"],
             params["adjustment_step"],
             params["ma_time"],  # <--- no admin_fee needed
-            params["initial_prices"],
-        )
-
-    return amm_interface.at(swap)
-
-
-@pytest.fixture(scope="module")
-def swap_nofee(
-    tricrypto_factory_nofee,
-    amm_interface,
-    coins,
-    params,
-    deployer,
-):
-
-    with boa.env.prank(deployer):
-        swap = tricrypto_factory_nofee.deploy_pool(
-            "Curve.fi USDC-BTC-ETH",
-            "USDCBTCETH",
-            [coin.address for coin in coins],
-            params["A"],
-            params["gamma"],
-            0,
-            0,
-            0,
-            params["allowed_extra_profit"],
-            params["adjustment_step"],
-            params["ma_time"],
             params["initial_prices"],
         )
 
@@ -114,19 +87,3 @@ def _crypto_swap_with_deposit(coins, user, tricrypto_swap, initial_prices):
 @pytest.fixture(scope="module")
 def swap_with_deposit(swap, coins, user):
     yield _crypto_swap_with_deposit(coins, user, swap, INITIAL_PRICES)
-
-
-@pytest.fixture(scope="module")
-def swap_nofee_with_deposit(swap_nofee, coins, user, factory_admin):
-    swap = _crypto_swap_with_deposit(coins, user, swap_nofee, INITIAL_PRICES)
-
-    # ramp A (but not really) to disable loss check for nofee pool:
-    with boa.env.prank(factory_admin):
-
-        swap.ramp_A_gamma(
-            swap.A(),
-            swap.gamma(),
-            boa.env.vm.state.timestamp + 60 * 60 * 24 * 7 + 1,
-        )
-
-    return swap

@@ -58,15 +58,6 @@ def _get_prices_math(swap):
     ]
 
 
-def _get_prices_numeric(swap, views):
-
-    smol_dx = 10**18
-    return [
-        smol_dx / views.get_dy(0, 1, smol_dx, swap),
-        smol_dx / views.get_dy(0, 2, smol_dx, swap),
-    ]
-
-
 def _get_prices_numeric_nofee(swap, views):
 
     smol_dx = 10**18
@@ -83,29 +74,7 @@ def _get_prices_numeric_nofee(swap, views):
 )
 @settings(max_examples=100, deadline=None)
 @pytest.mark.parametrize("j", [1, 2])
-def test_dydx_pump(swap_nofee_with_deposit, user, dollar_amount, coins, j):
-
-    dydx_math_0 = _get_prices_math(swap_nofee_with_deposit)
-    dx = dollar_amount * 10**18
-    mint_for_testing(coins[0], user, dx)
-
-    with boa.env.prank(user):
-        swap_nofee_with_deposit.exchange(0, j, dx, 0)
-
-    dydx_math_1 = _get_prices_math(swap_nofee_with_deposit)
-
-    for n in range(2):
-        assert dydx_math_1[n] > dydx_math_0[n]
-
-
-@given(
-    dollar_amount=strategy(
-        "uint256", min_value=10**4, max_value=4 * 10**5
-    ),  # Can be more than we have
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.parametrize("j", [1, 2])
-def test_dydx_pump_withfee(swap_with_deposit, user, dollar_amount, coins, j):
+def test_dydx_pump(swap_with_deposit, user, dollar_amount, coins, j):
 
     dydx_math_0 = _get_prices_math(swap_with_deposit)
     dx = dollar_amount * 10**18
@@ -127,30 +96,7 @@ def test_dydx_pump_withfee(swap_with_deposit, user, dollar_amount, coins, j):
 )
 @settings(max_examples=100, deadline=None)
 @pytest.mark.parametrize("j", [1, 2])
-def test_dydx_dump(swap_nofee_with_deposit, user, dollar_amount, coins, j):
-
-    dydx_math_0 = _get_prices_math(swap_nofee_with_deposit)
-
-    dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
-    mint_for_testing(coins[j], user, dx)
-
-    with boa.env.prank(user):
-        swap_nofee_with_deposit.exchange(j, 0, dx, 0)
-
-    dydx_math_1 = _get_prices_math(swap_nofee_with_deposit)
-
-    for n in range(2):
-        assert dydx_math_1[n] < dydx_math_0[n]
-
-
-@given(
-    dollar_amount=strategy(
-        "uint256", min_value=10**4, max_value=4 * 10**5
-    ),  # Can be more than we have
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.parametrize("j", [1, 2])
-def test_dydx_dump_withfee(swap_with_deposit, user, dollar_amount, coins, j):
+def test_dydx_dump(swap_with_deposit, user, dollar_amount, coins, j):
 
     dydx_math_0 = _get_prices_math(swap_with_deposit)
 
@@ -174,31 +120,6 @@ def test_dydx_dump_withfee(swap_with_deposit, user, dollar_amount, coins, j):
 @settings(max_examples=100, deadline=None)
 @pytest.mark.parametrize("j", [1, 2])
 def test_dydx_similar(
-    swap_nofee_with_deposit, views_contract, user, dollar_amount, coins, j
-):
-
-    dx = dollar_amount * 10**18
-    mint_for_testing(coins[0], user, dx)
-
-    with boa.env.prank(user):
-        swap_nofee_with_deposit.exchange(0, j, dx, 0)
-
-    dydx_math = _get_prices_math(swap_nofee_with_deposit)
-    dydx_numeric = _get_prices_numeric(swap_nofee_with_deposit, views_contract)
-
-    for n in range(2):
-        diff = dydx_math[n] - dydx_numeric[n]
-        assert abs(diff) < 1
-
-
-@given(
-    dollar_amount=strategy(
-        "uint256", min_value=5 * 10**4, max_value=5 * 10**5
-    ),  # Can be more than we have
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.parametrize("j", [1, 2])
-def test_dydx_similar_withfee(
     swap_with_deposit, views_contract, user, dollar_amount, coins, j
 ):
 
