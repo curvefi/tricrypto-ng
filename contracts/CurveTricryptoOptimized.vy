@@ -16,9 +16,6 @@ implements: ERC20  # <--------------------- AMM contract is also the LP token.
 
 # --------------------------------- Interfaces -------------------------------
 
-interface ERC1271:
-    def isValidSignature(_hash: bytes32, _signature: Bytes[65]) -> bytes32: view
-
 interface Math:
     def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
     def wad_exp(_power: int256) -> uint256: view
@@ -297,10 +294,6 @@ def __init__(
 def __default__():
     if msg.value > 0:
         assert WETH20 in self.coins  # dev: ETH not in pool
-        #                                Checks if deployed pool contains ETH.
-        #      This ensures no ETH is stuck in a pool where ETH is not a coin.
-        #            If ETH is sent to a pool that does contain ETH, then the
-        #                         AMM will gulp it during _claim_admin_fees().
 
 
 @internal
@@ -1034,7 +1027,10 @@ def tweak_price(
     K0_prev: uint256 = 0,
 ):
     """
-    @notice Conditionally adjust prices around which liquidity is distributed.
+    @notice Tweaks price_oracle, last_price and conditionally adjusts
+            price_scale. This is called whenever there is an unbalanced
+            liquidity operation: _exchange, add_liquidity, or
+            remove_liquidity_one_coin.
     @dev Contains main liquidity rebalancing logic, by tweaking `price_scale`.
     @param A_gamma Array of A and gamma parameters.
     @param _xp Array of current balances.
@@ -1092,13 +1088,15 @@ def tweak_price(
         self.price_oracle_packed = self._pack_prices(price_oracle)
         self.last_prices_timestamp = block.timestamp  # <---- Store timestamp.
 
+    #                  price_oracle is used further on to calculate its vector
+    #            distance from price_scale. This distance is used to calculate
+    #                  the amount of adjustment to be done to the price_scale.
+
     # ------------------ If new_D is set to 0, calculate it ------------------
 
     D_unadjusted: uint256 = new_D  # <- Withdrawal methods know new D already.
     if new_D == 0:  # <----------------- _exchange method does not know new D.
-        D_unadjusted = (
-            MATH.newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
-        )
+        D_unadjusted = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
 
     # ----------------------- Calculate last_prices --------------------------
 
@@ -1159,7 +1157,7 @@ def tweak_price(
         xcp_profit = unsafe_div(
             old_xcp_profit * virtual_price,
             old_virtual_price
-        )  # <---------------- Safe to do unsafe_div as old_virtual_price > 0.
+        )  # <---------------- Safu to do unsafe_div as old_virtual_price > 0.
 
         #       If A and gamma are not undergoing ramps (t < block.timestamp),
         #         ensure new virtual_price is not less than old virtual_price,

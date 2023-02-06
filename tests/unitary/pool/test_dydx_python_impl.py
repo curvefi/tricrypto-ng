@@ -7,25 +7,24 @@ from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
 
+# fmt: off
 def _get_price(x1, x2, x3, D, gamma, A):
 
     a = (
         D**9 * (1 + gamma) * (-1 + gamma * (-2 + (-1 + 27 * A) * gamma))
-        + 81
-        * D**6
-        * (1 + gamma * (2 + gamma + 9 * A * gamma))
-        * x1
-        * x2
-        * x3
+        + 81 * D**6 * (1 + gamma * (2 + gamma + 9 * A * gamma)) * x1 * x2 * x3  # noqa
         - 2187 * D**3 * (1 + gamma) * x1**2 * x2**2 * x3**2
         + 19683 * x1**3 * x2**3 * x3**3
     )
     b = 729 * A * D**5 * gamma**2 * x1 * x2 * x3
     c = 27 * A * D**8 * gamma**2 * (1 + gamma)
 
-    return (x2 * (a - b * (x2 + x3) - c * (2 * x1 + x2 + x3))) / (
-        x1 * (-a + b * (x1 + x3) + c * (x1 + 2 * x2 + x3))
+    return (
+        (x2 * (a - b * (x2 + x3) - c * (2 * x1 + x2 + x3)))
+        /
+        (x1 * (-a + b * (x1 + x3) + c * (x1 + 2 * x2 + x3)))
     )
+# fmt: on
 
 
 def _get_dydx(swap, i, j):
