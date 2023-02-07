@@ -33,9 +33,16 @@ def get_y(
     _ANN: uint256, _gamma: uint256, x: uint256[N_COINS], _D: uint256, i: uint256
 ) -> uint256[2]:
     """
-    Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
-    ANN = A * N**N
+    @notice Calculate x[i] given other balances x[0..N_COINS-1] and invariant D.
+    @dev ANN = A * N**N . AMM contract's A is actuall ANN.
+    @param _ANN AMM.A() value.
+    @param _gamma AMM.gamma() value.
+    @param x Balances multiplied by prices and precisions of all coins.
+    @param _D Invariant.
+    @param i Index of coin to calculate y.
+    @return y Calculated y.
     """
+
     j: uint256 = 0
     k: uint256 = 0
     if i == 0:
@@ -166,6 +173,10 @@ def _newton_y(
     ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256
 ) -> uint256:
 
+    # Calculate x[i] given A, gamma, xp and D using newton's method.
+    # This is the original method; get_y replaces it, but defautls to
+    # this version conditionally.
+
     # Safety checks
     assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"
     assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
@@ -288,7 +299,7 @@ def newton_D(
 
     D: uint256 = 0
     if K0_prev == 0:
-        D = N_COINS * self._geometric_mean(x, False)
+        D = N_COINS * self._geometric_mean(x)
     else:
         if S > 10**36:
             D = self._cbrt(
@@ -428,24 +439,46 @@ def get_dydx():
 @external
 @view
 def cbrt(x: uint256) -> uint256:
+    """
+    @notice Calculate the cubic root of a number in 1e18 precision
+    @dev Consumes around 1500 gas units
+    @param x The number to calculate the cubic root of
+    @return The cubic root of the number
+    """
     return self._cbrt(x)
 
 
 @external
 @view
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
-    return self._geometric_mean(unsorted_x, sort)
+def geometric_mean(_x: uint256[3]) -> uint256:
+    """
+    @notice Calculate the geometric mean of a list of numbers in 1e18 precision.
+    @param _x list of 3 numbers to sort
+    @returns  The geometric mean of the list of numbers
+    """
+    return self._geometric_mean(_x)
 
 
 @external
 @view
 def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
+    """
+    @notice Calculates the reduction coefficient for the given x and fee_gamma
+    @dev This method is used for calculating fees.
+    @param x The x values
+    @param fee_gamma The fee gamma value
+    """
     return self._reduction_coefficient(x, fee_gamma)
 
 
 @external
 @view
 def wad_exp(_power: int256) -> uint256:
+    """
+    @notice Calculates the e**x with 1e18 precision
+    @param _power The number to calculate the exponential of
+    @return The exponential of the given number
+    """
     return self._exp(_power)
 
 
@@ -478,11 +511,6 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
 @internal
 @pure
 def _exp(_power: int256) -> uint256:
-    """
-    @notice Calculates the e**x with 1e18 precision
-    @param _power The number to calculate the exponential of
-    @return The exponential of the given number
-    """
 
     # This implementation is borrowed from efforts from transmissions11 and Remco Bloemen:
     # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
@@ -529,11 +557,9 @@ def _exp(_power: int256) -> uint256:
 @internal
 @pure
 def _log2(x: uint256) -> int256:
-    """
-    @notice Compute the binary logarithm of `x`
-    @param x The number to compute the logarithm of
-    @return The binary logarithm of `x`
-    """
+
+    # Compute the binary logarithm of `x`
+
     # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
     # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
     #
@@ -564,12 +590,6 @@ def _log2(x: uint256) -> int256:
 @internal
 @pure
 def _cbrt(x: uint256) -> uint256:
-    """
-    @notice Calculate the cubic root of a number in 1e18 precision
-    @dev Consumes around 1500 gas units
-    @param x The number to calculate the cubic root of
-    @return The cubic root of the number
-    """
 
     xx: uint256 = 0
     if x >= 115792089237316195423570985008687907853269 * 10**18:
@@ -625,12 +645,10 @@ def _cbrt(x: uint256) -> uint256:
 
 @internal
 @pure
-def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
-    """
-    @notice Sorts the array of 3 numbers in descending order
-    @param unsorted_x The array to sort
-    @return The sorted array
-    """
+def _sort(unsorted_x: uint256[3]) -> uint256[3]:
+
+    # Sorts a three-array number in a descending order:
+
     x: uint256[N_COINS] = unsorted_x
     temp_var: uint256 = x[0]
     if x[0] < x[1]:
@@ -644,17 +662,17 @@ def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
         temp_var = x[1]
         x[1] = x[2]
         x[2] = temp_var
+
     return x
 
 
 @internal
 @view
-def _geometric_mean(_x: uint256[3], sort: bool = True) -> uint256:
-    x: uint256[N_COINS] = _x
-    if sort:
-        x = self._sort(_x)
+def _geometric_mean(_x: uint256[3]) -> uint256:
 
-    prod: uint256 = x[0] * x[1] / 10**18 * x[2] / 10**18
+    # calculates a geometric mean for three numbers.
+
+    prod: uint256 = _x[0] * _x[1] / 10**18 * _x[2] / 10**18
     assert prod > 0
 
     return self._cbrt(prod)
