@@ -1183,7 +1183,7 @@ def tweak_price(
                 ratio = unsafe_sub(10**18, ratio)
             norm = unsafe_add(norm, ratio**2)
 
-        norm = isqrt(norm)
+        norm = isqrt(norm)  # <-------------------- isqrt is not in base 1e18.
         adjustment_step: uint256 = max(
             rebalancing_params[1], unsafe_div(norm, 5)
         )  #           ^------------------------------------- adjustment_step.
