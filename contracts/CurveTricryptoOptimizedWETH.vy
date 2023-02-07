@@ -118,9 +118,10 @@ event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
 
-event TweakPriceScale:
-    price_scale: uint256[2]
-    adjustment_step: uint256
+event TweakPrices:
+    price_scale: uint256[N_COINS-1]
+    price_oracle: uint256[N_COINS-1]
+    last_prices: uint256[N_COINS-1]
 
 
 # ----------------------- Storage/State Variables ----------------------------
@@ -1233,13 +1234,15 @@ def tweak_price(
                 self.D = D
                 self.virtual_price = old_virtual_price
 
-                log TweakPriceScale(p_new, adjustment_step)  # <--- Log tweak.
+                log TweakPrices(p_new, price_oracle, last_prices)
 
                 return  # <------------------------- Return if we've adjusted.
 
     # --------- price_scale was not adjusted. Update the profit counter and D.
     self.D = D_unadjusted
     self.virtual_price = virtual_price
+
+    log TweakPrices(price_scale, price_oracle, last_prices)
 
 
 @internal
