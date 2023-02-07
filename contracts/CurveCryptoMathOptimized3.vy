@@ -68,7 +68,10 @@ def get_y(
             unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)
         ),
         unsafe_div(
-            unsafe_div(unsafe_div(unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN), 27**2), convert(A_MULTIPLIER, int256)),
+            unsafe_div(
+                unsafe_div(unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN), 27**2),
+                convert(A_MULTIPLIER, int256)
+            ),
             x_k,
         ),
     )
@@ -156,9 +159,16 @@ def get_y(
 
     C1: int256 = unsafe_div(unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18)
 
-    root_K0: int256 = unsafe_div(unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1), 3)
+    root_K0: int256 = unsafe_div(
+        unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1),
+        3
+    )
     root: uint256 = convert(
-        unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_div(D**2, 27), x_k), D), x_j), root_K0,),
+        unsafe_div(
+            unsafe_mul(
+                unsafe_div(unsafe_mul(unsafe_div(unsafe_div(D**2, 27), x_k), D), x_j),
+                root_K0
+            ),
             a,
         ),
         uint256,
@@ -304,20 +314,29 @@ def newton_D(
         if S > 10**36:
             D = self._cbrt(
                 unsafe_mul(
-                    unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**36), x[2]), K0_prev), 27),
+                    unsafe_mul(
+                        unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**36), x[2]), K0_prev),
+                        27
+                    ),
                     10**12
                 )
             )
         elif S > 10**24:
             D = self._cbrt(
                 unsafe_mul(
-                    unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**24), x[2]), K0_prev), 27),
+                    unsafe_mul(
+                        unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**24), x[2]), K0_prev),
+                        27
+                    ),
                     10**6,
                 )
             )
         else:
             D = self._cbrt(
-                unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**18), x[2]), K0_prev), 27)
+                unsafe_mul(
+                    unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(x[0], x[1]), 10**18), x[2]), K0_prev),
+                    27
+                )
             )
 
     # initialise variables:

@@ -62,7 +62,7 @@ def compile_swap_source_code(
 
 def deploy(
     coins,
-    swap_contract="contracts/CurveTricryptoOptimized.vy",
+    swap_contract="contracts/CurveTricryptoOptimizedWETH.vy",
     optimized: bool = True,
     params: dict = PARAMS,
 ):
@@ -146,7 +146,7 @@ def main():
     params["ma_time"] = 866  # 600 / ln(2)
     swap, token, math, views, _ = deploy(
         coins=coins,
-        swap_contract="contracts/CurveTricryptoOptimized.vy",
+        swap_contract="contracts/CurveTricryptoOptimizedWETH.vy",
         optimized=True,
         params=params,
     )

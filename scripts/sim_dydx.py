@@ -126,7 +126,7 @@ def _setup_pool():
         gauge_implementation = gauge_interface.deploy_as_blueprint()
 
         amm_interface = boa.load_partial(
-            "contracts/CurveTricryptoOptimized.vy"
+            "contracts/CurveTricryptoOptimizedWETH.vy"
         )
         amm_implementation = amm_interface.deploy_as_blueprint()
 

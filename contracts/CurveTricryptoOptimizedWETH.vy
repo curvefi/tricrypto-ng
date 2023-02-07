@@ -17,7 +17,7 @@ implements: ERC20  # <--------------------- AMM contract is also the LP token.
 # --------------------------------- Interfaces -------------------------------
 
 interface Math:
-    def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
+    def geometric_mean(_x: uint256[N_COINS]) -> uint256: view
     def wad_exp(_power: int256) -> uint256: view
     def cbrt(x: uint256) -> uint256: view
     def reduction_coefficient(
