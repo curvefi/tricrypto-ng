@@ -2,13 +2,13 @@
 # (c) Curve.Fi, 2023
 
 """
-@title CurveTricryptoNG
+@title CurveTricryptoOptimizedWETH
 @license MIT
 @author Curve.Fi
 @notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
 @dev View methods for `get_dy`, `get_dx`, `calc_token_amounts` etc. are available
      in the `views_implementation` of the Factory.
-@dev All prices in the are with respect to the first token in the pool.
+@dev All prices in the AMM are with respect to the first token in the pool.
 """
 
 from vyper.interfaces import ERC20
@@ -249,7 +249,7 @@ def __init__(
     self.packed_precisions = packed_precisions  # <------- Precisions of coins
     #                            are calculated as 10**(18 - coin.decimals()).
 
-    self.initial_A_gamma = packed_A_gamma  # <------------------ A and gamma.
+    self.initial_A_gamma = packed_A_gamma  # <------------------- A and gamma.
     self.future_A_gamma = packed_A_gamma
 
     self.packed_rebalancing_params = packed_rebalancing_params  # <-- Contains
@@ -621,7 +621,8 @@ def add_liquidity(
         token_supply += d_token
         self.mint(receiver, d_token)
 
-        # Calculate price
+        # --------------------------------------------------- Calculate price.
+
         # p_i * (dx_i - dtoken / token_supply * xx_i) = sum{k!=i}(p_k * (dtoken / token_supply * xx_k - dx_k))
         # Only ix is nonzero
         p: uint256 = 0
@@ -1174,6 +1175,8 @@ def tweak_price(
 
         # ------------------- Get adjustment step ----------------------------
 
+        #                Calculate the vector distance between price_scale and
+        #                                                        price_oracle.
         norm: uint256 = 0
         ratio: uint256 = 0
         for k in range(N_COINS - 1):
@@ -1189,15 +1192,15 @@ def tweak_price(
             rebalancing_params[1], unsafe_div(norm, 5)
         )  #           ^------------------------------------- adjustment_step.
 
-        if norm > adjustment_step and old_virtual_price > 0:  # <----- We only
-            #                     adjust prices if the vector distance between
-            #         price_oracle and price_scale is large enough. This check
-            #            ensures that no rebalancing occurs if the distance is
-            #        low i.e. the pool prices are pegged to the oracle prices.
+        if norm > adjustment_step:  # <---------- We only adjust prices if the
+            #          vector distance between price_oracle and price_scale is
+            #             large enough. This check ensures that no rebalancing
+            #           occurs if the distance is low i.e. the pool prices are
+            #                                     pegged to the oracle prices.
+
+            # ------------------------------------- Calculate new price scale.
 
             p_new: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-
-            # -------------- Calculate new price scale -----------------------
             for k in range(N_COINS - 1):
                 p_new[k] = unsafe_div(
                     price_scale[k] * unsafe_sub(norm, adjustment_step)
@@ -1211,15 +1214,14 @@ def tweak_price(
                 xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
 
             # ------------------------------------------ Update D with new xp.
-            D: uint256 = (
-                MATH.newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
-            )
+            D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
 
             xp[0] = D / N_COINS
             for k in range(N_COINS - 1):
                 xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
 
-            # ------ Reuse `old_virtual_price` (but it has new virtual_price).
+            # ---------- Calculate new virtual_price using new xp and D. Reuse
+            #              `old_virtual_price` (but it has new virtual_price).
             old_virtual_price = (
                 10**18 * MATH.geometric_mean(xp) / total_supply
             )
@@ -1319,6 +1321,7 @@ def _claim_admin_fees():
 @internal
 @view
 def xp() -> uint256[N_COINS]:
+
     result: uint256[N_COINS] = self.balances
     packed_prices: uint256 = self.price_scale_packed
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)

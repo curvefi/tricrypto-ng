@@ -184,7 +184,7 @@ def _newton_y(
 ) -> uint256:
 
     # Calculate x[i] given A, gamma, xp and D using newton's method.
-    # This is the original method; get_y replaces it, but defautls to
+    # This is the original method; get_y replaces it, but defaults to
     # this version conditionally.
 
     # Safety checks
@@ -447,9 +447,32 @@ def newton_D(
 
 @external
 @view
-def get_dydx():
-    # TODO: implement dy/dx
-    pass
+def get_price(
+    _x1: uint256, _x2: uint256, _x3: uint256, _D: uint256, _gamma: uint256, _A: uint256
+) -> uint256:
+
+    x1: int256 = convert(_x1, int256)
+    x2: int256 = convert(_x2, int256)
+    x3: int256 = convert(_x3, int256)
+    D: int256 = convert(_D, int256)
+    gamma: int256 = convert(_gamma, int256)
+    A: int256 = convert(_A, int256)
+
+    a: int256 = (
+        (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18 +
+        81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D -
+        2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D +
+        10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
+    )
+    b: int256 = 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
+    c: int256 = 27*A*gamma**2*(10**18 + gamma)/D/27/10000
+    p: int256 = (
+        10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18)
+    )/(
+        x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18)
+    )
+
+    return convert(-p, uint256)
 
 
 # --------------------------- Math Utils -------------------------------------
@@ -504,12 +527,12 @@ def wad_exp(_power: int256) -> uint256:
 @internal
 @pure
 def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
-    """
-    fee_gamma / (fee_gamma + (1 - K))
-    where
-    K = prod(x) / (sum(x) / N)**N
-    (all normalized to 1e18)
-    """
+
+    # fee_gamma / (fee_gamma + (1 - K))
+    # where
+    # K = prod(x) / (sum(x) / N)**N
+    # (all normalized to 1e18)
+
     K: uint256 = 10**18
     S: uint256 = x[0]
     S = unsafe_add(S, x[1])
@@ -531,7 +554,7 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
 @pure
 def _exp(_power: int256) -> uint256:
 
-    # This implementation is borrowed from efforts from transmissions11 and Remco Bloemen:
+    # This implementation is borrowed from transmissions11 and Remco Bloemen:
     # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
     # Method: wadExp
 
