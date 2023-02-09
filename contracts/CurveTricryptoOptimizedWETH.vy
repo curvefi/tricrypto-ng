@@ -37,13 +37,8 @@ interface Math:
         i: uint256,
     ) -> uint256[2]: view
     def get_p(
-        _x1: uint256,
-        _x2: uint256,
-        _x3: uint256,
-        _D: uint256,
-        _A: uint256,
-        _gamma: uint256,
-    ) -> uint256: view
+        _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[2],
+    ) -> uint256[N_COINS-1]: view
 
 interface WETH:
     def deposit(): payable
@@ -1031,11 +1026,7 @@ def tweak_price(
 
     # ----------------------- Calculate last_prices --------------------------
 
-    last_prices = [
-        MATH.get_p(_xp[1], _xp[0], _xp[2], D_unadjusted, A_gamma[0], A_gamma[1]),
-        MATH.get_p(_xp[2], _xp[0], _xp[1], D_unadjusted, A_gamma[0], A_gamma[1]),
-    ]
-
+    last_prices = MATH.get_p(_xp, D_unadjusted, A_gamma)
     self.last_prices_packed = self._pack_prices(last_prices)
 
     # ------- Update profit numbers without price adjustment first -----------
