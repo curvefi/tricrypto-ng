@@ -447,16 +447,21 @@ def newton_D(
 
 @external
 @view
-def get_price(
-    _x1: uint256, _x2: uint256, _x3: uint256, _D: uint256, _gamma: uint256, _A: uint256
+def get_p(
+    _x1: uint256,
+    _x2: uint256,
+    _x3: uint256,
+    _D: uint256,
+    _A: uint256,
+    _gamma: uint256
 ) -> uint256:
 
     x1: int256 = convert(_x1, int256)
     x2: int256 = convert(_x2, int256)
     x3: int256 = convert(_x3, int256)
     D: int256 = convert(_D, int256)
-    gamma: int256 = convert(_gamma, int256)
     A: int256 = convert(_A, int256)
+    gamma: int256 = convert(_gamma, int256)
 
     a: int256 = (
         (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18 +
@@ -466,12 +471,12 @@ def get_price(
     )
     b: int256 = 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
     c: int256 = 27*A*gamma**2*(10**18 + gamma)/D/27/10000
+
     p: int256 = (
         10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18)
     )/(
         x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18)
     )
-
     return convert(-p, uint256)
 
 

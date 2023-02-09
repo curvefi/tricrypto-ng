@@ -36,6 +36,14 @@ interface Math:
         D: uint256,
         i: uint256,
     ) -> uint256[2]: view
+    def get_p(
+        _x1: uint256,
+        _x2: uint256,
+        _x3: uint256,
+        _D: uint256,
+        _A: uint256,
+        _gamma: uint256,
+    ) -> uint256: view
 
 interface WETH:
     def deposit(): payable
@@ -621,47 +629,8 @@ def add_liquidity(
         token_supply += d_token
         self.mint(receiver, d_token)
 
-        # --------------------------------------------------- Calculate price.
+        self.tweak_price(A_gamma, xp, D, 0)
 
-        # p_i * (dx_i - dtoken / token_supply * xx_i) = sum{k!=i}(p_k * (dtoken / token_supply * xx_k - dx_k))
-        # Only ix is nonzero
-        p: uint256 = 0
-
-        if d_token > 10**5:
-
-            if ix < N_COINS:  # <----------- adding only one coin at index ix.
-
-                S: uint256 = 0
-                last_prices: uint256[N_COINS - 1] = self._unpack_prices(
-                    self.last_prices_packed
-                )
-
-                # -------------------- Calculate prices post liquidity action.
-                for i in range(N_COINS):
-                    if i != ix:
-                        if i == 0:
-                            S += xx[0] * precisions[0]
-                        else:
-                            S += (
-                                xx[i]
-                                * last_prices[i - 1]
-                                * precisions[i]
-                                / PRECISION
-                            )
-
-                S = S * d_token / token_supply
-                p = (
-                    S
-                    * PRECISION
-                    / (
-                        amounts[ix] * precisions[ix]
-                        - d_token * xx[ix] * precisions[ix] / token_supply
-                    )
-                )
-
-        self.tweak_price(A_gamma, xp, ix, p, D, 0)
-        #                                 ^----------       p=0 if more than 2
-        #                                           coins are being deposited.
 
     else:
 
@@ -776,7 +745,7 @@ def remove_liquidity_one_coin(
 
     # ------------------------------------------------------------------------
 
-    dy, p, D, xp, approx_fee = self._calc_withdraw_one_coin(
+    dy, D, xp, approx_fee = self._calc_withdraw_one_coin(
         A_gamma,
         token_amount,
         i,
@@ -792,8 +761,8 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    self.tweak_price(A_gamma, xp, i, p, D, 0)
-    #                                ^---- p > 0 since one coin being removed.
+    self.tweak_price(A_gamma, xp, D, 0)
+
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
 
     self._claim_admin_fees()  # <----------- Because virtual_price can go down
@@ -973,46 +942,10 @@ def _exchange(
     ########################## -------> TRANSFER OUT
     self._transfer_out(self.coins[j], dy, use_eth, receiver)
 
-    # -------------------------- Calculate prices ----------------------------
-
-    p: uint256 = 0
-    ix: uint256 = j
-
-    if dx > 10**5 and dy > 10**5:
-
-        _dx: uint256 = dx * prec_i
-        _dy: uint256 = dy * prec_j
-
-        if i != 0 and j != 0:
-
-            p = (
-                (
-                    shift(
-                        self.last_prices_packed,
-                        -PRICE_SIZE * convert(i - 1, int256)
-                    )
-                    & PRICE_MASK
-                )
-                * _dx
-                / _dy
-            )
-
-        elif i == 0:
-
-            p = _dx * 10**18 / _dy
-
-        else:  # <---------------- If j == 0, then we tweak based on the trade
-            #                                           price of the ith coin.
-            p = _dy * 10**18 / _dx
-            ix = i
-
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
     K0_prev: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[1]
-    self.tweak_price(A_gamma, xp, ix, p, 0, K0_prev)
-    #                                 ^  ^  ^------ newton_D converges faster.
-    #                                 ^  ^--------- recalculate invariant (D).
-    #                                 ^------ p != 0, so no get_y in newton_D.
+    self.tweak_price(A_gamma, xp, 0, K0_prev)
 
     log TokenExchange(sender, i, dx, j, dy, fee)
 
@@ -1023,8 +956,6 @@ def _exchange(
 def tweak_price(
     A_gamma: uint256[2],
     _xp: uint256[N_COINS],
-    i: uint256,
-    p_i: uint256,
     new_D: uint256,
     K0_prev: uint256 = 0,
 ):
@@ -1036,8 +967,6 @@ def tweak_price(
     @dev Contains main liquidity rebalancing logic, by tweaking `price_scale`.
     @param A_gamma Array of A and gamma parameters.
     @param _xp Array of current balances.
-    @param i Index of the coin to tweak.
-    @param p_i Current price of the coin.
     @param new_D New D value.
     @param K0_prev Initial guess for `newton_D`.
     """
@@ -1102,43 +1031,10 @@ def tweak_price(
 
     # ----------------------- Calculate last_prices --------------------------
 
-    if p_i > 0:  # < ---------- If the liquidity action triggering tweak_price
-        #       involves a single token in or out, then p_i will be zero. This
-        #           occurs in add_liquidity for a single token, _exchange, and
-        #            remove_liquidity_one_coin. The calculation of last_prices
-        #                                              in this case is simple.
-
-        if i > 0:
-            last_prices[i - 1] = p_i
-        else:
-            for k in range(N_COINS - 1):
-                last_prices[k] = last_prices[k] * 10**18 / p_i  # <---- If 0th
-                #                   price changed - change all prices instead.
-    else:
-
-        #                     Liquidity action triggering tweak_price involves
-        #           multiple tokens. So the input for p_i == 0. We now need to
-        #     calculate last_prices for multiple tokens, which involves get_y.
-
-        __xp: uint256[N_COINS] = _xp
-        dx_price: uint256 = __xp[0] / 10**6
-        __xp[0] += dx_price
-
-        y_out: uint256[2] = empty(uint256[2])
-
-        for k in range(N_COINS - 1):
-
-            y_out = MATH.get_y(
-                A_gamma[0],
-                A_gamma[1],
-                __xp,
-                D_unadjusted,
-                k + 1
-            )
-
-            last_prices[k] = (
-                price_scale[k] * dx_price / (_xp[k + 1] - y_out[0])
-            )
+    last_prices = [
+        MATH.get_p(_xp[1], _xp[0], _xp[2], D_unadjusted, A_gamma[0], A_gamma[1]),
+        MATH.get_p(_xp[2], _xp[0], _xp[1], D_unadjusted, A_gamma[0], A_gamma[1]),
+    ]
 
     self.last_prices_packed = self._pack_prices(last_prices)
 
@@ -1148,6 +1044,8 @@ def tweak_price(
     xp[0] = unsafe_div(D_unadjusted, N_COINS)
     for k in range(N_COINS - 1):
         xp[k + 1] = D_unadjusted * 10**18 / (N_COINS * price_scale[k])
+
+    # ------------------------- Update xcp_profit ----------------------------
 
     xcp_profit: uint256 = 10**18
     virtual_price: uint256 = 10**18
@@ -1415,7 +1313,7 @@ def _calc_withdraw_one_coin(
     i: uint256,
     update_D: bool,
     calc_price: bool,
-) -> (uint256, uint256, uint256, uint256[N_COINS], uint256):
+) -> (uint256, uint256, uint256[N_COINS], uint256):
 
     token_supply: uint256 = self.totalSupply
     assert token_amount <= token_supply  # dev: token amount more than supply
@@ -1465,32 +1363,7 @@ def _calc_withdraw_one_coin(
     dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
     xp[i] = y_out[0]
 
-    # --------------------------------- Price calc ---------------------------
-
-    p: uint256 = 0
-    if calc_price and dy > 10**5 and token_amount > 10**5:
-
-        # p_i = dD / D0 * sum'(p_k * x_k) / (dy - dD / D0 * y0)
-        S: uint256 = 0
-        last_prices: uint256[N_COINS - 1] = self._unpack_prices(
-            self.last_prices_packed
-        )
-
-        for k in range(N_COINS):
-            if k != i:
-                if k == 0:
-                    S += xx[0] * precisions[0]
-                else:
-                    S += xx[k] * last_prices[k - 1] * precisions[k] / PRECISION
-
-        S = S * dD / D0
-        p = (
-            S
-            * PRECISION
-            / (dy * precisions[i] - dD * xx[i] * precisions[i] / D0)
-        )
-
-    return dy, p, D, xp, approx_fee
+    return dy, D, xp, approx_fee
 
 
 # ------------------------ ERC20 functions -----------------------------------

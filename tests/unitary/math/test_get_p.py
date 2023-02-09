@@ -16,18 +16,20 @@ SETTINGS = {"max_examples": 100, "deadline": None}
 def dydx_safemath():
 
     get_price_impl = """
+N_COINS: constant(uint256) = 3
+A_MULTIPLIER: constant(uint256) = 100
+
 @external
 @view
-def get_price(
-    _x1: uint256, _x2: uint256, _x3: uint256, _D: uint256, _gamma: uint256, _A: uint256
+def get_p(
+    _x1: uint256, _x2: uint256, _x3: uint256, _D: uint256, _A: uint256, _gamma: uint256,
 ) -> uint256:
-
     x1: int256 = convert(_x1, int256)
     x2: int256 = convert(_x2, int256)
     x3: int256 = convert(_x3, int256)
     D: int256 = convert(_D, int256)
-    gamma: int256 = convert(_gamma, int256)
     A: int256 = convert(_A, int256)
+    gamma: int256 = convert(_gamma, int256)
 
     a: int256 = (
         (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18 +
@@ -37,15 +39,14 @@ def get_price(
     )
     b: int256 = 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
     c: int256 = 27*A*gamma**2*(10**18 + gamma)/D/27/10000
+
     p: int256 = (
         10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18)
     )/(
         x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18)
     )
-
     return convert(-p, uint256)
-    """
-
+"""
     return boa.loads(get_price_impl)
 
 
@@ -68,7 +69,7 @@ def _get_dydx_vyper(swap, i, j, price_calc):
 
     D = swap.D()
 
-    return price_calc.get_price(x1, x2, x3, D, gamma, A)
+    return price_calc.get_p(x1, x2, x3, D, A, gamma)
 
 
 def _get_prices_vyper(swap, price_calc):
@@ -109,8 +110,8 @@ def _get_prices_numeric_nofee(swap, views):
 @settings(**SETTINGS)
 @pytest.mark.parametrize("i", [0, 1, 2])
 @pytest.mark.parametrize("j", [0, 1, 2])
-def test_dydx_similar(
-    swap_with_deposit,
+def test_dxdy_similar(
+    yuge_swap,
     dydx_safemath,
     views_contract,
     user,
@@ -127,12 +128,10 @@ def test_dydx_similar(
     mint_for_testing(coins[i], user, dx)
 
     with boa.env.prank(user):
-        swap_with_deposit.exchange(i, j, dx, 0)
+        yuge_swap.exchange(i, j, dx, 0)
 
-    dxdy_vyper = _get_prices_vyper(swap_with_deposit, dydx_safemath)
-    dxdy_numeric_nofee = _get_prices_numeric_nofee(
-        swap_with_deposit, views_contract
-    )
+    dxdy_vyper = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_numeric_nofee = _get_prices_numeric_nofee(yuge_swap, views_contract)
 
     for n in range(2):
         assert abs(log(dxdy_vyper[n] / dxdy_numeric_nofee[n])) < 1e-5
@@ -145,18 +144,16 @@ def test_dydx_similar(
 )
 @settings(**SETTINGS)
 @pytest.mark.parametrize("j", [1, 2])
-def test_dydx_pump(
-    swap_with_deposit, dydx_safemath, user, dollar_amount, coins, j
-):
+def test_dxdy_pump(yuge_swap, dydx_safemath, user, dollar_amount, coins, j):
 
-    dydx_math_0 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
+    dydx_math_0 = _get_prices_vyper(yuge_swap, dydx_safemath)
     dx = dollar_amount * 10**18
     mint_for_testing(coins[0], user, dx)
 
     with boa.env.prank(user):
-        swap_with_deposit.exchange(0, j, dx, 0)
+        yuge_swap.exchange(0, j, dx, 0)
 
-    dydx_math_1 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
+    dydx_math_1 = _get_prices_vyper(yuge_swap, dydx_safemath)
 
     for n in range(2):
         assert dydx_math_1[n] > dydx_math_0[n]
@@ -169,19 +166,17 @@ def test_dydx_pump(
 )
 @settings(**SETTINGS)
 @pytest.mark.parametrize("j", [1, 2])
-def test_dydx_dump(
-    swap_with_deposit, dydx_safemath, user, dollar_amount, coins, j
-):
+def test_dxdy_dump(yuge_swap, dydx_safemath, user, dollar_amount, coins, j):
 
-    dydx_math_0 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
+    dydx_math_0 = _get_prices_vyper(yuge_swap, dydx_safemath)
 
     dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
     mint_for_testing(coins[j], user, dx)
 
     with boa.env.prank(user):
-        swap_with_deposit.exchange(j, 0, dx, 0)
+        yuge_swap.exchange(j, 0, dx, 0)
 
-    dydx_math_1 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
+    dydx_math_1 = _get_prices_vyper(yuge_swap, dydx_safemath)
 
     for n in range(2):
         assert dydx_math_1[n] < dydx_math_0[n]
