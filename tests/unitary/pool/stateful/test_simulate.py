@@ -104,7 +104,9 @@ class StatefulSimulation(StatefulBase):
 
     @invariant()
     def simulator(self):
+
         if self.trader.xcp_profit / 1e18 - 1 > 1e-8:
+
             assert (
                 abs(self.trader.xcp_profit - self.swap.xcp_profit())
                 / (self.trader.xcp_profit - 10**18)
@@ -112,9 +114,12 @@ class StatefulSimulation(StatefulBase):
             )
 
         for i in range(2):
-            price_scale = self.swap.price_scale(i)
-            price_trader = self.trader.curve.p[i + 1]
-            assert approx(price_scale, price_trader, 1e-3)
+            try:
+                price_scale = self.swap.price_scale(i)
+                price_trader = self.trader.curve.p[i + 1]
+                assert approx(price_scale, price_trader, 1e-3)
+            except:  # noqa: E722
+                breakpoint()
 
 
 def test_sim(swap, views_contract, users, pool_coins, tricrypto_factory):

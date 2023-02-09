@@ -85,16 +85,25 @@ def _get_prices_vyper(swap, price_calc):
     return prices
 
 
-def _get_prices_numeric_nofee(swap, views):
+def _get_prices_numeric_nofee(swap, views, sell_usd):
 
-    smol_dx = 10**18
-    dy_nofee_token_1 = views.internal._get_dy_nofee(0, 1, smol_dx, swap)[0]
-    dy_nofee_token_2 = views.internal._get_dy_nofee(0, 2, smol_dx, swap)[0]
+    if sell_usd:
 
-    prices = [
-        smol_dx * 10**18 // dy_nofee_token_1,
-        smol_dx * 10**18 // dy_nofee_token_2,
-    ]
+        dx = 10**16  # 0.01 USD
+        dy = [
+            views.internal._get_dy_nofee(0, 1, dx, swap)[0],
+            views.internal._get_dy_nofee(0, 2, dx, swap)[0],
+        ]
+        prices = [dx * 10**18 // dy[0], dx * 10**18 // dy[1]]
+
+    else:
+
+        prices = []
+        for i in range(1, 3):
+
+            dx = int(0.01 * 10**36 // INITIAL_PRICES[i])
+            dolla_out = views.internal._get_dy_nofee(i, 0, dx, swap)[0]
+            prices.append(dolla_out * 10**18 // dx)
 
     return prices
 
@@ -131,10 +140,15 @@ def test_dxdy_similar(
         yuge_swap.exchange(i, j, dx, 0)
 
     dxdy_vyper = _get_prices_vyper(yuge_swap, dydx_safemath)
-    dxdy_numeric_nofee = _get_prices_numeric_nofee(yuge_swap, views_contract)
+    dxdy_numeric_nofee = _get_prices_numeric_nofee(
+        yuge_swap, views_contract, sell_usd=(i == 0)
+    )
 
     for n in range(2):
+
         assert abs(log(dxdy_vyper[n] / dxdy_numeric_nofee[n])) < 1e-5
+        dxdy_swap = yuge_swap.last_prices(n)
+        assert abs(log(dxdy_vyper[n] / dxdy_swap)) < 1e-5
 
 
 @given(
@@ -146,17 +160,21 @@ def test_dxdy_similar(
 @pytest.mark.parametrize("j", [1, 2])
 def test_dxdy_pump(yuge_swap, dydx_safemath, user, dollar_amount, coins, j):
 
-    dydx_math_0 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_math_0 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_swap_0 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+
     dx = dollar_amount * 10**18
     mint_for_testing(coins[0], user, dx)
 
     with boa.env.prank(user):
         yuge_swap.exchange(0, j, dx, 0)
 
-    dydx_math_1 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_math_1 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_swap_1 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
 
     for n in range(2):
-        assert dydx_math_1[n] > dydx_math_0[n]
+        assert dxdy_math_1[n] > dxdy_math_0[n]
+        assert dxdy_swap_1[n] > dxdy_swap_0[n]
 
 
 @given(
@@ -168,7 +186,8 @@ def test_dxdy_pump(yuge_swap, dydx_safemath, user, dollar_amount, coins, j):
 @pytest.mark.parametrize("j", [1, 2])
 def test_dxdy_dump(yuge_swap, dydx_safemath, user, dollar_amount, coins, j):
 
-    dydx_math_0 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_math_0 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_swap_0 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
 
     dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
     mint_for_testing(coins[j], user, dx)
@@ -176,7 +195,9 @@ def test_dxdy_dump(yuge_swap, dydx_safemath, user, dollar_amount, coins, j):
     with boa.env.prank(user):
         yuge_swap.exchange(j, 0, dx, 0)
 
-    dydx_math_1 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_math_1 = _get_prices_vyper(yuge_swap, dydx_safemath)
+    dxdy_swap_1 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
 
     for n in range(2):
-        assert dydx_math_1[n] < dydx_math_0[n]
+        assert dxdy_math_1[n] < dxdy_math_0[n]
+        assert dxdy_swap_1[n] < dxdy_swap_0[n]

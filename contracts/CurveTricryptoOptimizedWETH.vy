@@ -1027,6 +1027,8 @@ def tweak_price(
     # ----------------------- Calculate last_prices --------------------------
 
     last_prices = MATH.get_p(_xp, D_unadjusted, A_gamma)
+    for k in range(N_COINS - 1):
+        last_prices[k] = last_prices[k] * price_scale[k] / 10**18
     self.last_prices_packed = self._pack_prices(last_prices)
 
     # ------- Update profit numbers without price adjustment first -----------
