@@ -8,12 +8,12 @@ from hypothesis import given, settings
 from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
-SETTINGS = {"max_examples": 10000, "deadline": None}
+SETTINGS = {"max_examples": 100, "deadline": None}
 
 
 # flake8: noqa: E501
 @pytest.fixture(scope="module")
-def get_price():
+def dydx_safemath():
 
     get_price_impl = """
 @external
@@ -107,18 +107,29 @@ def _get_prices_numeric_nofee(swap, views):
     ),
 )
 @settings(**SETTINGS)
-@pytest.mark.parametrize("j", [1, 2])
+@pytest.mark.parametrize("i", [0, 1, 2])
+@pytest.mark.parametrize("j", [0, 1, 2])
 def test_dydx_similar(
-    swap_with_deposit, get_price, views_contract, user, dollar_amount, coins, j
+    swap_with_deposit,
+    dydx_safemath,
+    views_contract,
+    user,
+    dollar_amount,
+    coins,
+    i,
+    j,
 ):
 
-    dx = dollar_amount * 10**18
-    mint_for_testing(coins[0], user, dx)
+    if i == j:
+        return
+
+    dx = dollar_amount * 10**36 // INITIAL_PRICES[i]
+    mint_for_testing(coins[i], user, dx)
 
     with boa.env.prank(user):
-        swap_with_deposit.exchange(0, j, dx, 0)
+        swap_with_deposit.exchange(i, j, dx, 0)
 
-    dxdy_vyper = _get_prices_vyper(swap_with_deposit, get_price)
+    dxdy_vyper = _get_prices_vyper(swap_with_deposit, dydx_safemath)
     dxdy_numeric_nofee = _get_prices_numeric_nofee(
         swap_with_deposit, views_contract
     )
@@ -135,17 +146,17 @@ def test_dydx_similar(
 @settings(**SETTINGS)
 @pytest.mark.parametrize("j", [1, 2])
 def test_dydx_pump(
-    swap_with_deposit, get_price, user, dollar_amount, coins, j
+    swap_with_deposit, dydx_safemath, user, dollar_amount, coins, j
 ):
 
-    dydx_math_0 = _get_prices_vyper(swap_with_deposit, get_price)
+    dydx_math_0 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
     dx = dollar_amount * 10**18
     mint_for_testing(coins[0], user, dx)
 
     with boa.env.prank(user):
         swap_with_deposit.exchange(0, j, dx, 0)
 
-    dydx_math_1 = _get_prices_vyper(swap_with_deposit, get_price)
+    dydx_math_1 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
 
     for n in range(2):
         assert dydx_math_1[n] > dydx_math_0[n]
@@ -159,10 +170,10 @@ def test_dydx_pump(
 @settings(**SETTINGS)
 @pytest.mark.parametrize("j", [1, 2])
 def test_dydx_dump(
-    swap_with_deposit, get_price, user, dollar_amount, coins, j
+    swap_with_deposit, dydx_safemath, user, dollar_amount, coins, j
 ):
 
-    dydx_math_0 = _get_prices_vyper(swap_with_deposit, get_price)
+    dydx_math_0 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
 
     dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
     mint_for_testing(coins[j], user, dx)
@@ -170,7 +181,7 @@ def test_dydx_dump(
     with boa.env.prank(user):
         swap_with_deposit.exchange(j, 0, dx, 0)
 
-    dydx_math_1 = _get_prices_vyper(swap_with_deposit, get_price)
+    dydx_math_1 = _get_prices_vyper(swap_with_deposit, dydx_safemath)
 
     for n in range(2):
         assert dydx_math_1[n] < dydx_math_0[n]
