@@ -71,6 +71,18 @@ class StatefulSimulation(StatefulBase):
         self.trader.xcp_profit_real = self.swap._storage.virtual_price.get()
         self.trader.t = boa.env.vm.state.timestamp
 
+        print("\n------------------- initialised!")
+        print(
+            "swap balances: ",
+            [
+                self.swap.balances(0),
+                self.swap.balances(1),
+                self.swap.balances(2),
+            ],
+        )
+        print("swap xp: ", self.swap.internal.xp())
+        self.step = 0
+
     @rule(
         exchange_amount_in=exchange_amount_in,
         exchange_i=exchange_i,
@@ -78,10 +90,28 @@ class StatefulSimulation(StatefulBase):
         user=user,
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
+
+        if exchange_i == exchange_j:
+            return
+
+        print(f"Step {self.step}: ")
+        self.step += 1
+        print("exchange amount in: ", exchange_amount_in / 10**18, " USD")
+        print("exchange_i: ", exchange_i)
+        print("exchange_j: ", exchange_j)
+
         exchange_amount_in = (
             exchange_amount_in
             * 10**18
             // self.trader.price_oracle[exchange_i]
+        )
+        print("dx in: ", exchange_amount_in)
+
+        print("swap xp before: ", self.swap.internal.xp())
+        print("swap price scale before: ", get_price_scale(self.swap))
+        print(
+            "swap price oracle before: ",
+            [self.swap.price_oracle(0), self.swap.price_oracle(1)],
         )
 
         dy_swap = super().exchange(
@@ -95,12 +125,26 @@ class StatefulSimulation(StatefulBase):
             )
             price = exchange_amount_in * 10**18 // dy_trader
 
+            print("dy swap: ", dy_swap / 10**18)
+            print("dy trader: ", dy_trader / 10**18)
+
             self.trader.tweak_price(
                 boa.env.vm.state.timestamp, exchange_i, exchange_j, price
             )
 
             # check if output value from exchange is similar
             assert abs(log(dy_swap / dy_trader)) < 1e-5
+
+            print("trader xp: ", self.trader.curve.xp())
+            print("swap xp: ", self.swap.internal.xp())
+            print("trader curve price scale: ", self.trader.curve.p[1:])
+            print("swap price scale: ", get_price_scale(self.swap))
+            print("trader price oracle: ", self.trader.price_oracle[1:])
+            print(
+                "swap price oracle: ",
+                [self.swap.price_oracle(0), self.swap.price_oracle(1)],
+            )
+            print()
 
     @invariant()
     def simulator(self):
@@ -119,6 +163,19 @@ class StatefulSimulation(StatefulBase):
                 price_trader = self.trader.curve.p[i + 1]
                 assert approx(price_scale, price_trader, 1e-3)
             except:  # noqa: E722
+                print("---------- Error!")
+                print("swap xp: ", self.swap.internal.xp())
+                print("swap D: ", self.swap.D())
+                print(
+                    "swap balances: ",
+                    [
+                        self.swap.balances(0),
+                        self.swap.balances(1),
+                        self.swap.balances(2),
+                    ],
+                )
+                print("swap A_gamma: ", self.swap.A(), self.swap.gamma())
+
                 breakpoint()
 
 
