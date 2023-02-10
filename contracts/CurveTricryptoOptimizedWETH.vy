@@ -1111,6 +1111,10 @@ def tweak_price(
             for k in range(N_COINS - 1):
                 xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
 
+            for _x in xp:
+                frac: uint256 = _x * 10**18 / D
+                assert (frac > 10**16 - 1) and (frac < 10**20 + 1)
+
             # ---------- Calculate new virtual_price using new xp and D. Reuse
             #              `old_virtual_price` (but it has new virtual_price).
             old_virtual_price = (

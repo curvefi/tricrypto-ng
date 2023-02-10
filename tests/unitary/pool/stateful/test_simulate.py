@@ -75,12 +75,12 @@ class StatefulSimulation(StatefulBase):
         print(
             "swap balances: ",
             [
-                self.swap.balances(0),
-                self.swap.balances(1),
-                self.swap.balances(2),
+                self.swap.balances(0) / 1e18,
+                self.swap.balances(1) / 1e18,
+                self.swap.balances(2) / 1e18,
             ],
         )
-        print("swap xp: ", self.swap.internal.xp())
+        print("swap xp: ", [k / 1e18 for k in self.swap.internal.xp()])
         self.step = 0
 
     @rule(
@@ -99,19 +99,29 @@ class StatefulSimulation(StatefulBase):
         print("exchange amount in: ", exchange_amount_in / 10**18, " USD")
         print("exchange_i: ", exchange_i)
         print("exchange_j: ", exchange_j)
+        print(
+            "trader price oracle: ",
+            [k / 1e18 for k in self.trader.price_oracle],
+        )
 
         exchange_amount_in = (
             exchange_amount_in
             * 10**18
             // self.trader.price_oracle[exchange_i]
         )
-        print("dx in: ", exchange_amount_in)
+        print("dx in: ", exchange_amount_in / 1e18)
 
-        print("swap xp before: ", self.swap.internal.xp())
-        print("swap price scale before: ", get_price_scale(self.swap))
+        print("swap xp before: ", [k / 1e18 for k in self.swap.internal.xp()])
+        print(
+            "swap price scale before: ",
+            [k / 1e18 for k in get_price_scale(self.swap)],
+        )
         print(
             "swap price oracle before: ",
-            [self.swap.price_oracle(0), self.swap.price_oracle(1)],
+            [
+                self.swap.price_oracle(0) / 1e18,
+                self.swap.price_oracle(1) / 1e18,
+            ],
         )
 
         dy_swap = super().exchange(
@@ -135,16 +145,30 @@ class StatefulSimulation(StatefulBase):
             # check if output value from exchange is similar
             assert abs(log(dy_swap / dy_trader)) < 1e-5
 
-            print("trader xp: ", self.trader.curve.xp())
-            print("swap xp: ", self.swap.internal.xp())
-            print("trader curve price scale: ", self.trader.curve.p[1:])
-            print("swap price scale: ", get_price_scale(self.swap))
-            print("trader price oracle: ", self.trader.price_oracle[1:])
+            print("trader xp: ", [k / 1e18 for k in self.trader.curve.xp()])
+            print("swap xp: ", [k / 1e18 for k in self.swap.internal.xp()])
+            print(
+                "trader curve price scale: ",
+                [k / 1e18 for k in self.trader.curve.p[1:]],
+            )
+            print(
+                "swap price scale: ",
+                [k / 1e18 for k in get_price_scale(self.swap)],
+            )
+            print(
+                "trader price oracle: ",
+                [k / 1e18 for k in self.trader.price_oracle[1:]],
+            )
             print(
                 "swap price oracle: ",
-                [self.swap.price_oracle(0), self.swap.price_oracle(1)],
+                [
+                    self.swap.price_oracle(0) / 1e18,
+                    self.swap.price_oracle(1) / 1e18,
+                ],
             )
             print()
+            boa.env.time_travel(12)
+            print("time travelled!")
 
     @invariant()
     def simulator(self):
@@ -164,14 +188,14 @@ class StatefulSimulation(StatefulBase):
                 assert approx(price_scale, price_trader, 1e-3)
             except:  # noqa: E722
                 print("---------- Error!")
-                print("swap xp: ", self.swap.internal.xp())
-                print("swap D: ", self.swap.D())
+                print("swap xp: ", [k / 1e18 for k in self.swap.internal.xp()])
+                print("swap D: ", self.swap.D() / 1e18)
                 print(
                     "swap balances: ",
                     [
-                        self.swap.balances(0),
-                        self.swap.balances(1),
-                        self.swap.balances(2),
+                        self.swap.balances(0) / 1e18,
+                        self.swap.balances(1) / 1e18,
+                        self.swap.balances(2) / 1e18,
                     ],
                 )
                 print("swap A_gamma: ", self.swap.A(), self.swap.gamma())
