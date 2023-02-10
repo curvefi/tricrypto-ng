@@ -128,12 +128,22 @@ class StatefulSimulation(StatefulBase):
             exchange_amount_in, exchange_i, exchange_j, user
         )
 
-        if dy_swap:
+        if not dy_swap:
+            print("swap failed!")
+            print()
+
+        else:
 
             dy_trader = self.trader.buy(
                 exchange_amount_in, exchange_i, exchange_j
             )
-            price = exchange_amount_in * 10**18 // dy_trader
+
+            # we calculate price from a small trade post swap
+            # since this is similar to get_p (analytical price calc):
+            dy_small = self.views.internal._get_dy_nofee(
+                exchange_i, exchange_j, 10**16, self.swap
+            )[0]
+            price = 10**16 * 10**18 // dy_small
 
             print("dy swap: ", dy_swap / 10**18)
             print("dy trader: ", dy_trader / 10**18)
@@ -167,8 +177,6 @@ class StatefulSimulation(StatefulBase):
                 ],
             )
             print()
-            boa.env.time_travel(12)
-            print("time travelled!")
 
     @invariant()
     def simulator(self):
@@ -199,8 +207,6 @@ class StatefulSimulation(StatefulBase):
                     ],
                 )
                 print("swap A_gamma: ", self.swap.A(), self.swap.gamma())
-
-                breakpoint()
 
 
 def test_sim(swap, views_contract, users, pool_coins, tricrypto_factory):
