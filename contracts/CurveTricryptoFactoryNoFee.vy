@@ -30,7 +30,6 @@ event TricryptoPoolDeployed:
     ma_exp_time: uint256
     initial_prices: uint256[N_COINS-1]
     deployer: address
-    implementation: address
 
 event LiquidityGaugeDeployed:
     pool: address
@@ -41,7 +40,6 @@ event UpdateFeeReceiver:
     _new_fee_receiver: address
 
 event UpdatePoolImplementation:
-    _implementtion_id: uint256
     _old_pool_implementation: address
     _new_pool_implementation: address
 
@@ -73,7 +71,7 @@ N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 # Limits
-MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
+MIN_FEE: constant(uint256) = 0
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
 
 MIN_GAMMA: constant(uint256) = 10 ** 10
@@ -94,7 +92,7 @@ future_admin: public(address)
 # fee receiver for all pools:
 fee_receiver: public(address)
 
-pool_implementations: public(HashMap[uint256, address])
+pool_implementation: public(address)
 gauge_implementation: public(address)
 views_implementation: public(address)
 
@@ -145,7 +143,6 @@ def deploy_pool(
     _name: String[32],
     _symbol: String[10],
     _coins: address[N_COINS],
-    implementation_id: uint256,
     A: uint256,
     gamma: uint256,
     mid_fee: uint256,
@@ -160,24 +157,17 @@ def deploy_pool(
     @notice Deploy a new pool
     @param _name Name of the new plain pool
     @param _symbol Symbol for the new plain pool - will be concatenated with factory symbol
-
+    Other parameters need some description
     @return Address of the deployed pool
     """
-    pool_implementation: address = self.pool_implementations[implementation_id]
-    assert pool_implementation != empty(address), "Pool implementation not set"
+    assert self.pool_implementation != empty(address), "Pool implementation not set"
 
     # Validate parameters
     assert A > MIN_A-1
     assert A < MAX_A+1
     assert gamma > MIN_GAMMA-1
     assert gamma < MAX_GAMMA+1
-    assert mid_fee > MIN_FEE-1
-    assert mid_fee < MAX_FEE-1
-    assert out_fee >= mid_fee
-    assert out_fee < MAX_FEE-1
     assert allowed_extra_profit < 10**16+1
-    assert fee_gamma < 10**18+1
-    assert fee_gamma > 0
     assert adjustment_step < 10**18+1
     assert adjustment_step > 0
     assert ma_exp_time < 872542  # 7 * 24 * 60 * 60 / ln(2)
@@ -224,7 +214,7 @@ def deploy_pool(
 
     # pool is an ERC20 implementation
     pool: address = create_from_blueprint(
-        pool_implementation,
+        self.pool_implementation,
         _name,
         _symbol,
         _coins,
@@ -271,8 +261,7 @@ def deploy_pool(
         adjustment_step,
         ma_exp_time,
         initial_prices,
-        msg.sender,
-        pool_implementation
+        msg.sender
     )
 
     return pool
@@ -315,24 +304,16 @@ def set_fee_receiver(_fee_receiver: address):
 
 
 @external
-def set_pool_implementation(
-    _pool_implementation: address, _implementation_index: uint256
-):
+def set_pool_implementation(_pool_implementation: address):
     """
     @notice Set pool implementation
     @dev Set to empty(address) to prevent deployment of new pools
     @param _pool_implementation Address of the new pool implementation
-    @param _implementation_index Index of the pool implementation
     """
     assert msg.sender == self.admin  # dev: admin only
 
-    log UpdatePoolImplementation(
-        _implementation_index,
-        self.pool_implementations[_implementation_index],
-        _pool_implementation
-    )
-
-    self.pool_implementations[_implementation_index] = _pool_implementation
+    log UpdatePoolImplementation(self.pool_implementation, _pool_implementation)
+    self.pool_implementation = _pool_implementation
 
 
 @external

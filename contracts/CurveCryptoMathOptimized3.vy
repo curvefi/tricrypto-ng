@@ -1,11 +1,16 @@
 # @version 0.3.7
-
-# (c) Curve.Fi, 2022
+# (c) Curve.Fi, 2023
 # Math for 3-coin Curve cryptoswap pools
 #
 # Unless otherwise agreed on, only contracts owned by Curve DAO or
 # Swiss Stake GmbH are allowed to call this contract.
 
+"""
+@title CurveTricryptoMathOptimized
+@license MIT
+@author Curve.Fi
+@notice Curve AMM Math for 3 unpegged assets (e.g. ETH, BTC, USD).
+"""
 
 N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
@@ -16,7 +21,7 @@ MAX_GAMMA: constant(uint256) = 5 * 10**16
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER * 1000
 
-version: public(constant(String[8])) = "v1.0.0"
+version: public(constant(String[8])) = "v2.0.0"
 
 
 # ------------------------ AMM math functions --------------------------------
@@ -28,9 +33,26 @@ def get_y(
     _ANN: uint256, _gamma: uint256, x: uint256[N_COINS], _D: uint256, i: uint256
 ) -> uint256[2]:
     """
-    Calculating x[i] given other balances x[0..N_COINS-1] and invariant D
-    ANN = A * N**N
+    @notice Calculate x[i] given other balances x[0..N_COINS-1] and invariant D.
+    @dev ANN = A * N**N . AMM contract's A is actuall ANN.
+    @param _ANN AMM.A() value.
+    @param _gamma AMM.gamma() value.
+    @param x Balances multiplied by prices and precisions of all coins.
+    @param _D Invariant.
+    @param i Index of coin to calculate y.
+    @return y Calculated y.
     """
+
+    # Safety checks
+    assert _ANN > MIN_A - 1 and _ANN < MAX_A + 1, "dev: unsafe values A"
+    assert _gamma > MIN_GAMMA - 1 and _gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe values D"
+
+    for k in range(3):
+        if k != i:
+            frac: uint256 = x[k] * 10**18 / _D
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+
     j: uint256 = 0
     k: uint256 = 0
     if i == 0:
@@ -50,46 +72,49 @@ def get_y(
     x_k: int256 = convert(x[k], int256)
 
     a: int256 = 10**36 / 27
+
+    # 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
     b: int256 = unsafe_sub(
         unsafe_add(
-            10**36 / 9, unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)
+            10**36 / 9,
+            unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)
         ),
         unsafe_div(
             unsafe_div(
                 unsafe_div(
-                    unsafe_mul(
-                        unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN
-                    ),
-                    27**2,
+                    unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN),
+                    27**2
                 ),
-                convert(A_MULTIPLIER, int256),
+                convert(A_MULTIPLIER, int256)
             ),
             x_k,
         ),
     )
+
+    # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = unsafe_add(
         unsafe_add(
             10**36 / 9,
-            unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27),
+            unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27)
         ),
         unsafe_div(
             unsafe_div(
                 unsafe_mul(
-                    unsafe_div(
-                        gamma**2 * (unsafe_sub(unsafe_add(x_j, x_k), D)), D
-                    ),
-                    ANN,
+                    unsafe_div(gamma**2 * (unsafe_sub(unsafe_add(x_j, x_k), D)), D),
+                    ANN
                 ),
-                27,
+                27
             ),
             convert(A_MULTIPLIER, int256),
         ),
     )
+
+    # (10**18 + gamma)**2/27
     d: int256 = unsafe_div(unsafe_add(10**18, gamma)**2, 27)
 
-    d0: int256 = abs(
-        unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b)
-    )
+    # abs(3*a*c/b - b)
+    d0: int256 = abs(unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b))
+
     divider: int256 = 0
     if d0 > 10**48:
         divider = 10**30
@@ -113,27 +138,29 @@ def get_y(
     additional_prec: int256 = 0
     if abs(a) > abs(b):
         additional_prec = abs(a) / abs(b)
+        # a * additional_prec / divider
         a = unsafe_div(unsafe_mul(a, additional_prec), divider)
         b = unsafe_div(unsafe_mul(b, additional_prec), divider)
         c = unsafe_div(unsafe_mul(c, additional_prec), divider)
         d = unsafe_div(unsafe_mul(d, additional_prec), divider)
     else:
         additional_prec = abs(b) / abs(a)
+        # a * additional_prec / divider
         a = unsafe_div(unsafe_div(a, additional_prec), divider)
         b = unsafe_div(unsafe_div(b, additional_prec), divider)
         c = unsafe_div(unsafe_div(c, additional_prec), divider)
         d = unsafe_div(unsafe_div(d, additional_prec), divider)
 
-    delta0: int256 = unsafe_sub(
-        unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b
-    )
+    # 3*a*c/b - b
+    delta0: int256 = unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b)
+
+    # 9*a*c/b - 2*b - 27*a**2/b*d/b
     delta1: int256 = unsafe_sub(
-        unsafe_sub(
-            unsafe_div(unsafe_mul(unsafe_mul(9, a), c), b), unsafe_mul(2, b)
-        ),
+        unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(9, a), c), b), unsafe_mul(2, b)),
         unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(27, a**2), b), d), b),
     )
 
+    # delta1**2 + 4*delta0**2/b*delta0
     sqrt_arg: int256 = unsafe_add(
         delta1**2,
         unsafe_mul(unsafe_div(unsafe_mul(4, delta0**2), b), delta0),
@@ -152,42 +179,43 @@ def get_y(
 
     second_cbrt: int256 = 0
     if delta1 > 0:
+        # convert(self.cbrt(convert((delta1 + sqrt_val), uint256)/2), int256)
         second_cbrt = convert(
-            self._cbrt(
-                unsafe_div(convert((unsafe_add(delta1, sqrt_val)), uint256), 2)
-            ),
+            self._cbrt(unsafe_div(convert((unsafe_add(delta1, sqrt_val)), uint256), 2)),
             int256,
         )
     else:
+        # -convert(self.cbrt(convert(-(delta1 - sqrt_val), uint256)/2), int256)
         second_cbrt = -convert(
-            self._cbrt(
-                unsafe_div(convert(-unsafe_sub(delta1, sqrt_val), uint256), 2)
-            ),
+            self._cbrt(unsafe_div(convert(-unsafe_sub(delta1, sqrt_val), uint256), 2)),
             int256,
         )
 
-    C1: int256 = unsafe_div(
-        unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18
+    # b_cbrt*b_cbrt/10**18*second_cbrt/10**18
+    C1: int256 = unsafe_div(unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18)
+
+    # (b + b*delta0/C1 - C1)/3
+    root_K0: int256 = unsafe_div(
+        unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1),
+        3
     )
 
-    root_K0: int256 = unsafe_div(
-        unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1), 3
-    )
+    # convert(D*D/27/x_k*D/x_j*root_K0/a, uint256)
     root: uint256 = convert(
         unsafe_div(
             unsafe_mul(
-                unsafe_div(
-                    unsafe_mul(unsafe_div(unsafe_div(D**2, 27), x_k), D), x_j
-                ),
-                root_K0,
+                unsafe_div(unsafe_mul(unsafe_div(unsafe_div(D**2, 27), x_k), D), x_j),
+                root_K0
             ),
             a,
         ),
         uint256,
     )
 
-    return [
-        root, convert(unsafe_div(unsafe_mul(10**18, root_K0), a), uint256)
+    # convert(10**18*root_K0/a, uint256) ---------------------------------
+    return [  #                                                           |
+        root,  #                                                          |
+        convert(unsafe_div(unsafe_mul(10**18, root_K0), a), uint256)  # <-
     ]
 
 
@@ -197,21 +225,20 @@ def _newton_y(
     ANN: uint256, gamma: uint256, x: uint256[N_COINS], D: uint256, i: uint256
 ) -> uint256:
 
+    # Calculate x[i] given A, gamma, xp and D using newton's method.
+    # This is the original method; get_y replaces it, but defaults to
+    # this version conditionally.
+
     # Safety checks
     assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"
-    assert (
-        gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1
-    ), "dev: unsafe values gamma"
-    assert (
-        D > 10**17 - 1 and D < 10**15 * 10**18 + 1
-    ), "dev: unsafe values D"
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
+    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1, "dev: unsafe values D"
 
     for k in range(3):
         if k != i:
             frac: uint256 = x[k] * 10**18 / D
-            assert (
-                frac > 10**16 - 1 and frac < 10**20 + 1
-            ), "dev: unsafe values x[i]"
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+
     y: uint256 = D / N_COINS
     K0_i: uint256 = 10**18
     S_i: uint256 = 0
@@ -220,9 +247,7 @@ def _newton_y(
     x_sorted[i] = 0
     x_sorted = self._sort(x_sorted)  # From high to low
 
-    convergence_limit: uint256 = max(
-        max(x_sorted[0] / 10**14, D / 10**14), 100
-    )
+    convergence_limit: uint256 = max(max(x_sorted[0] / 10**14, D / 10**14), 100)
     for j in range(2, N_COINS + 1):
         _x: uint256 = x_sorted[N_COINS - j]
         y = y * D / (_x * N_COINS)  # Small _x first
@@ -326,7 +351,7 @@ def newton_D(
 
     D: uint256 = 0
     if K0_prev == 0:
-        D = N_COINS * self._geometric_mean(x, False)
+        D = N_COINS * self._geometric_mean(x)
     else:
         if S > 10**36:
             D = self._cbrt(
@@ -335,13 +360,13 @@ def newton_D(
                         unsafe_div(
                             unsafe_mul(
                                 unsafe_div(unsafe_mul(x[0], x[1]), 10**36),
-                                x[2],
+                                x[2]
                             ),
-                            K0_prev,
+                            K0_prev
                         ),
-                        27,
+                        27
                     ),
-                    10**12,
+                    10**12
                 )
             )
         elif S > 10**24:
@@ -351,11 +376,11 @@ def newton_D(
                         unsafe_div(
                             unsafe_mul(
                                 unsafe_div(unsafe_mul(x[0], x[1]), 10**24),
-                                x[2],
+                                x[2]
                             ),
-                            K0_prev,
+                            K0_prev
                         ),
-                        27,
+                        27
                     ),
                     10**6,
                 )
@@ -365,11 +390,12 @@ def newton_D(
                 unsafe_mul(
                     unsafe_div(
                         unsafe_mul(
-                            unsafe_div(unsafe_mul(x[0], x[1]), 10**18), x[2]
+                            unsafe_div(unsafe_mul(x[0], x[1]), 10**18),
+                            x[2]
                         ),
-                        K0_prev,
+                        K0_prev
                     ),
-                    27,
+                    27
                 )
             )
 
@@ -395,24 +421,24 @@ def newton_D(
                         unsafe_mul(
                             unsafe_mul(
                                 unsafe_mul(unsafe_mul(10**18, x[0]), N_COINS) / D,
-                                x[1],
+                                x[1]
                             ),
-                            N_COINS,
+                            N_COINS
                         ),
-                        D,
+                        D
                     ),
-                    x[2],
+                    x[2]
                 ),
                 N_COINS,
             ),
             D,
         )
 
-        _g1k0 = gamma + 10**18
+        _g1k0 = unsafe_add(gamma, 10**18)
         if _g1k0 > K0:
-            _g1k0 = _g1k0 - K0 + 1
+            _g1k0 = unsafe_add(unsafe_sub(_g1k0, K0), 1)
         else:
-            _g1k0 = K0 - _g1k0 + 1
+            _g1k0 = unsafe_add(unsafe_sub(K0, _g1k0), 1)
 
 
         # D / (A * N**N) * _g1k0**2 / gamma**2
@@ -422,11 +448,12 @@ def newton_D(
                 unsafe_mul(
                     unsafe_div(
                         unsafe_mul(
-                            unsafe_div(unsafe_mul(10**18, D), gamma), _g1k0
+                            unsafe_div(unsafe_mul(10**18, D), gamma),
+                            _g1k0
                         ),
-                        gamma,
+                        gamma
                     ),
-                    _g1k0,
+                    _g1k0
                 ),
                 A_MULTIPLIER,
             ),
@@ -436,7 +463,8 @@ def newton_D(
         # 2*N*K0 / _g1k0
         # (2 * 10**18) * N_COINS * K0 / _g1k0
         mul2 = unsafe_div(
-            unsafe_mul(unsafe_mul(2 * 10**18, N_COINS), K0), _g1k0
+            unsafe_mul(unsafe_mul(2 * 10**18, N_COINS), K0),
+            _g1k0
         )
 
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
@@ -451,7 +479,8 @@ def newton_D(
         # D -= f / fprime
         # D * (neg_fprime + S) / neg_fprime
         D_plus = unsafe_div(
-            unsafe_mul(D, unsafe_add(neg_fprime, S)), neg_fprime
+            unsafe_mul(D, unsafe_add(neg_fprime, S)),
+            neg_fprime
         )
         # D*D / neg_fprime
         D_minus = unsafe_div(unsafe_mul(D, D), neg_fprime)
@@ -459,9 +488,7 @@ def newton_D(
             # D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
             D_minus += unsafe_div(
                 unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18
-                    ),
+                    unsafe_div(unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18),
                     unsafe_sub(10**18, K0),
                 ),
                 K0,
@@ -470,9 +497,7 @@ def newton_D(
             # D_minus -= D * (mul1 / neg_fprime) / 10**18 * (K0 - 10**18) / K0
             D_minus -= unsafe_div(
                 unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18
-                    ),
+                    unsafe_div(unsafe_mul(D, unsafe_div(mul1, neg_fprime)), 10**18),
                     unsafe_sub(K0, 10**18),
                 ),
                 K0,
@@ -503,9 +528,91 @@ def newton_D(
 
 @external
 @view
-def get_dydx():
-    # TODO: implement dy/dx
-    pass
+def get_p(
+    _xp: uint256[N_COINS],
+    _D: uint256,
+    _A_gamma: uint256[2],
+) -> uint256[N_COINS-1]:
+    """
+    @notice Calculates dx/dy.
+    @dev Output needs to be multiplied with price_scale to get the actual value.
+    @param _xp Balances of the pool.
+    @param _D Current value of D.
+    @param _A_gamma Amplification coefficient and gamma.
+    @return dy/dx for each coin (Except the first one)
+    """
+
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe values D"
+
+    xp: int256[N_COINS] = empty(int256[N_COINS])
+    A_gamma: int256[2] = empty(int256[2])
+
+    D: int256 = convert(_D, int256)
+    for i in range(N_COINS):
+        xp[i] = convert(_xp[i], int256)
+        if i < N_COINS-1:
+            A_gamma[i] = convert(_A_gamma[i], int256)
+
+    # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
+    s1: int256 = unsafe_div(unsafe_mul(unsafe_add(10**18, A_gamma[1]), unsafe_add(-10**18, unsafe_div(unsafe_mul(A_gamma[1], unsafe_add(-2 * 10**18, unsafe_div(unsafe_mul(unsafe_add(-10**18, unsafe_div(unsafe_mul(10**18, A_gamma[0]), 10000)), A_gamma[1]), 10**18))), 10**18))), 10**18)
+
+    # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
+    s2: int256 = unsafe_div(unsafe_mul(A_gamma[1], (unsafe_add(unsafe_add(2*10**18, A_gamma[1]), unsafe_div(unsafe_mul(unsafe_div(unsafe_div(unsafe_mul(10**18*9, A_gamma[0]), 27), 10000), A_gamma[1]), 10**18)))), 10**18)
+    s2 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_mul(81, (10**18 + s2)), xp[0]), D), xp[1]), D), xp[2]), D)
+
+    # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
+    s3: int256 = unsafe_mul(2187, unsafe_add(10**18, A_gamma[1]))
+    s3 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(s3, xp[0]), D), xp[1]), D), xp[2]), D)
+    s3 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(s3, xp[0]), D), xp[1]), D), xp[2]), D)
+
+    # 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
+    s4: int256 = unsafe_mul(10**18 * 19683, xp[0])
+    s4 = unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(s4, D), xp[1]), D), xp[2])
+    s4 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(s4, D), xp[0]), D), xp[1]), D), xp[2]), D), xp[0]), D), xp[1]), D), xp[2]), D)
+
+    a: int256 = s1 + s2 + s4 - s3
+
+    # 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
+    b: int256 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(10**18 * 27, A_gamma[0]), 10000), xp[0]), D), xp[1]), D), xp[2]), D), unsafe_mul(A_gamma[1], A_gamma[1])), D)
+
+    # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
+    c: int256 = unsafe_div(unsafe_mul(unsafe_mul(unsafe_div(A_gamma[0], 10000), unsafe_mul(A_gamma[1], A_gamma[1])), unsafe_add(10**18, A_gamma[1])), D)
+
+    return [
+        self._get_dxdy(xp[1], xp[0], xp[2], a, b, c),
+        self._get_dxdy(xp[2], xp[0], xp[1], a, b, c),
+    ]
+
+@internal
+@view
+def _get_dxdy(
+    x1: int256,
+    x2: int256,
+    x3: int256,
+    a: int256,
+    b: int256,
+    c: int256,
+) -> uint256:
+
+    # p = 10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18) / x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18)
+    p: int256 = unsafe_div(
+        unsafe_mul(
+            unsafe_mul(10**18, x2),
+            unsafe_sub(
+                unsafe_sub(unsafe_mul(10**18, a), unsafe_div(unsafe_mul(b, unsafe_add(x2, x3)), 10**18)),
+                unsafe_div(unsafe_mul(c, unsafe_add(unsafe_add(unsafe_mul(2, x1), x2), x3)), 10**18)
+            )
+        ),
+        unsafe_mul(
+            x1,
+            unsafe_add(
+                unsafe_add(unsafe_mul(-10**18, a), unsafe_div(unsafe_mul(b, unsafe_add(x1, x3)), 10**18)),
+                unsafe_div(unsafe_mul(c, unsafe_add(unsafe_add(x1, unsafe_mul(2, x2)), x3)), 10**18)
+            )
+        )
+    )
+
+    return convert(-p, uint256)
 
 
 # --------------------------- Math Utils -------------------------------------
@@ -514,36 +621,58 @@ def get_dydx():
 @external
 @view
 def cbrt(x: uint256) -> uint256:
+    """
+    @notice Calculate the cubic root of a number in 1e18 precision
+    @dev Consumes around 1500 gas units
+    @param x The number to calculate the cubic root of
+    @return The cubic root of the number
+    """
     return self._cbrt(x)
 
 
 @external
 @view
-def geometric_mean(unsorted_x: uint256[N_COINS], sort: bool = True) -> uint256:
-    return self._geometric_mean(unsorted_x, sort)
+def geometric_mean(_x: uint256[3]) -> uint256:
+    """
+    @notice Calculate the geometric mean of a list of numbers in 1e18 precision.
+    @param _x list of 3 numbers to sort
+    @returns  The geometric mean of the list of numbers
+    """
+    return self._geometric_mean(_x)
 
 
 @external
 @view
 def reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
+    """
+    @notice Calculates the reduction coefficient for the given x and fee_gamma
+    @dev This method is used for calculating fees.
+    @param x The x values
+    @param fee_gamma The fee gamma value
+    """
     return self._reduction_coefficient(x, fee_gamma)
 
 
 @external
 @view
 def wad_exp(_power: int256) -> uint256:
+    """
+    @notice Calculates the e**x with 1e18 precision
+    @param _power The number to calculate the exponential of
+    @return The exponential of the given number
+    """
     return self._exp(_power)
 
 
 @internal
 @pure
 def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
-    """
-    fee_gamma / (fee_gamma + (1 - K))
-    where
-    K = prod(x) / (sum(x) / N)**N
-    (all normalized to 1e18)
-    """
+
+    # fee_gamma / (fee_gamma + (1 - K))
+    # where
+    # K = prod(x) / (sum(x) / N)**N
+    # (all normalized to 1e18)
+
     K: uint256 = 10**18
     S: uint256 = x[0]
     S = unsafe_add(S, x[1])
@@ -556,9 +685,7 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
     K = unsafe_div(unsafe_mul(unsafe_mul(K, N_COINS), x[2]), S)
 
     if fee_gamma > 0:
-        K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(
-            unsafe_add(fee_gamma, 10**18), K
-        )
+        K = unsafe_mul(fee_gamma, 10**18) / unsafe_sub(unsafe_add(fee_gamma, 10**18), K)
 
     return K
 
@@ -566,13 +693,8 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
 @internal
 @pure
 def _exp(_power: int256) -> uint256:
-    """
-    @notice Calculates the e**x with 1e18 precision
-    @param _power The number to calculate the exponential of
-    @return The exponential of the given number
-    """
 
-    # This implementation is borrowed from efforts from transmissions11 and Remco Bloemen:
+    # This implementation is borrowed from transmissions11 and Remco Bloemen:
     # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
     # Method: wadExp
 
@@ -598,38 +720,20 @@ def _exp(_power: int256) -> uint256:
         unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442
     )
     p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
-    p = unsafe_add(
-        unsafe_div(unsafe_mul(p, y), 2**96),
-        28719021644029726153956944680412240,
-    )
-    p = unsafe_add(
-        unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96)
-    )
+    p = unsafe_add(unsafe_div(unsafe_mul(p, y), 2**96), 28719021644029726153956944680412240)
+    p = unsafe_add(unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96))
 
     q: int256 = x - 2855989394907223263936484059900
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945
-    )
-    q = unsafe_sub(
-        unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380
-    )
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        3604857256930695427073651918091429,
-    )
-    q = unsafe_sub(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        14423608567350463180887372962807573,
-    )
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        26449188498355588339934803723976023,
-    )
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 3604857256930695427073651918091429)
+    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 14423608567350463180887372962807573)
+    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 26449188498355588339934803723976023)
 
     return shift(
         unsafe_mul(
             convert(unsafe_div(p, q), uint256),
-            3822833074963236453042738258902158003155416615667,
+            3822833074963236453042738258902158003155416615667
         ),
         unsafe_sub(k, 195),
     )
@@ -638,11 +742,9 @@ def _exp(_power: int256) -> uint256:
 @internal
 @pure
 def _log2(x: uint256) -> int256:
-    """
-    @notice Compute the binary logarithm of `x`
-    @param x The number to compute the logarithm of
-    @return The binary logarithm of `x`
-    """
+
+    # Compute the binary logarithm of `x`
+
     # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
     # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
     #
@@ -673,12 +775,6 @@ def _log2(x: uint256) -> int256:
 @internal
 @pure
 def _cbrt(x: uint256) -> uint256:
-    """
-    @notice Calculate the cubic root of a number in 1e18 precision
-    @dev Consumes around 1500 gas units
-    @param x The number to calculate the cubic root of
-    @return The cubic root of the number
-    """
 
     xx: uint256 = 0
     if x >= 115792089237316195423570985008687907853269 * 10**18:
@@ -716,27 +812,13 @@ def _cbrt(x: uint256) -> uint256:
     # would be one too many iterations. Without initial values, the iteration count
     # can go up to 20 or greater. The iterations are unrolled. This reduces gas costs
     # but takes up more bytecode:
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
-    a = unsafe_div(
-        unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3
-    )
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
+    a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
 
     if x >= 115792089237316195423570985008687907853269 * 10**18:
         return a * 10**12
@@ -748,12 +830,10 @@ def _cbrt(x: uint256) -> uint256:
 
 @internal
 @pure
-def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
-    """
-    @notice Sorts the array of 3 numbers in descending order
-    @param unsorted_x The array to sort
-    @return The sorted array
-    """
+def _sort(unsorted_x: uint256[3]) -> uint256[3]:
+
+    # Sorts a three-array number in a descending order:
+
     x: uint256[N_COINS] = unsorted_x
     temp_var: uint256 = x[0]
     if x[0] < x[1]:
@@ -767,17 +847,17 @@ def _sort(unsorted_x: uint256[N_COINS]) -> uint256[N_COINS]:
         temp_var = x[1]
         x[1] = x[2]
         x[2] = temp_var
+
     return x
 
 
 @internal
 @view
-def _geometric_mean(_x: uint256[3], sort: bool = True) -> uint256:
-    x: uint256[N_COINS] = _x
-    if sort:
-        x = self._sort(_x)
+def _geometric_mean(_x: uint256[3]) -> uint256:
 
-    prod: uint256 = x[0] * x[1] / 10**18 * x[2] / 10**18
+    # calculates a geometric mean for three numbers.
+
+    prod: uint256 = _x[0] * _x[1] / 10**18 * _x[2] / 10**18
     assert prod > 0
 
     return self._cbrt(prod)

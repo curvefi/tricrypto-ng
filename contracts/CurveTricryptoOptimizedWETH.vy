@@ -1,21 +1,23 @@
 # @version 0.3.7
-# (c) Curve.Fi, 2021
-# Pool for 3 coin unpegged assets (e.g. ETH, BTC, USD)
-# note: View methods for `get_dy`, `get_dx`, `calc_token_amounts`
-#       etc. are available in the `views_implementation` of the Factory.
-# note: All prices in the are with respect to the first token in the pool.
+# (c) Curve.Fi, 2023
 
+"""
+@title CurveTricryptoOptimizedWETH
+@license MIT
+@author Curve.Fi
+@notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
+@dev View methods for `get_dy`, `get_dx`, `calc_token_amounts` etc. are available
+     in the `views_implementation` of the Factory.
+@dev All prices in the AMM are with respect to the first token in the pool.
+"""
 
 from vyper.interfaces import ERC20
 implements: ERC20  # <--------------------- AMM contract is also the LP token.
 
 # --------------------------------- Interfaces -------------------------------
 
-interface ERC1271:
-    def isValidSignature(_hash: bytes32, _signature: Bytes[65]) -> bytes32: view
-
 interface Math:
-    def geometric_mean(unsorted_x: uint256[N_COINS]) -> uint256: view
+    def geometric_mean(_x: uint256[N_COINS]) -> uint256: view
     def wad_exp(_power: int256) -> uint256: view
     def cbrt(x: uint256) -> uint256: view
     def reduction_coefficient(
@@ -34,6 +36,9 @@ interface Math:
         D: uint256,
         i: uint256,
     ) -> uint256[2]: view
+    def get_p(
+        _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[2],
+    ) -> uint256[N_COINS-1]: view
 
 interface WETH:
     def deposit(): payable
@@ -116,9 +121,10 @@ event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
 
-event TweakPriceScale:
-    price_scale: uint256[2]
-    adjustment_step: uint256
+event TweakPrices:
+    price_scale: uint256[N_COINS-1]
+    price_oracle: uint256[N_COINS-1]
+    last_prices: uint256[N_COINS-1]
 
 
 # ----------------------- Storage/State Variables ----------------------------
@@ -198,7 +204,7 @@ INF_COINS: constant(uint256) = 15
 name: public(immutable(String[64]))
 symbol: public(immutable(String[32]))
 decimals: public(constant(uint8)) = 18
-version: public(constant(String[8])) = "1"
+version: public(constant(String[8])) = "v2.0.0"
 
 balanceOf: public(HashMap[address, uint256])
 allowance: public(HashMap[address, HashMap[address, uint256]])
@@ -246,7 +252,7 @@ def __init__(
     self.packed_precisions = packed_precisions  # <------- Precisions of coins
     #                            are calculated as 10**(18 - coin.decimals()).
 
-    self.initial_A_gamma = packed_A_gamma  # <------------------ A and gamma.
+    self.initial_A_gamma = packed_A_gamma  # <------------------- A and gamma.
     self.future_A_gamma = packed_A_gamma
 
     self.packed_rebalancing_params = packed_rebalancing_params  # <-- Contains
@@ -292,10 +298,6 @@ def __init__(
 def __default__():
     if msg.value > 0:
         assert WETH20 in self.coins  # dev: ETH not in pool
-        #                                Checks if deployed pool contains ETH.
-        #      This ensures no ETH is stuck in a pool where ETH is not a coin.
-        #            If ETH is sent to a pool that does contain ETH, then the
-        #                         AMM will gulp it during _claim_admin_fees().
 
 
 @internal
@@ -343,6 +345,9 @@ def _transfer_in(
 
         else:
 
+            # --------- This part of the _transfer_in logic is only accessible
+            #                                                    by _exchange.
+
             #                 First call callback logic and then check if pool
             #                  gets dx amounts of _coins[i], revert otherwise.
             b: uint256 = ERC20(_coin).balanceOf(self)
@@ -354,6 +359,8 @@ def _transfer_in(
                 )
             )
             assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+            #                                          ^------ note: dx cannot
+            #                   be 0, so the contract MUST receive some _coin.
 
         if _coin == WETH20:
             WETH(WETH20).withdraw(dx)  # <--------- if WETH was transferred in
@@ -401,6 +408,13 @@ def exchange(
 ) -> uint256:
     """
     @notice Exchange using wrapped native token by default
+    @param i Index value for the input coin
+    @param j Index value for the output coin
+    @param dx Amount of input coin being swapped in
+    @param min_dy Minimum amount of output coin to receive
+    @param use_eth True if the input coin is native token, False otherwise
+    @param receiver Address to send the output coin to. Default is msg.sender
+    @returns dy Amount of output coin received
     """
     return self._exchange(
         msg.sender,
@@ -428,6 +442,12 @@ def exchange_underlying(
 ) -> uint256:
     """
     @notice Exchange using native token transfers.
+    @param i Index value for the input coin
+    @param j Index value for the output coin
+    @param dx Amount of input coin being swapped in
+    @param min_dy Minimum amount of output coin to receive
+    @param receiver Address to send the output coin to. Default is msg.sender
+    @returns dy Amount of output coin received
     """
     return self._exchange(
         msg.sender,
@@ -457,17 +477,23 @@ def exchange_extended(
 ) -> uint256:
     """
     @notice Exchange with callback method.
-    @dev This method does not allow native token as input, but does allow
-         swaps that return native token.
+    @dev This method does not allow swapping in native token, but does allow
+         swaps that transfer out native token from the pool.
+    @param i Index value for the input coin
+    @param j Index value for the output coin
+    @param dx Amount of input coin being swapped in
+    @param min_dy Minimum amount of output coin to receive
+    @param use_eth True if output is native token, False otherwise
+    @param sender Address to transfer input coin from
+    @param receiver Address to send the output coin to
+    @param cb Callback signature
+    @returns dy Amount of output coin received
     """
 
     assert cb != empty(bytes32)  # dev: No callback specified
     return self._exchange(
         sender, 0, i, j, dx, min_dy, use_eth, receiver, msg.sender, cb
-    )  #        ^ --------------------- ^ ------- msg.value is set to 0, since
-    # ------- this method cannot receive ETH (because ETH has no transferFrom)
-    # ----------- but the _exchange method can return ETH (or native token) to
-    # -------------------------------- the receiver if use_eth is set to True.
+    )  # callbacker should never be self ------------------^
 
 
 @payable
@@ -479,6 +505,14 @@ def add_liquidity(
     use_eth: bool = False,
     receiver: address = msg.sender
 ) -> uint256:
+    """
+    @notice Adds liquidity into the pool.
+    @param amounts Amounts of each coin to add.
+    @param min_mint_amount Minimum amount of LP to mint.
+    @param use_eth True if native token is being added to the pool.
+    @param receiver Address to send the LP tokens to. Default is msg.sender
+    @returns d_token Amount of LP tokens minted
+    """
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
@@ -560,14 +594,7 @@ def add_liquidity(
 
     # -------------------- Calculate LP tokens to mint -----------------------
 
-    check_loss: bool = True
     if self.future_A_gamma_time > block.timestamp:  # <--- A_gamma is ramping.
-
-        check_loss = False  # <----------- If the A_gamma is undergoing a ramp
-        #          then new virtual_price can be lower than old virtual_price.
-        #          In this case, we want to switch off this Loss check so that
-        #       the pool continues to function even during a ramp and collects
-        #                                          profits to offset the loss.
 
         # ----- Recalculate the invariant if A or gamma are undergoing a ramp.
         old_D = MATH.newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
@@ -597,46 +624,8 @@ def add_liquidity(
         token_supply += d_token
         self.mint(receiver, d_token)
 
-        # Calculate price
-        # p_i * (dx_i - dtoken / token_supply * xx_i) = sum{k!=i}(p_k * (dtoken / token_supply * xx_k - dx_k))
-        # Only ix is nonzero
-        p: uint256 = 0
+        self.tweak_price(A_gamma, xp, D, 0)
 
-        if d_token > 10**5:
-
-            if ix < N_COINS:  # <----------- adding only one coin at index ix.
-
-                S: uint256 = 0
-                last_prices: uint256[N_COINS - 1] = self._unpack_prices(
-                    self.last_prices_packed
-                )
-
-                # -------------------- Calculate prices post liquidity action.
-                for i in range(N_COINS):
-                    if i != ix:
-                        if i == 0:
-                            S += xx[0] * precisions[0]
-                        else:
-                            S += (
-                                xx[i]
-                                * last_prices[i - 1]
-                                * precisions[i]
-                                / PRECISION
-                            )
-
-                S = S * d_token / token_supply
-                p = (
-                    S
-                    * PRECISION
-                    / (
-                        amounts[ix] * precisions[ix]
-                        - d_token * xx[ix] * precisions[ix] / token_supply
-                    )
-                )
-
-        self.tweak_price(A_gamma, xp, ix, p, D, 0, check_loss)
-        #                                 ^----------       p=0 if more than 2
-        #                                           coins are being deposited.
 
     else:
 
@@ -659,7 +648,7 @@ def remove_liquidity(
     min_amounts: uint256[N_COINS],
     use_eth: bool = False,
     receiver: address = msg.sender
-) -> uint256[3]:
+) -> uint256[N_COINS]:
     """
     @notice This withdrawal method is very safe, does no complex math since
             tokens are withdrawn in balanced proportions. No fees are charged.
@@ -667,7 +656,7 @@ def remove_liquidity(
     @param min_amounts Minimum amounts of tokens to withdraw
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
-    @return Amounts of tokens withdrawn
+    @return d_balances Amounts of tokens withdrawn
     """
     amount: uint256 = _amount
     balances: uint256[N_COINS] = self.balances
@@ -678,7 +667,7 @@ def remove_liquidity(
     total_supply: uint256 = self.totalSupply  # <------ Get totalSupply before
     self.burnFrom(msg.sender, _amount)  # ---- reducing it with self.burnFrom.
 
-    #                There are two cases for withdrawing tokens from the pool.
+    # There are two cases for withdrawing tokens from the pool.
     #   Case 1. Withdrawal does not empty the pool.
     #           In this situation, D is adjusted proportional to the amount of
     #           LP tokens burnt. ERC20 tokens transferred is proportional
@@ -729,7 +718,15 @@ def remove_liquidity_one_coin(
     receiver: address = msg.sender
 ) -> uint256:
     """
-    @notice Withdraw liquidity in a single token. Involves fees.
+    @notice Withdraw liquidity in a single token.
+            Involves fees (lower than swap fees).
+    @dev This operation also involves an admin fee claim.
+    @param token_amount Amount of LP tokens to burn
+    @param i Index of the token to withdraw
+    @param min_amount Minimum amount of token to withdraw.
+    @param use_eth Whether to withdraw ETH or not
+    @param receiver Address to send the withdrawn tokens to
+    @return dy Amount of token withdrawn
     """
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -743,21 +740,13 @@ def remove_liquidity_one_coin(
 
     # ------------------------------------------------------------------------
 
-    check_loss: bool = True
-    if self.future_A_gamma_time > block.timestamp:
-        check_loss = False  # <---- If A and/or gamma are being ramped, do not
-        #       check if re-computed virtual price after removing liquidity is
-        #                     above the current virtual price. This is because
-        #                    ramping of pool parameters can cause pool losses.
-
-    dy, p, D, xp, approx_fee = self._calc_withdraw_one_coin(
-        A_gamma, token_amount, i, not check_loss, True
-    )  #                           ^
-    #                              ^--- If check_loss is True, then `update_D`
-    #                    is False and vice versa. We need to update D if ramps
-    #               are happening. This is because the invariant experiences a
-    #                 change while parameter ramping. If we do not recalculate
-    #      invariant during ramping, then the calculated dy will be incorrect.
+    dy, D, xp, approx_fee = self._calc_withdraw_one_coin(
+        A_gamma,
+        token_amount,
+        i,
+        (self.future_A_gamma_time > block.timestamp),  # <------- During ramps
+        True  #                                           we need to update D.
+    )
 
     assert dy >= min_amount, "Slippage"
 
@@ -767,15 +756,15 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    self.tweak_price(A_gamma, xp, i, p, D, 0, check_loss)
-    #                                ^---- p > 0 since one coin being removed.
-
-    self._claim_admin_fees()  # <----------- Because virtual_price can go down
-    #       slightly, there can be instances where `remove_liquidity_one_coin`
-    #                can result in the virtual price going down slightly, even
-    #                             if this loss check happens in `tweak_price`.
+    self.tweak_price(A_gamma, xp, D, 0)
 
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
+
+    self._claim_admin_fees()  # <----------- Because virtual_price can go down
+    #       slightly, there can be instances where the virtual price goes down
+    #           for `remove_liquidity_one_coin` operations. Loss checks happen
+    #            in the previous step, so it is safe to claim admin fees after
+    #                                          removing liquidity in one coin.
 
     return dy
 
@@ -783,6 +772,9 @@ def remove_liquidity_one_coin(
 @external
 @nonreentrant("lock")
 def claim_admin_fees():
+    """
+    @notice Claim admin fees. Callable by anyone.
+    """
     self._claim_admin_fees()
 
 
@@ -818,6 +810,11 @@ def _unpack(_packed: uint256) -> uint256[3]:
 @internal
 @view
 def _pack_prices(prices_to_pack: uint256[N_COINS-1]) -> uint256:
+    """
+    @notice Packs N_COINS-1 prices into a uint256.
+    @param prices_to_pack The prices to pack
+    @return The packed uint256
+    """
     packed_prices: uint256 = 0
     p: uint256 = 0
     for k in range(N_COINS - 1):
@@ -831,6 +828,11 @@ def _pack_prices(prices_to_pack: uint256[N_COINS-1]) -> uint256:
 @internal
 @view
 def _unpack_prices(_packed_prices: uint256) -> uint256[2]:
+    """
+    @notice Unpacks N_COINS-1 prices from a uint256.
+    @param _packed_prices The packed prices
+    @return The unpacked prices
+    """
     unpacked_prices: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
     packed_prices: uint256 = _packed_prices
     for k in range(N_COINS - 1):
@@ -858,8 +860,6 @@ def _exchange(
 ) -> uint256:
 
     assert i != j  # dev: coin index out of range
-    assert i < N_COINS  # dev: coin index out of range
-    assert j < N_COINS  # dev: coin index out of range
     assert dx > 0  # dev: do not exchange 0 coins
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -867,8 +867,8 @@ def _exchange(
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
     dy: uint256 = 0
 
-    y: uint256 = xp[j]
-    x0: uint256 = xp[i]
+    y: uint256 = xp[j]  # <----------------- if j > N_COINS, this will revert.
+    x0: uint256 = xp[i]  # <--------------- if i > N_COINS, this will  revert.
     xp[i] = x0 + dx
     self.balances[i] = xp[i]
 
@@ -888,12 +888,7 @@ def _exchange(
     # ----------- Update invariant if A, gamma are undergoing ramps ---------
 
     t: uint256 = self.future_A_gamma_time
-    check_loss: bool = True
     if t > block.timestamp:
-
-        check_loss = False  # <----------------- Do not check loss if ramping.
-        #     This is because during ramping, virtual_price can go down. If it
-        #  does, then the check will raise an error and the AMM will not work.
 
         x0 *= prec_i
 
@@ -909,11 +904,8 @@ def _exchange(
 
     D: uint256 = self.D
     prec_j: uint256 = precisions[j]
-    y_out: uint256[2] = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
-    dy = xp[j] - y_out[0]  # <------------------------- y_out[0] is the new y.
-
-    xp[j] -= dy  # <----------------------------- Not defining new "y" here to
-    #                     have less variables / make subsequent calls cheaper.
+    dy = xp[j] - MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[0]
+    xp[j] -= dy
     dy -= 1
 
     if j > 0:
@@ -928,6 +920,11 @@ def _exchange(
     y -= dy
     self.balances[j] = y  # <----------- Update pool balance of outgoing coin.
 
+    y *= prec_j
+    if j > 0:
+        y = y * price_scale[j - 1] / PRECISION
+    xp[j] = y  # <------------------------------------------------- Update xp.
+
     # ---------------------- Do Transfers in and out -------------------------
 
     ########################## TRANSFER IN <-------
@@ -940,61 +937,10 @@ def _exchange(
     ########################## -------> TRANSFER OUT
     self._transfer_out(self.coins[j], dy, use_eth, receiver)
 
-    # --------------------- Calculate and adjust prices ----------------------
-
-    y *= prec_j
-    if j > 0:
-        y = y * price_scale[j - 1] / PRECISION
-    xp[j] = y  # <------------------------------------------------- Update xp.
-
-    # ------------------------------------------------------ Calculate prices.
-    p: uint256 = 0
-    ix: uint256 = j
-
-    if dx > 10**5 and dy > 10**5:
-        _dx: uint256 = dx * prec_i
-        _dy: uint256 = dy * prec_j
-        if i != 0 and j != 0:
-
-            p = (
-                (
-                    shift(
-                        self.last_prices_packed,
-                        -PRICE_SIZE * convert(i - 1, int256)
-                    )
-                    & PRICE_MASK
-                )
-                * _dx
-                / _dy
-            )
-
-        elif i == 0:
-
-            p = _dx * 10**18 / _dy
-
-        else:  # <---------------- If j == 0, then we tweak based on the trade
-            #                                           price of the ith coin.
-            p = _dy * 10**18 / _dx
-            ix = i
-
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
-    y_out = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)  # <-- We recalculate
-    #      y_out post-adjustment of pool balances, to get the initial estimate
-    #     for newton_D. This is an extra operation that allows faster newton_D
-    #           convergence, and ends up saving between 10-20k gas on average.
-
-    #       y_out needs to be recalculated again since the initial estimate is
-    #           sensitive to pool balances. If pool balances are updated after
-    #                a get_y call, K0_prev (the input to calculate the initial
-    #           estimate for D) becomes stale. While some error is acceptable,
-    #           we re-calculate to stay on the safe side. This is not repeated
-    #        for add_liquidity and remove_liquidity_one_coin since gas savings
-    #          there were not interesting enough to introduce this complexity.
-
-    self.tweak_price(A_gamma, xp, ix, p, 0, y_out[1], check_loss)
-    #                                 ^  ^--------- recalculate invariant (D).
-    #                                 ^------- p > 0 since 1 coin is involved.
+    K0_prev: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[1]
+    self.tweak_price(A_gamma, xp, 0, K0_prev)
 
     log TokenExchange(sender, i, dx, j, dy, fee)
 
@@ -1005,23 +951,19 @@ def _exchange(
 def tweak_price(
     A_gamma: uint256[2],
     _xp: uint256[N_COINS],
-    i: uint256,
-    p_i: uint256,
     new_D: uint256,
     K0_prev: uint256 = 0,
-    check_loss: bool = True,
 ):
     """
-    @notice Conditionally adjust prices around which liquidity is distributed.
+    @notice Tweaks price_oracle, last_price and conditionally adjusts
+            price_scale. This is called whenever there is an unbalanced
+            liquidity operation: _exchange, add_liquidity, or
+            remove_liquidity_one_coin.
     @dev Contains main liquidity rebalancing logic, by tweaking `price_scale`.
     @param A_gamma Array of A and gamma parameters.
     @param _xp Array of current balances.
-    @param i Index of the coin to tweak.
-    @param p_i Current price of the coin.
     @param new_D New D value.
     @param K0_prev Initial guess for `newton_D`.
-    @param check_loss Boolean flag, if activated, will check if virtual price
-           decreases.
     """
 
     # ---------------------------- Read storage ------------------------------
@@ -1072,54 +1014,21 @@ def tweak_price(
         self.price_oracle_packed = self._pack_prices(price_oracle)
         self.last_prices_timestamp = block.timestamp  # <---- Store timestamp.
 
+    #                  price_oracle is used further on to calculate its vector
+    #            distance from price_scale. This distance is used to calculate
+    #                  the amount of adjustment to be done to the price_scale.
+
     # ------------------ If new_D is set to 0, calculate it ------------------
 
     D_unadjusted: uint256 = new_D  # <- Withdrawal methods know new D already.
     if new_D == 0:  # <----------------- _exchange method does not know new D.
-        D_unadjusted = (
-            MATH.newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
-        )
+        D_unadjusted = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
 
     # ----------------------- Calculate last_prices --------------------------
 
-    if p_i > 0:  # < ---------- If the liquidity action triggering tweak_price
-        #       involves a single token in or out, then p_i will be zero. This
-        #           occurs in add_liquidity for a single token, _exchange, and
-        #            remove_liquidity_one_coin. The calculation of last_prices
-        #                                              in this case is simple.
-
-        if i > 0:
-            last_prices[i - 1] = p_i
-        else:
-            for k in range(N_COINS - 1):
-                last_prices[k] = last_prices[k] * 10**18 / p_i  # <---- If 0th
-                #                   price changed - change all prices instead.
-    else:
-
-        #                     Liquidity action triggering tweak_price involves
-        #           multiple tokens. So the input for p_i == 0. We now need to
-        #     calculate last_prices for multiple tokens, which involves get_y.
-
-        __xp: uint256[N_COINS] = _xp
-        dx_price: uint256 = __xp[0] / 10**6
-        __xp[0] += dx_price
-
-        y_out: uint256[2] = empty(uint256[2])
-
-        for k in range(N_COINS - 1):
-
-            y_out = MATH.get_y(
-                A_gamma[0],
-                A_gamma[1],
-                __xp,
-                D_unadjusted,
-                k + 1
-            )
-
-            last_prices[k] = (
-                price_scale[k] * dx_price / (_xp[k + 1] - y_out[0])
-            )
-
+    last_prices = MATH.get_p(_xp, D_unadjusted, A_gamma)
+    for k in range(N_COINS - 1):
+        last_prices[k] = last_prices[k] * price_scale[k] / 10**18
     self.last_prices_packed = self._pack_prices(last_prices)
 
     # ------- Update profit numbers without price adjustment first -----------
@@ -1128,6 +1037,8 @@ def tweak_price(
     xp[0] = unsafe_div(D_unadjusted, N_COINS)
     for k in range(N_COINS - 1):
         xp[k + 1] = D_unadjusted * 10**18 / (N_COINS * price_scale[k])
+
+    # ------------------------- Update xcp_profit ----------------------------
 
     xcp_profit: uint256 = 10**18
     virtual_price: uint256 = 10**18
@@ -1139,12 +1050,12 @@ def tweak_price(
         xcp_profit = unsafe_div(
             old_xcp_profit * virtual_price,
             old_virtual_price
-        )  # <---------------- Safe to do unsafe_div as old_virtual_price > 0.
+        )  # <---------------- Safu to do unsafe_div as old_virtual_price > 0.
 
         #       If A and gamma are not undergoing ramps (t < block.timestamp),
         #         ensure new virtual_price is not less than old virtual_price,
         #                                        else the pool suffers a loss.
-        if check_loss:
+        if self.future_A_gamma_time < block.timestamp:
             assert virtual_price > old_virtual_price, "Loss"
 
     self.xcp_profit = xcp_profit
@@ -1155,6 +1066,8 @@ def tweak_price(
 
         # ------------------- Get adjustment step ----------------------------
 
+        #                Calculate the vector distance between price_scale and
+        #                                                        price_oracle.
         norm: uint256 = 0
         ratio: uint256 = 0
         for k in range(N_COINS - 1):
@@ -1165,20 +1078,20 @@ def tweak_price(
                 ratio = unsafe_sub(10**18, ratio)
             norm = unsafe_add(norm, ratio**2)
 
-        norm = isqrt(norm)
+        norm = isqrt(norm)  # <-------------------- isqrt is not in base 1e18.
         adjustment_step: uint256 = max(
             rebalancing_params[1], unsafe_div(norm, 5)
         )  #           ^------------------------------------- adjustment_step.
 
-        if norm > adjustment_step and old_virtual_price > 0:  # <----- We only
-            #                     adjust prices if the vector distance between
-            #         price_oracle and price_scale is large enough. This check
-            #            ensures that no rebalancing occurs if the distance is
-            #        low i.e. the pool prices are pegged to the oracle prices.
+        if norm > adjustment_step:  # <---------- We only adjust prices if the
+            #          vector distance between price_oracle and price_scale is
+            #             large enough. This check ensures that no rebalancing
+            #           occurs if the distance is low i.e. the pool prices are
+            #                                     pegged to the oracle prices.
+
+            # ------------------------------------- Calculate new price scale.
 
             p_new: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-
-            # -------------- Calculate new price scale -----------------------
             for k in range(N_COINS - 1):
                 p_new[k] = unsafe_div(
                     price_scale[k] * unsafe_sub(norm, adjustment_step)
@@ -1192,15 +1105,20 @@ def tweak_price(
                 xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
 
             # ------------------------------------------ Update D with new xp.
-            D: uint256 = (
-                MATH.newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
-            )
+            D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
+
+            for k in range(N_COINS):
+                frac: uint256 = xp[k] * 10**18 / D  # <----- Check validity of
+                assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  #   p_new.
+                #                       In an balanced pool, frac is 10**18/3.
 
             xp[0] = D / N_COINS
             for k in range(N_COINS - 1):
-                xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
+                xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])  # <---- Convert
+                #                                           xp to real prices.
 
-            # ------ Reuse `old_virtual_price` (but it has new virtual_price).
+            # ---------- Calculate new virtual_price using new xp and D. Reuse
+            #              `old_virtual_price` (but it has new virtual_price).
             old_virtual_price = (
                 10**18 * MATH.geometric_mean(xp) / total_supply
             )
@@ -1215,13 +1133,15 @@ def tweak_price(
                 self.D = D
                 self.virtual_price = old_virtual_price
 
-                log TweakPriceScale(p_new, adjustment_step)  # <--- Log tweak.
+                log TweakPrices(p_new, price_oracle, last_prices)
 
                 return  # <------------------------- Return if we've adjusted.
 
     # --------- price_scale was not adjusted. Update the profit counter and D.
     self.D = D_unadjusted
     self.virtual_price = virtual_price
+
+    log TweakPrices(price_scale, price_oracle, last_prices)
 
 
 @internal
@@ -1298,6 +1218,7 @@ def _claim_admin_fees():
 @internal
 @view
 def xp() -> uint256[N_COINS]:
+
     result: uint256[N_COINS] = self.balances
     packed_prices: uint256 = self.price_scale_packed
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
@@ -1391,7 +1312,7 @@ def _calc_withdraw_one_coin(
     i: uint256,
     update_D: bool,
     calc_price: bool,
-) -> (uint256, uint256, uint256, uint256[N_COINS], uint256):
+) -> (uint256, uint256, uint256[N_COINS], uint256):
 
     token_supply: uint256 = self.totalSupply
     assert token_amount <= token_supply  # dev: token amount more than supply
@@ -1401,6 +1322,8 @@ def _calc_withdraw_one_coin(
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
     xp: uint256[N_COINS] = precisions
     D0: uint256 = 0
+
+    # -------------------------- Calculate D0 and xp -------------------------
 
     price_scale_i: uint256 = PRECISION * precisions[0]
     packed_prices: uint256 = self.price_scale_packed
@@ -1439,32 +1362,7 @@ def _calc_withdraw_one_coin(
     dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
     xp[i] = y_out[0]
 
-    # --------------------------------- Price calc ---------------------------
-
-    p: uint256 = 0
-    if calc_price and dy > 10**5 and token_amount > 10**5:
-
-        # p_i = dD / D0 * sum'(p_k * x_k) / (dy - dD / D0 * y0)
-        S: uint256 = 0
-        last_prices: uint256[N_COINS - 1] = self._unpack_prices(
-            self.last_prices_packed
-        )
-
-        for k in range(N_COINS):
-            if k != i:
-                if k == 0:
-                    S += xx[0] * precisions[0]
-                else:
-                    S += xx[k] * last_prices[k - 1] * precisions[k] / PRECISION
-
-        S = S * dD / D0
-        p = (
-            S
-            * PRECISION
-            / (dy * precisions[i] - dD * xx[i] * precisions[i] / D0)
-        )
-
-    return dy, p, D, xp, approx_fee
+    return dy, D, xp, approx_fee
 
 
 # ------------------------ ERC20 functions -----------------------------------
@@ -1646,6 +1544,7 @@ def mint(_to: address, _value: uint256) -> bool:
          proper events are emitted.
     @param _to The account that will receive the created tokens.
     @param _value The amount that will be created.
+    @returns bool True if the operation was successful.
     """
     self.totalSupply += _value
     self.balanceOf[_to] += _value
@@ -1658,6 +1557,9 @@ def mint(_to: address, _value: uint256) -> bool:
 def mint_relative(_to: address, frac: uint256) -> uint256:
     """
     @dev Increases supply by factor of (1 + frac/1e18) and mints it for _to
+    @param _to The account that will receive the created tokens.
+    @param frac The fraction of the current supply to mint.
+    @returns d_supply The amount minted.
     """
     supply: uint256 = self.totalSupply
     d_supply: uint256 = supply * frac / 10**18
@@ -1675,6 +1577,7 @@ def burnFrom(_to: address, _value: uint256) -> bool:
     @dev Burn an amount of the token from a given account.
     @param _to The account whose tokens will be burned.
     @param _value The amount that will be burned.
+    @returns bool True if the operation was successful.
     """
     self.totalSupply -= _value
     self.balanceOf[_to] -= _value
@@ -1690,20 +1593,29 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 @view
 @nonreentrant("lock")
 def lp_price() -> uint256:
+    """
+    @notice Calculates the current price of the LP token.
+    @return The price of the LP token w.r.t the coin at 0th index.
+    """
 
     price_oracle: uint256[N_COINS-1] = self._unpack_prices(
         self.price_oracle_packed
     )
     return (
         3 * self.virtual_price *
-        MATH.geometric_mean([10**18, price_oracle[0], price_oracle[1]])
-    ) / 10**18
+        MATH.cbrt(price_oracle[0] * price_oracle[1])
+    ) / 10**24
 
 
 @external
 @view
 @nonreentrant("lock")
 def get_virtual_price() -> uint256:
+    """
+    @notice Calculates the current virtual price of the pool LP token.
+    @dev Not to be confused with `self.virtual_price` which is a cached
+         virtual price.
+    """
     return 10**18 * self.get_xcp(self.D) / self.totalSupply
 
 
@@ -1711,6 +1623,14 @@ def get_virtual_price() -> uint256:
 @view
 @nonreentrant("lock")
 def price_oracle(k: uint256) -> uint256:
+    """
+    @notice Returns the oracle price of the coin at index `k` w.r.t the coin
+            at index 0.
+    @dev The oracle is an exponential moving average, with a periodicity
+         determined by `self.ma_time`. The aggregated prices are cached state
+         prices (dy/dx) calculated AFTER the latest trade.
+    @param k The index of the coin.
+    """
     price_oracle: uint256 = self._unpack_prices(self.price_oracle_packed)[k]
     last_prices_timestamp: uint256 = self.last_prices_timestamp
 
@@ -1736,18 +1656,36 @@ def price_oracle(k: uint256) -> uint256:
 @external
 @view
 def last_prices(k: uint256) -> uint256:
+    """
+    @notice Returns last price of the coin at index `k` w.r.t the coin
+            at index 0.
+    @param k The index of the coin.
+    """
     return self._unpack_prices(self.last_prices_packed)[k]
 
 
 @external
 @view
 def price_scale(k: uint256) -> uint256:
+    """
+    @notice Returns the price scale of the coin at index `k` w.r.t the coin
+            at index 0.
+    @dev Price scale determines the price band around which liquidity is
+         concentrated.
+    @param k The index of the coin.
+    """
     return self._unpack_prices(self.price_scale_packed)[k]
 
 
 @external
 @view
 def fee() -> uint256:
+    """
+    @notice Returns the fee charged by the pool at current state.
+    @dev Not to be confused with the fee charged at liquidity action, since
+         there the fee is calculated on `xp` AFTER liquidity is added or
+         removed.
+    """
     return self._fee(self.xp())
 
 
@@ -1771,30 +1709,48 @@ def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
 def calc_token_fee(
     amounts: uint256[N_COINS], xp: uint256[N_COINS]
 ) -> uint256:
+    """
+    @notice Returns the fee charged on the given amounts for add_liquidity.
+    @param amounts The amounts of coins being added to the pool.
+    @param xp The current balances of the pool multiplied by coin precisions.
+    """
     return self._calc_token_fee(amounts, xp)
 
 
 @view
 @external
 def A() -> uint256:
+    """
+    @notice Returns the current pool amplification parameter.
+    """
     return self._A_gamma()[0]
 
 
 @view
 @external
 def gamma() -> uint256:
+    """
+    @notice Returns the current pool gamma parameter.
+    """
     return self._A_gamma()[1]
 
 
 @view
 @external
 def precisions() -> uint256[N_COINS]:  # <-------------- For by view contract.
+    """
+    @notice Returns the precisions of each coin in the pool.
+    """
     return self._unpack(self.packed_precisions)
 
 
 @external
 @view
 def fee_calc(xp: uint256[N_COINS]) -> uint256:  # <----- For by view contract.
+    """
+    @notice Returns the fee charged by the pool at current state.
+    @param xp The current balances of the pool multiplied by coin precisions.
+    """
     return self._fee(xp)
 
 
@@ -1814,6 +1770,13 @@ def DOMAIN_SEPARATOR() -> bytes32:
 def ramp_A_gamma(
     future_A: uint256, future_gamma: uint256, future_time: uint256
 ):
+    """
+    @notice Initialise Ramping A and gamma parameter values linearly.
+    @dev Only accessible by factory admin, and only
+    @param future_A The future A value.
+    @param future_gamma The future gamma value.
+    @param future_time The timestamp at which the ramping will end.
+    """
     assert msg.sender == Factory(self.factory).admin()  # dev: only owner
     assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1)  # dev: ramp undergoing
     assert future_time > block.timestamp + MIN_RAMP_TIME - 1  # dev: insufficient time
@@ -1855,6 +1818,10 @@ def ramp_A_gamma(
 
 @external
 def stop_ramp_A_gamma():
+    """
+    @notice Stop Ramping A and gamma parameters immediately.
+    @dev Only accessible by factory admin.
+    """
     assert msg.sender == Factory(self.factory).admin()  # dev: only owner
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -1879,6 +1846,16 @@ def commit_new_parameters(
     _new_adjustment_step: uint256,
     _new_ma_time: uint256,
 ):
+    """
+    @notice Commit new parameters.
+    @dev Only accessible by factory admin.
+    @param _new_mid_fee The new mid fee.
+    @param _new_out_fee The new out fee.
+    @param _new_fee_gamma The new fee gamma.
+    @param _new_allowed_extra_profit The new allowed extra profit.
+    @param _new_adjustment_step The new adjustment step.
+    @param _new_ma_time The new ma time. ma_time is time_in_seconds/ln(2).
+    """
     assert msg.sender == Factory(self.factory).admin()  # dev: only owner
     assert self.admin_actions_deadline == 0  # dev: active action
 
@@ -1950,6 +1927,11 @@ def commit_new_parameters(
 @external
 @nonreentrant("lock")
 def apply_new_parameters():
+    """
+    @notice Apply new parameters.
+    @dev Only accessible by factory admin. Only callable after
+         admin_actions_deadline.
+    """
     assert msg.sender == Factory(self.factory).admin()  #dev: only owner
     assert block.timestamp >= self.admin_actions_deadline  #dev: insufficient time
     assert self.admin_actions_deadline != 0  #dev: no active action
@@ -1977,5 +1959,10 @@ def apply_new_parameters():
 
 @external
 def revert_new_parameters():
+    """
+    @notice Revert committed parameters
+    @dev Only accessible by factory admin. Setting admin_actions_deadline to 0
+         ensures a revert in apply_new_parameters.
+    """
     assert msg.sender == Factory(self.factory).admin()  # dev: only owner
     self.admin_actions_deadline = 0

@@ -35,6 +35,7 @@ def swap(
             "Curve.fi USDC-BTC-ETH",
             "USDCBTCETH",
             [coin.address for coin in pool_coins],
+            0,  # <-------- 0th implementation index
             params["A"],
             params["gamma"],
             params["mid_fee"],
