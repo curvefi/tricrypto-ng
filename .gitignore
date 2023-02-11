@@ -104,6 +104,7 @@ celerybeat.pid
 .venv
 env/
 venv/
+profile-venv/
 ENV/
 env.bak/
 venv.bak/
@@ -141,3 +142,6 @@ reports/
 # data
 /data
 todo.txt
+
+# misc
+requirements-profiling.txt

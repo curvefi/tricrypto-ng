@@ -1107,20 +1107,15 @@ def tweak_price(
             # ------------------------------------------ Update D with new xp.
             D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
 
+            for k in range(N_COINS):
+                frac: uint256 = xp[k] * 10**18 / D  # <----- Check validity of
+                assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  #   p_new.
+                #                       In an balanced pool, frac is 10**18/3.
+
             xp[0] = D / N_COINS
             for k in range(N_COINS - 1):
-                xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])
-
-            # -------------------------------- Check that xp is within bounds.
-            #                               Perfectly balanced pools will have
-            #          _x/D == 333333333333333333 (or 0.33) since each coin is
-            #                                     1/3rd the value of the pool.
-            for _x in xp:
-                frac: uint256 = _x * 10**18 / D
-                assert (frac > 10**16 - 1) and (frac < 10**20 + 1)
-
-            #               If a pool is severely imbalanced, the above fails.
-            #                         LPs can withdraw via `remove_liquidity`.
+                xp[k + 1] = D * 10**18 / (N_COINS * p_new[k])  # <---- Convert
+                #                                           xp to real prices.
 
             # ---------- Calculate new virtual_price using new xp and D. Reuse
             #              `old_virtual_price` (but it has new virtual_price).

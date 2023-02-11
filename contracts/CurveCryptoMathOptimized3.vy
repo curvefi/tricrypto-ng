@@ -43,6 +43,16 @@ def get_y(
     @return y Calculated y.
     """
 
+    # Safety checks
+    assert _ANN > MIN_A - 1 and _ANN < MAX_A + 1, "dev: unsafe values A"
+    assert _gamma > MIN_GAMMA - 1 and _gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe values D"
+
+    for k in range(3):
+        if k != i:
+            frac: uint256 = x[k] * 10**18 / _D
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+
     j: uint256 = 0
     k: uint256 = 0
     if i == 0:
@@ -62,6 +72,8 @@ def get_y(
     x_k: int256 = convert(x[k], int256)
 
     a: int256 = 10**36 / 27
+
+    # 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
     b: int256 = unsafe_sub(
         unsafe_add(
             10**36 / 9,
@@ -78,6 +90,8 @@ def get_y(
             x_k,
         ),
     )
+
+    # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = unsafe_add(
         unsafe_add(
             10**36 / 9,
@@ -94,8 +108,11 @@ def get_y(
             convert(A_MULTIPLIER, int256),
         ),
     )
+
+    # (10**18 + gamma)**2/27
     d: int256 = unsafe_div(unsafe_add(10**18, gamma)**2, 27)
 
+    # abs(3*a*c/b - b)
     d0: int256 = abs(unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b))
 
     divider: int256 = 0
@@ -121,23 +138,29 @@ def get_y(
     additional_prec: int256 = 0
     if abs(a) > abs(b):
         additional_prec = abs(a) / abs(b)
+        # a * additional_prec / divider
         a = unsafe_div(unsafe_mul(a, additional_prec), divider)
         b = unsafe_div(unsafe_mul(b, additional_prec), divider)
         c = unsafe_div(unsafe_mul(c, additional_prec), divider)
         d = unsafe_div(unsafe_mul(d, additional_prec), divider)
     else:
         additional_prec = abs(b) / abs(a)
+        # a * additional_prec / divider
         a = unsafe_div(unsafe_div(a, additional_prec), divider)
         b = unsafe_div(unsafe_div(b, additional_prec), divider)
         c = unsafe_div(unsafe_div(c, additional_prec), divider)
         d = unsafe_div(unsafe_div(d, additional_prec), divider)
 
+    # 3*a*c/b - b
     delta0: int256 = unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b)
+
+    # 9*a*c/b - 2*b - 27*a**2/b*d/b
     delta1: int256 = unsafe_sub(
         unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(9, a), c), b), unsafe_mul(2, b)),
         unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(27, a**2), b), d), b),
     )
 
+    # delta1**2 + 4*delta0**2/b*delta0
     sqrt_arg: int256 = unsafe_add(
         delta1**2,
         unsafe_mul(unsafe_div(unsafe_mul(4, delta0**2), b), delta0),
@@ -156,22 +179,28 @@ def get_y(
 
     second_cbrt: int256 = 0
     if delta1 > 0:
+        # convert(self.cbrt(convert((delta1 + sqrt_val), uint256)/2), int256)
         second_cbrt = convert(
             self._cbrt(unsafe_div(convert((unsafe_add(delta1, sqrt_val)), uint256), 2)),
             int256,
         )
     else:
+        # -convert(self.cbrt(convert(-(delta1 - sqrt_val), uint256)/2), int256)
         second_cbrt = -convert(
             self._cbrt(unsafe_div(convert(-unsafe_sub(delta1, sqrt_val), uint256), 2)),
             int256,
         )
 
+    # b_cbrt*b_cbrt/10**18*second_cbrt/10**18
     C1: int256 = unsafe_div(unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18)
 
+    # (b + b*delta0/C1 - C1)/3
     root_K0: int256 = unsafe_div(
         unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1),
         3
     )
+
+    # convert(D*D/27/x_k*D/x_j*root_K0/a, uint256)
     root: uint256 = convert(
         unsafe_div(
             unsafe_mul(
@@ -183,7 +212,11 @@ def get_y(
         uint256,
     )
 
-    return [root, convert(unsafe_div(unsafe_mul(10**18, root_K0), a), uint256)]
+    # convert(10**18*root_K0/a, uint256) ---------------------------------
+    return [  #                                                           |
+        root,  #                                                          |
+        convert(unsafe_div(unsafe_mul(10**18, root_K0), a), uint256)  # <-
+    ]
 
 
 @internal
@@ -500,6 +533,16 @@ def get_p(
     _D: uint256,
     _A_gamma: uint256[2],
 ) -> uint256[N_COINS-1]:
+    """
+    @notice Calculates dx/dy.
+    @dev Output needs to be multiplied with price_scale to get the actual value.
+    @param _xp Balances of the pool.
+    @param _D Current value of D.
+    @param _A_gamma Amplification coefficient and gamma.
+    @return dy/dx for each coin (Except the first one)
+    """
+
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe values D"
 
     xp: int256[N_COINS] = empty(int256[N_COINS])
     A_gamma: int256[2] = empty(int256[2])
@@ -510,60 +553,35 @@ def get_p(
         if i < N_COINS-1:
             A_gamma[i] = convert(_A_gamma[i], int256)
 
-    s1: int256 = (
-        (10**18 + A_gamma[1]) *
-        (
-            -10**18 + A_gamma[1]*
-            (
-                -2 * 10**18 +
-                (-10**18 + 10**18 * A_gamma[0] / 10000) * A_gamma[1] / 10**18
-            ) / 10**18
-        ) / 10**18
-    )
-    s2: int256 = (
-        81 * (
-            10**18 +
-            A_gamma[1] * (
-                2*10**18 + A_gamma[1] +
-                10**18 * 9 *
-                A_gamma[0]/27/10000 *
-                A_gamma[1] / 10**18
-            ) / 10**18
-        ) *
-        xp[0]/D * xp[1]/D * xp[2]/D
-    )
-    s3: int256 = (
-        2187 *
-        (10**18 + A_gamma[1]) *
-        xp[0]/D * xp[1]/D * xp[2]/D *
-        xp[0]/D * xp[1]/D * xp[2]/D
-    )
-    s4: int256 = (
-        10**18 * 19683 *
-        xp[0]/D * xp[1]/D * xp[2]/D *
-        xp[0]/D * xp[1]/D * xp[2]/D *
-        xp[0]/D * xp[1]/D * xp[2]/D
-    )
+    # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
+    s1: int256 = unsafe_div(unsafe_mul(unsafe_add(10**18, A_gamma[1]), unsafe_add(-10**18, unsafe_div(unsafe_mul(A_gamma[1], unsafe_add(-2 * 10**18, unsafe_div(unsafe_mul(unsafe_add(-10**18, unsafe_div(unsafe_mul(10**18, A_gamma[0]), 10000)), A_gamma[1]), 10**18))), 10**18))), 10**18)
+
+    # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
+    s2: int256 = unsafe_div(unsafe_mul(A_gamma[1], (unsafe_add(unsafe_add(2*10**18, A_gamma[1]), unsafe_div(unsafe_mul(unsafe_div(unsafe_div(unsafe_mul(10**18*9, A_gamma[0]), 27), 10000), A_gamma[1]), 10**18)))), 10**18)
+    s2 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_mul(81, (10**18 + s2)), xp[0]), D), xp[1]), D), xp[2]), D)
+
+    # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
+    s3: int256 = unsafe_mul(2187, unsafe_add(10**18, A_gamma[1]))
+    s3 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(s3, xp[0]), D), xp[1]), D), xp[2]), D)
+    s3 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(s3, xp[0]), D), xp[1]), D), xp[2]), D)
+
+    # 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
+    s4: int256 = unsafe_mul(10**18 * 19683, xp[0])
+    s4 = unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(s4, D), xp[1]), D), xp[2])
+    s4 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(s4, D), xp[0]), D), xp[1]), D), xp[2]), D), xp[0]), D), xp[1]), D), xp[2]), D)
 
     a: int256 = s1 + s2 + s4 - s3
-    b: int256 = (
-        10**18 * 729 *
-        A_gamma[0]/27/10000 *
-        xp[0]/D * xp[1]/D * xp[2]/D *
-        A_gamma[1]**2 / D
-    )
-    c: int256 = (
-        27 *
-        A_gamma[0]/27/10000 *
-        A_gamma[1]**2 *
-        (10**18 + A_gamma[1]) / D
-    )
+
+    # 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
+    b: int256 = unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(10**18 * 27, A_gamma[0]), 10000), xp[0]), D), xp[1]), D), xp[2]), D), unsafe_mul(A_gamma[1], A_gamma[1])), D)
+
+    # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
+    c: int256 = unsafe_div(unsafe_mul(unsafe_mul(unsafe_div(A_gamma[0], 10000), unsafe_mul(A_gamma[1], A_gamma[1])), unsafe_add(10**18, A_gamma[1])), D)
 
     return [
         self._get_dxdy(xp[1], xp[0], xp[2], a, b, c),
         self._get_dxdy(xp[2], xp[0], xp[1], a, b, c),
     ]
-
 
 @internal
 @view
@@ -576,22 +594,20 @@ def _get_dxdy(
     c: int256,
 ) -> uint256:
 
-    p: int256 = (
-        (
-            10**18 * x2 *
-            (
-                10**18 * a -
-                b * (x2 + x3) / 10**18 -
-                c * (2*x1 + x2 + x3) / 10**18
+    # p = 10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18) / x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18)
+    p: int256 = unsafe_div(
+        unsafe_mul(
+            unsafe_mul(10**18, x2),
+            unsafe_sub(
+                unsafe_sub(unsafe_mul(10**18, a), unsafe_div(unsafe_mul(b, unsafe_add(x2, x3)), 10**18)),
+                unsafe_div(unsafe_mul(c, unsafe_add(unsafe_add(unsafe_mul(2, x1), x2), x3)), 10**18)
             )
-        )
-        /
-        (
-            x1 *
-            (
-                -10**18 * a +
-                b * (x1 + x3) / 10**18 +
-                c * (x1 + 2*x2 + x3) / 10**18
+        ),
+        unsafe_mul(
+            x1,
+            unsafe_add(
+                unsafe_add(unsafe_mul(-10**18, a), unsafe_div(unsafe_mul(b, unsafe_add(x1, x3)), 10**18)),
+                unsafe_div(unsafe_mul(c, unsafe_add(unsafe_add(x1, unsafe_mul(2, x2)), x3)), 10**18)
             )
         )
     )
