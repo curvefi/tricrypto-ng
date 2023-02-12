@@ -231,7 +231,6 @@ class StatefulSimulation(StatefulBase):
                 print("swap A_gamma: ", self.swap.A(), self.swap.gamma())
 
                 if self.check_limits([0, 0, 0]):
-                    breakpoint()
                     assert False
                 print("-------------------")
 
