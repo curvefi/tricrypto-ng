@@ -65,8 +65,8 @@ def test_approval_event_fires(swap, alice, bob):
 
     assert len(logs) == 1
     assert logs[0].event_type.name == "Approval"
-    assert logs[0].topics[0] == alice
-    assert logs[0].topics[1] == bob
+    assert logs[0].topics[0].lower() == alice.lower()
+    assert logs[0].topics[1].lower() == bob.lower()
     assert logs[0].args[0] == 10**19
 
 
