@@ -6,7 +6,7 @@ def test_revert_unauthorised_access(user, tricrypto_factory):
     with boa.env.prank(user):
         with boa.reverts(dev="admin only"):
             tricrypto_factory.set_pool_implementation(
-                boa.env.generate_address()
+                boa.env.generate_address(), 0
             )
 
         with boa.reverts(dev="admin only"):

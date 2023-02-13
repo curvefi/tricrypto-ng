@@ -98,6 +98,7 @@ def test_revert_deploy_without_implementations(
                 "Curve.fi USDC-BTC-ETH",
                 "USDCBTCETH",
                 [coin.address for coin in coins],
+                0,
                 params["A"],
                 params["gamma"],
                 params["mid_fee"],
