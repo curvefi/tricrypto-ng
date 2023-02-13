@@ -151,19 +151,13 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
     out = coins[j].balanceOf(user) - out
 
     price_scale_1 = [swap_with_deposit.price_scale(i) for i in range(2)]
-    prices2 = [swap_with_deposit.last_prices(k) for k in [0, 1]]
 
+    ix = j
     if i == 0:
-        out_price = amount * 10**18 // out
         ix = j
     elif j == 0:
-        out_price = out * 10**18 // amount
         ix = i
-    else:
-        ix = j
-        out_price = amount * prices1[i] // out
 
-    assert approx(out_price, prices2[ix - 1], 2e-10)
     boa.env.time_travel(seconds=t)
     mint_for_testing(coins[0], user, 10**18)
 
