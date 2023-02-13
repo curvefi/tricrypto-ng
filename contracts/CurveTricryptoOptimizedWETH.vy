@@ -197,8 +197,6 @@ MAX_GAMMA: constant(uint256) = 5 * 10**16
 PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
-INF_COINS: constant(uint256) = 15
-
 # ----------------------- ERC20 Specific vars --------------------------------
 
 name: public(immutable(String[64]))
@@ -521,7 +519,8 @@ def add_liquidity(
     d_token: uint256 = 0
     d_token_fee: uint256 = 0
     old_D: uint256 = 0
-    ix: uint256 = INF_COINS
+
+    assert amounts[0] + amounts[1] + amounts[2] > 0, "dev: no coins to add"
 
     # --------------------- Get prices, balances -----------------------------
 
@@ -579,18 +578,6 @@ def add_liquidity(
                 )
 
             amountsp[i] = xp[i] - xp_old[i]
-
-            #                  Record the number of coins that are being added
-            #             to the pool. If no coins are added, ix == INF_COINS.
-            #               If only one coin is being added, then the index of
-            #          that coin is recorded in ix. If more than one coins are
-            #                           being added, then ix == INF_COINS - 1.
-            if ix == INF_COINS:
-                ix = i  # <--------------------- Only one coin is being added.
-            else:
-                ix = INF_COINS - 1  # <---- More than one coin is being added.
-
-    assert ix != INF_COINS  # dev: no coins to add
 
     # -------------------- Calculate LP tokens to mint -----------------------
 
