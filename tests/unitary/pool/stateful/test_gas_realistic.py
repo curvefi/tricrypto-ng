@@ -100,7 +100,7 @@ class StatefulGas(StatefulBase):
                 raise
             return
 
-        d_balance = self.get_coin_balance(self.coins[exchange_i], user)
+        d_balance = self.get_coin_balance(user, self.coins[exchange_i])
         try:
             admin_balance = self.swap.balanceOf(self.fee_receiver)
             with boa.env.prank(user):
@@ -121,7 +121,7 @@ class StatefulGas(StatefulBase):
             return
 
         d_balance = (
-            self.get_coin_balance(self.coins[exchange_i], user) - d_balance
+            self.get_coin_balance(user, self.coins[exchange_i]) - d_balance
         )
         d_token = d_token - self.token.balanceOf(user)
 

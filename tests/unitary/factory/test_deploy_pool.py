@@ -67,21 +67,21 @@ def test_check_pool_data_on_deployment(swap, tricrypto_factory, coins):
                 continue
 
             assert (
-                tricrypto_factory.find_pool_for_coins(coin_a, coin_b)
-                == swap.address
+                tricrypto_factory.find_pool_for_coins(coin_a, coin_b).lower()
+                == swap.address.lower()
             )
 
             tricrypto_factory.get_coin_indices(
                 swap.address, coin_a, coin_b
             ) == (i, j)
 
-    assert tricrypto_factory.get_coins(swap.address) == [
-        coin.address for coin in coins
-    ]
+    pool_coins = tricrypto_factory.get_coins(swap.address)
+    coins_lower = [coin.address.lower() for coin in coins]
+    for i in range(len(pool_coins)):
+        assert pool_coins[i].lower() == coins_lower[i]
 
-    assert tricrypto_factory.get_decimals(swap.address) == [
-        coin.decimals() for coin in coins
-    ]
+    pool_decimals = list(tricrypto_factory.get_decimals(swap.address))
+    assert pool_decimals == [coin.decimals() for coin in coins]
 
     assert tricrypto_factory.get_eth_index(swap.address) == 2
 
@@ -98,6 +98,7 @@ def test_revert_deploy_without_implementations(
                 "Curve.fi USDC-BTC-ETH",
                 "USDCBTCETH",
                 [coin.address for coin in coins],
+                0,
                 params["A"],
                 params["gamma"],
                 params["mid_fee"],

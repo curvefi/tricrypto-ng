@@ -283,7 +283,7 @@ def test_immediate_withdraw_one(
                 // swap_with_deposit.D()
             )
 
-            if frac > 1.1e16 or frac < 0.9e20:
+            if frac > 1.1e16 and frac < 0.9e20:
                 raise
             else:
                 return
