@@ -80,9 +80,8 @@ def test_check_pool_data_on_deployment(swap, tricrypto_factory, coins):
     for i in range(len(pool_coins)):
         assert pool_coins[i].lower() == coins_lower[i]
 
-    assert tricrypto_factory.get_decimals(swap.address) == [
-        coin.decimals() for coin in coins
-    ]
+    pool_decimals = list(tricrypto_factory.get_decimals(swap.address))
+    assert pool_decimals == [coin.decimals() for coin in coins]
 
     assert tricrypto_factory.get_eth_index(swap.address) == 2
 

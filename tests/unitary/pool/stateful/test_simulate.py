@@ -71,18 +71,6 @@ class StatefulSimulation(StatefulBase):
         self.trader.xcp_profit_real = self.swap._storage.virtual_price.get()
         self.trader.t = boa.env.vm.state.timestamp
 
-        print("\n------------------- initialised!")
-        print(
-            "swap balances: ",
-            [
-                self.swap.balances(0) / 1e18,
-                self.swap.balances(1) / 1e18,
-                self.swap.balances(2) / 1e18,
-            ],
-        )
-        print("swap xp: ", [k / 1e18 for k in self.swap.internal.xp()])
-        self.step = 0
-
     @rule(
         exchange_amount_in=exchange_amount_in,
         exchange_i=exchange_i,
@@ -94,48 +82,17 @@ class StatefulSimulation(StatefulBase):
         if exchange_i == exchange_j:
             return
 
-        print(f"Step {self.step}: ")
-        self.step += 1
-        print("exchange amount in: ", exchange_amount_in / 10**18, " USD")
-        print("exchange_i: ", exchange_i)
-        print("exchange_j: ", exchange_j)
-        print(
-            "trader price oracle: ",
-            [k / 1e18 for k in self.trader.price_oracle],
-        )
-
         exchange_amount_in = (
             exchange_amount_in
             * 10**18
             // self.trader.price_oracle[exchange_i]
-        )
-        print("dx in: ", exchange_amount_in / 1e18)
-
-        xp = self.swap.internal.xp()
-        D = self.swap.D()
-        print("swap xp before: ", [k / 1e18 for k in xp])
-        print("swap xp_i/D before: ", [f / D for f in xp])
-        print(
-            "swap price scale before: ",
-            [k / 1e18 for k in get_price_scale(self.swap)],
-        )
-        print(
-            "swap price oracle before: ",
-            [
-                self.swap.price_oracle(0) / 1e18,
-                self.swap.price_oracle(1) / 1e18,
-            ],
         )
 
         dy_swap = super().exchange(
             exchange_amount_in, exchange_i, exchange_j, user
         )
 
-        if not dy_swap:
-            print("swap failed!")
-            print()
-
-        else:
+        if dy_swap:
 
             dy_trader = self.trader.buy(
                 exchange_amount_in, exchange_i, exchange_j
@@ -156,45 +113,13 @@ class StatefulSimulation(StatefulBase):
                 )[0],
             ]
 
-            print("dy swap: ", dy_swap / 10**18)
-            print("dy trader: ", dy_trader / 10**18)
-            print("swap price: ", prices)
-
             self.trader.tweak_price(
                 boa.env.vm.state.timestamp, exchange_i, exchange_j, prices
             )
 
             # check if output value from exchange is similar
             assert abs(log(dy_swap / dy_trader)) < 1e-3
-
-            xp = self.swap.internal.xp()
-            D = self.swap.D()
-
-            print("trader xp: ", [k / 1e18 for k in self.trader.curve.xp()])
-            print("swap xp: ", [k / 1e18 for k in xp])
-            print("swap xp_i/D: ", [f / D for f in xp])
-            print(
-                "trader curve price scale: ",
-                [k / 1e18 for k in self.trader.curve.p[1:]],
-            )
-            print(
-                "swap price scale: ",
-                [k / 1e18 for k in get_price_scale(self.swap)],
-            )
-            print(
-                "trader price oracle: ",
-                [k / 1e18 for k in self.trader.price_oracle[1:]],
-            )
-            print(
-                "swap price oracle: ",
-                [
-                    self.swap.price_oracle(0) / 1e18,
-                    self.swap.price_oracle(1) / 1e18,
-                ],
-            )
             boa.env.time_travel(12)
-            print(">>>>>>>>> time travelling by 12 seconds!")
-            print()
 
     @invariant()
     def simulator(self):
@@ -213,26 +138,9 @@ class StatefulSimulation(StatefulBase):
                 price_trader = self.trader.curve.p[i + 1]
                 assert approx(price_scale, price_trader, 1e-3)
             except:  # noqa: E722
-                print("---------- Error!")
-                xp = self.swap.internal.xp()
-                print("swap xp: ", [k / 1e18 for k in xp])
-                D = self.swap.D()
-                print("swap D: ", D / 1e18)
-                xp_D = [f / D for f in xp]
-                print("swap xp_i/D: ", xp_D)
-                print(
-                    "swap balances: ",
-                    [
-                        self.swap.balances(0) / 1e18,
-                        self.swap.balances(1) / 1e18,
-                        self.swap.balances(2) / 1e18,
-                    ],
-                )
-                print("swap A_gamma: ", self.swap.A(), self.swap.gamma())
 
                 if self.check_limits([0, 0, 0]):
                     assert False
-                print("-------------------")
 
 
 def test_sim(swap, views_contract, users, pool_coins, tricrypto_factory):

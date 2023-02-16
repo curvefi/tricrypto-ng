@@ -210,7 +210,6 @@ class StatefulBase(RuleBasedStateMachine):
     @rule(sleep_time=sleep_time)
     def sleep(self, sleep_time):
         boa.env.time_travel(sleep_time)
-        print(f"<<<<<< time travelled by {sleep_time} seconds")
 
     @invariant()
     def balances(self):
