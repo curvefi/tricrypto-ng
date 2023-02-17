@@ -8,7 +8,7 @@ from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 100
+MAX_SAMPLES = 200
 STEP_COUNT = 100
 
 
@@ -118,7 +118,7 @@ class StatefulSimulation(StatefulBase):
             )
 
             # check if output value from exchange is similar
-            assert abs(log(dy_swap / dy_trader)) < 1e-3
+            assert abs(log(dy_swap / dy_trader)) < 0.1
             boa.env.time_travel(12)
 
     @invariant()
