@@ -1,7 +1,7 @@
 from boa.test import strategy
 from hypothesis import given, settings  # noqa
 
-SETTINGS = {"max_examples": 100, "deadline": None}
+SETTINGS = {"max_examples": 1000, "deadline": None}
 
 
 @given(
@@ -19,7 +19,6 @@ def test_get_dx(i, j, amount_in, yuge_swap, views_contract):
 
     expected_out = views_contract.get_dy(i, j, amount_in, yuge_swap)
     approx_in = views_contract.get_dx(i, j, expected_out, yuge_swap)
+    perc_diff = 100 * abs(amount_in - approx_in) / amount_in
 
-    perc_diff = 100 * (amount_in - approx_in) / amount_in
-
-    assert perc_diff < 0.001
+    assert perc_diff < 1

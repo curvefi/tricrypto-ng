@@ -81,9 +81,15 @@ def get_dx(
 
     dx: uint256 = 0
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    fee_dy: uint256 = 0
+    _dy: uint256 = dy
+    dx_prev: uint256 = 0
+    diff: uint256 = 0
 
-    # get dx
-    dx, xp = self._get_dx_fee(i, j, dy, swap)
+    # for more precise results, loop the following:
+    dx, xp = self._get_dx_fee(i, j, _dy, swap)
+    fee_dy = Curve(swap).fee_calc(xp) * _dy / 10**10
+    # _dy = dy + fee_dy + 1  # <--- loop this into _get_dx_fee
 
     return dx
 
@@ -179,7 +185,7 @@ def _get_dx_fee(
 
     # adjust xp with output dy. dy contains fee element, which we handle later
     # (hence this internal method is called _get_dx_fee)
-    xp[j] -= dy + 1  # we add 1 wei since dy usually has one wei subtracted
+    xp[j] -= dy
     xp[0] *= precisions[0]
     for k in range(N_COINS - 1):
         xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
