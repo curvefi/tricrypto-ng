@@ -65,8 +65,9 @@ def get_dy(
 
     dy: uint256 = 0
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    dy, xp = self._get_dy_nofee(i, j, dx, swap)
 
+    # dy = (get_y(x + dx) - y) * (1 - fee)
+    dy, xp = self._get_dy_nofee(i, j, dx, swap)
     dy -= Curve(swap).fee_calc(xp) * dy / 10**10
 
     return dy
@@ -80,11 +81,11 @@ def get_dx(
 
     dx: uint256 = 0
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
+
+    # get dx
     dx, xp = self._get_dx_fee(i, j, dy, swap)
 
-    # TODO: dx calculated assumes dy has fee subtracted already. What do?
-
-    return 0
+    return dx
 
 
 @view
@@ -176,8 +177,9 @@ def _get_dx_fee(
 
     xp, D, token_supply, price_scale, A, gamma, precisions = self._prep_calc(swap)
 
-    # adjust xp with output dy
-    xp[j] -= dy
+    # adjust xp with output dy. dy contains fee element, which we handle later
+    # (hence this internal method is called _get_dx_fee)
+    xp[j] -= dy + 1  # we add 1 wei since dy usually has one wei subtracted
     xp[0] *= precisions[0]
     for k in range(N_COINS - 1):
         xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
