@@ -77,7 +77,13 @@ def get_dy(
 def get_dx(
     i: uint256, j: uint256, dy: uint256, swap: address
 ) -> uint256:
-    # TODO: implement get_dx
+
+    dx: uint256 = 0
+    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    dx, xp = self._get_dx_fee(i, j, dy, swap)
+
+    # TODO: dx calculated assumes dy has fee subtracted already. What do?
+
     return 0
 
 
@@ -160,20 +166,15 @@ def _get_dx_fee(
     assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
     assert dy > 0, "do not exchange out 0 coins"
 
-    precisions: uint256[N_COINS] = Curve(swap).precisions()
-
-    price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-    for k in range(N_COINS - 1):
-        price_scale[k] = Curve(swap).price_scale(k)
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    for k in range(N_COINS):
-        xp[k] = Curve(swap).balances(k)
+    precisions: uint256[N_COINS] = empty(uint256[N_COINS])
+    price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
+    D: uint256 = 0
+    token_supply: uint256 = 0
+    A: uint256 = 0
+    gamma: uint256 = 0
 
-    A: uint256 = Curve(swap).A()
-    gamma: uint256 = Curve(swap).gamma()
-    D: uint256 = self._calc_D_ramp(
-        A, gamma, xp, precisions, price_scale, swap
-    )
+    xp, D, token_supply, price_scale, A, gamma, precisions = self._prep_calc(swap)
 
     # adjust xp with output dy
     xp[j] -= dy
@@ -200,20 +201,15 @@ def _get_dy_nofee(
     assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
     assert dx > 0, "do not exchange 0 coins"
 
-    precisions: uint256[N_COINS] = Curve(swap).precisions()
-
-    price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-    for k in range(N_COINS - 1):
-        price_scale[k] = Curve(swap).price_scale(k)
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    for k in range(N_COINS):
-        xp[k] = Curve(swap).balances(k)
+    precisions: uint256[N_COINS] = empty(uint256[N_COINS])
+    price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
+    D: uint256 = 0
+    token_supply: uint256 = 0
+    A: uint256 = 0
+    gamma: uint256 = 0
 
-    A: uint256 = Curve(swap).A()
-    gamma: uint256 = Curve(swap).gamma()
-    D: uint256 = self._calc_D_ramp(
-        A, gamma, xp, precisions, price_scale, swap
-    )
+    xp, D, token_supply, price_scale, A, gamma, precisions = self._prep_calc(swap)
 
     # adjust xp with input dx
     xp[i] += dx
@@ -237,21 +233,15 @@ def _calc_dtoken_nofee(
     amounts: uint256[N_COINS], deposit: bool, swap: address
 ) -> (uint256, uint256[N_COINS], uint256[N_COINS]):
 
-    precisions: uint256[N_COINS] = Curve(swap).precisions()
-    token_supply: uint256 = Curve(swap).totalSupply()
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    for k in range(N_COINS):
-        xp[k] = Curve(swap).balances(k)
+    precisions: uint256[N_COINS] = empty(uint256[N_COINS])
+    price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
+    D0: uint256 = 0
+    token_supply: uint256 = 0
+    A: uint256 = 0
+    gamma: uint256 = 0
 
-    price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
-    for k in range(N_COINS - 1):
-        price_scale[k] = Curve(swap).price_scale(k)
-
-    A: uint256 = Curve(swap).A()
-    gamma: uint256 = Curve(swap).gamma()
-    D0: uint256 = self._calc_D_ramp(
-        A, gamma, xp, precisions, price_scale, swap
-    )
+    xp, D0, token_supply, price_scale, A, gamma, precisions = self._prep_calc(swap)
 
     amountsp: uint256[N_COINS] = amounts
     if deposit:
@@ -277,3 +267,34 @@ def _calc_dtoken_nofee(
         d_token = token_supply - d_token
 
     return d_token, amountsp, xp
+
+
+@internal
+@view
+def _prep_calc(swap: address) -> (
+    uint256[N_COINS],
+    uint256,
+    uint256,
+    uint256[N_COINS-1],
+    uint256,
+    uint256,
+    uint256[N_COINS]
+):
+
+    precisions: uint256[N_COINS] = Curve(swap).precisions()
+    token_supply: uint256 = Curve(swap).totalSupply()
+    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    for k in range(N_COINS):
+        xp[k] = Curve(swap).balances(k)
+
+    price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
+    for k in range(N_COINS - 1):
+        price_scale[k] = Curve(swap).price_scale(k)
+
+    A: uint256 = Curve(swap).A()
+    gamma: uint256 = Curve(swap).gamma()
+    D: uint256 = self._calc_D_ramp(
+        A, gamma, xp, precisions, price_scale, swap
+    )
+
+    return xp, D, token_supply, price_scale, A, gamma, precisions
