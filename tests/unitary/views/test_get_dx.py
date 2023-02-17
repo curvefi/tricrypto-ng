@@ -21,4 +21,4 @@ def test_get_dx(i, j, amount_in, yuge_swap, views_contract):
     approx_in = views_contract.get_dx(i, j, expected_out, yuge_swap)
     perc_diff = 100 * abs(amount_in - approx_in) / amount_in
 
-    assert perc_diff < 1
+    assert perc_diff < 1e-5

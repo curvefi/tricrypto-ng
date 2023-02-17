@@ -83,13 +83,12 @@ def get_dx(
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     fee_dy: uint256 = 0
     _dy: uint256 = dy
-    dx_prev: uint256 = 0
-    diff: uint256 = 0
 
-    # for more precise results, loop the following:
-    dx, xp = self._get_dx_fee(i, j, _dy, swap)
-    fee_dy = Curve(swap).fee_calc(xp) * _dy / 10**10
-    # _dy = dy + fee_dy + 1  # <--- loop this into _get_dx_fee
+    # for more precise dx (but never exact), increase num loops
+    for k in range(5):
+        dx, xp = self._get_dx_fee(i, j, _dy, swap)
+        fee_dy = Curve(swap).fee_calc(xp) * _dy / 10**10
+        _dy = dy + fee_dy + 1
 
     return dx
 
