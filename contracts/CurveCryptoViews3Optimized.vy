@@ -151,6 +151,48 @@ def _calc_D_ramp(
 
 @internal
 @view
+def _get_dx_fee(
+    i: uint256, j: uint256, dy: uint256, swap: address
+) -> (uint256, uint256[N_COINS]):
+
+    # here, dy must include fees (and 1 wei offset)
+
+    assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
+    assert dy > 0, "do not exchange out 0 coins"
+
+    precisions: uint256[N_COINS] = Curve(swap).precisions()
+
+    price_scale: uint256[N_COINS - 1] = empty(uint256[N_COINS - 1])
+    for k in range(N_COINS - 1):
+        price_scale[k] = Curve(swap).price_scale(k)
+    xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    for k in range(N_COINS):
+        xp[k] = Curve(swap).balances(k)
+
+    A: uint256 = Curve(swap).A()
+    gamma: uint256 = Curve(swap).gamma()
+    D: uint256 = self._calc_D_ramp(
+        A, gamma, xp, precisions, price_scale, swap
+    )
+
+    # adjust xp with output dy
+    xp[j] -= dy
+    xp[0] *= precisions[0]
+    for k in range(N_COINS - 1):
+        xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
+
+    x_out: uint256[2] = Math(math).get_y(A, gamma, xp, D, i)
+    dx: uint256 = x_out[0] - xp[i]
+    xp[i] = x_out[0]
+    if i > 0:
+        dx = dx * PRECISION / price_scale[i - 1]
+    dx /= precisions[i]
+
+    return dx, xp
+
+
+@internal
+@view
 def _get_dy_nofee(
     i: uint256, j: uint256, dx: uint256, swap: address
 ) -> (uint256, uint256[N_COINS]):
@@ -173,6 +215,7 @@ def _get_dy_nofee(
         A, gamma, xp, precisions, price_scale, swap
     )
 
+    # adjust xp with input dx
     xp[i] += dx
     xp[0] *= precisions[0]
     for k in range(N_COINS - 1):
