@@ -1160,7 +1160,7 @@ def _claim_admin_fees():
     # ----------- If pool has accrued profits since last claim, claim profits.
     if xcp_profit > xcp_profit_a:
 
-        #  Admin fees are calculated is as follows.
+        #  Admin fees are calculated as follows.
         #      1. Calculate accrued profit since last claim. `xcp_profit`
         #         is the current profits. `xcp_profit_a` is the profits
         #         at the previous claim.
