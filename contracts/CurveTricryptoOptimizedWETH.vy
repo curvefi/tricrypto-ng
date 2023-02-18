@@ -731,8 +731,6 @@ def remove_liquidity_one_coin(
         A_gamma,
         token_amount,
         i,
-        (self.future_A_gamma_time > block.timestamp),  # <------- During ramps
-        True  #                                           we need to update D.
     )
 
     assert dy >= min_amount, "Slippage"
@@ -1297,8 +1295,6 @@ def _calc_withdraw_one_coin(
     A_gamma: uint256[2],
     token_amount: uint256,
     i: uint256,
-    update_D: bool,
-    calc_price: bool,
 ) -> (uint256, uint256, uint256[N_COINS], uint256):
 
     token_supply: uint256 = self.totalSupply
@@ -1322,7 +1318,7 @@ def _calc_withdraw_one_coin(
         xp[k] = xp[k] * xx[k] * p / PRECISION
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
-    if update_D:  # <-------------- D is updated if pool is undergoing a ramp.
+    if self.future_A_gamma_time > block.timestamp:
         D0 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)
     else:
         D0 = self.D
@@ -1685,10 +1681,7 @@ def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
     @param i token in which liquidity is withdrawn
     @returns Num received ith tokens
     """
-
-    return self._calc_withdraw_one_coin(
-        self._A_gamma(), token_amount, i, True, False
-    )[0]
+    return self._calc_withdraw_one_coin(self._A_gamma(), token_amount, i)[0]
 
 
 @external
