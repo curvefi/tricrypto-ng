@@ -741,7 +741,15 @@ def _exp(_power: int256) -> uint256:
 
 @internal
 @pure
-def _log2(x: uint256) -> int256:
+def _cbrt(x: uint256) -> uint256:
+
+    xx: uint256 = 0
+    if x >= max_value(uint256) / 10**18:
+        xx = x
+    elif x >= max_value(uint256) / 10**36:
+        xx = unsafe_mul(x, 10**18)
+    else:
+        xx = unsafe_mul(x, 10**36)
 
     # Compute the binary logarithm of `x`
 
@@ -752,39 +760,22 @@ def _log2(x: uint256) -> int256:
     # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
 
     log2x: int256 = 0
-    if x > 340282366920938463463374607431768211455:
+    if xx > max_value(uint128):
         log2x = 128
-    if unsafe_div(x, shift(2, log2x)) > 18446744073709551615:
+    if unsafe_div(xx, shift(2, log2x)) > max_value(uint64):
         log2x = log2x | 64
-    if unsafe_div(x, shift(2, log2x)) > 4294967295:
+    if unsafe_div(xx, shift(2, log2x)) > max_value(uint32):
         log2x = log2x | 32
-    if unsafe_div(x, shift(2, log2x)) > 65535:
+    if unsafe_div(xx, shift(2, log2x)) > max_value(uint16):
         log2x = log2x | 16
-    if unsafe_div(x, shift(2, log2x)) > 255:
+    if unsafe_div(xx, shift(2, log2x)) > max_value(uint8):
         log2x = log2x | 8
-    if unsafe_div(x, shift(2, log2x)) > 15:
+    if unsafe_div(xx, shift(2, log2x)) > 15:
         log2x = log2x | 4
-    if unsafe_div(x, shift(2, log2x)) > 3:
+    if unsafe_div(xx, shift(2, log2x)) > 3:
         log2x = log2x | 2
-    if unsafe_div(x, shift(2, log2x)) > 1:
+    if unsafe_div(xx, shift(2, log2x)) > 1:
         log2x = log2x | 1
-
-    return log2x
-
-
-@internal
-@pure
-def _cbrt(x: uint256) -> uint256:
-
-    xx: uint256 = 0
-    if x >= 115792089237316195423570985008687907853269 * 10**18:
-        xx = x
-    elif x >= 115792089237316195423570985008687907853269:
-        xx = unsafe_mul(x, 10**18)
-    else:
-        xx = unsafe_mul(x, 10**36)
-
-    log2x: int256 = self._log2(xx)
 
     # When we divide log2x by 3, the remainder is (log2x % 3).
     # So if we just multiply 2**(log2x/3) and discard the remainder to calculate our
@@ -820,9 +811,9 @@ def _cbrt(x: uint256) -> uint256:
     a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
     a = unsafe_div(unsafe_add(unsafe_mul(2, a), unsafe_div(xx, unsafe_mul(a, a))), 3)
 
-    if x >= 115792089237316195423570985008687907853269 * 10**18:
+    if x >= max_value(uint256) / 10**18:
         return a * 10**12
-    elif x >= 115792089237316195423570985008687907853269:
+    elif x >= max_value(uint256) / 10**36:
         return a * 10**6
 
     return a
