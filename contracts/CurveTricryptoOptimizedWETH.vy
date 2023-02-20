@@ -1612,7 +1612,7 @@ def get_virtual_price() -> uint256:
 def price_oracle(k: uint256) -> uint256:
     """
     @notice Returns the oracle price of the coin at index `k` w.r.t the coin
-            at index 0.
+            at index 0, where 0 > k > N_COINS-1.
     @dev The oracle is an exponential moving average, with a periodicity
          determined by `self.ma_time`. The aggregated prices are cached state
          prices (dy/dx) calculated AFTER the latest trade.
@@ -1645,7 +1645,7 @@ def price_oracle(k: uint256) -> uint256:
 def last_prices(k: uint256) -> uint256:
     """
     @notice Returns last price of the coin at index `k` w.r.t the coin
-            at index 0.
+            at index 0, where 0 > k > N_COINS-1.
     @param k The index of the coin.
     """
     return self._unpack_prices(self.last_prices_packed)[k]
@@ -1656,7 +1656,7 @@ def last_prices(k: uint256) -> uint256:
 def price_scale(k: uint256) -> uint256:
     """
     @notice Returns the price scale of the coin at index `k` w.r.t the coin
-            at index 0.
+            at index 0, where 0 > k > N_COINS-1.
     @dev Price scale determines the price band around which liquidity is
          concentrated.
     @param k The index of the coin.
