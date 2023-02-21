@@ -14,9 +14,6 @@ interface TricryptoPool:
 interface ERC20:
     def decimals() -> uint256: view
 
-interface LiquidityGauge:
-    def initialize(_lp_token: address): nonpayable
-
 
 event TricryptoPoolDeployed:
     coins: address[N_COINS]
@@ -290,9 +287,7 @@ def deploy_gauge(_pool: address) -> address:
     assert self.gauge_implementation != empty(address), "Gauge implementation not set"
 
     gauge: address = create_from_blueprint(self.gauge_implementation, _pool, code_offset=3)
-
     token: address = self.pool_data[_pool].token
-    LiquidityGauge(gauge).initialize(token)
     self.pool_data[_pool].liquidity_gauge = gauge
 
     log LiquidityGaugeDeployed(_pool, gauge)
