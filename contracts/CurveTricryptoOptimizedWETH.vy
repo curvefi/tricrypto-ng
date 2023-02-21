@@ -663,14 +663,14 @@ def remove_liquidity(
     #           In this situation, all tokens are withdrawn and the invariant
     #           is reset.
 
-    if amount == total_supply:  # <----------------------------------- Case 1.
+    if amount == total_supply:  # <----------------------------------- Case 2.
 
         for i in range(N_COINS):
 
             d_balances[i] = balances[i]
             self.balances[i] = 0  # <------------------------- Empty the pool.
 
-    else:  # <-------------------------------------------------------- Case 2.
+    else:  # <-------------------------------------------------------- Case 1.
 
         amount -= 1  # <---- To prevent rounding errors, favor LPs a tiny bit.
 
