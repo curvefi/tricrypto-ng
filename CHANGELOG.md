@@ -7,16 +7,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
  
 ## [2.0.0] - yyyy-mm-dd
  
-TriCrypto: Next Generation improvesgas efficiency and user experience while maintaining readability for the end user.
+TriCrypto: Next Generation improves gas efficiency and user experience while maintaining readability for the end user.
  
 ### Added
 - MAJOR Factory support for pools with 3 coins
 - MINOR Pool contracts gain ERC-20 compatibility
 - MINOR Add `permit()` method for gasless approvals
-- PATCH Significant gas optimizations 
- 
+
 ### Changed
- 
+- PATCH Significant gas optimizations 
+  
  
 ## [1.1.0] - 2021-07-13
   
