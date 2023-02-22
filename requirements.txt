@@ -15,9 +15,8 @@ pytest
 pytest-xdist
 pytest-check
 pytest-forked
-pytest-logging
 pdbpp
-hypothesis==6.68.1
+hypothesis>=6.68.1
 
 # vyper and dev framework:
 git+https://github.com/vyperlang/titanoboa
