@@ -163,6 +163,7 @@ class ProfitableState(StatefulBase):
                     token_amount, exchange_i, 0
                 )
             _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
+            self.xcp_profit = self.swap.xcp_profit()
 
         except Exception:
             # Small amounts may fail with rounding errors

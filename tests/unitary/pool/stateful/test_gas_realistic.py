@@ -5,8 +5,8 @@ from hypothesis.stateful import rule, run_state_machine_as_test
 from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 60
-STEP_COUNT = 30
+MAX_SAMPLES = 300
+STEP_COUNT = 100
 
 
 class StatefulGas(StatefulBase):
@@ -109,6 +109,7 @@ class StatefulGas(StatefulBase):
                 )
             _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
             self.total_supply += _claimed
+            self.xcp_profit = self.swap.xcp_profit()
 
         except Exception:
             # Small amounts may fail with rounding errors
