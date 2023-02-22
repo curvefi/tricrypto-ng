@@ -282,12 +282,14 @@ def deploy_gauge(_pool: address) -> address:
     @param _pool Factory pool address to deploy a gauge for
     @return Address of the deployed gauge
     """
+    gauge_implementation: address = self.gauge_implementation
     assert self.pool_data[_pool].coins[0] != empty(address), "Unknown pool"
     assert self.pool_data[_pool].liquidity_gauge == empty(address), "Gauge already deployed"
-    assert self.gauge_implementation != empty(address), "Gauge implementation not set"
+    assert gauge_implementation != empty(address), "Gauge implementation not set"
 
-    gauge: address = create_from_blueprint(self.gauge_implementation, _pool, code_offset=3)
-    token: address = self.pool_data[_pool].token
+    gauge: address = create_from_blueprint(
+        gauge_implementation, _pool, code_offset=3
+    )
     self.pool_data[_pool].liquidity_gauge = gauge
 
     log LiquidityGaugeDeployed(_pool, gauge)
