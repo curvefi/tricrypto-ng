@@ -1,6 +1,6 @@
 # @version 0.3.7
 # (c) Curve.Fi, 2023
-# Math for 3-coin Curve cryptoswap pools
+# SafeMath Implementation of AMM Math for 3-coin Curve Cryptoswap Pools
 #
 # Unless otherwise agreed on, only contracts owned by Curve DAO or
 # Swiss Stake GmbH are allowed to call this contract.
@@ -72,17 +72,9 @@ def get_y(
     x_k: int256 = convert(x[k], int256)
 
     a: int256 = 10**36 / 27
-
-    # 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
     b: int256 = 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
-
-    # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
-
-    # (10**18 + gamma)**2/27
     d: int256 = (10**18 + gamma)**2/27
-
-    # abs(3*a*c/b - b)
     d0: int256 = abs(3*a*c/b - b)
 
     divider: int256 = 0
@@ -108,26 +100,20 @@ def get_y(
     additional_prec: int256 = 0
     if abs(a) > abs(b):
         additional_prec = abs(a) / abs(b)
-        # a * additional_prec / divider
         a = a * additional_prec / divider
         b = b * additional_prec / divider
         c = c * additional_prec / divider
         d = d * additional_prec / divider
     else:
         additional_prec = abs(b) / abs(a)
-        # a * additional_prec / divider
         a = a * additional_prec / divider
         b = b * additional_prec / divider
         c = c * additional_prec / divider
         d = d * additional_prec / divider
 
-    # 3*a*c/b - b
     delta0: int256 = 3*a*c/b - b
-
-    # 9*a*c/b - 2*b - 27*a**2/b*d/b
     delta1: int256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
 
-    # delta1**2 + 4*delta0**2/b*delta0
     sqrt_arg: int256 = delta1**2 + 4*delta0**2/b*delta0
     sqrt_val: int256 = 0
     if sqrt_arg > 0:
@@ -143,22 +129,15 @@ def get_y(
 
     second_cbrt: int256 = 0
     if delta1 > 0:
-        # convert(self.cbrt(convert((delta1 + sqrt_val), uint256)/2), int256)
         second_cbrt = convert(self._cbrt(convert((delta1 + sqrt_val), uint256)/2), int256)
     else:
-        # -convert(self.cbrt(convert(-(delta1 - sqrt_val), uint256)/2), int256)
         second_cbrt = -convert(self._cbrt(convert(-(delta1 - sqrt_val), uint256)/2), int256)
 
-    # b_cbrt*b_cbrt/10**18*second_cbrt/10**18
     C1: int256 = b_cbrt*b_cbrt/10**18*second_cbrt/10**18
 
-    # (b + b*delta0/C1 - C1)/3
     root_K0: int256 = (b + b*delta0/C1 - C1)/3
-
-    # convert(D*D/27/x_k*D/x_j*root_K0/a, uint256)
     root: uint256 = convert(D*D/27/x_k*D/x_j*root_K0/a, uint256)
 
-    # convert(10**18*root_K0/a, uint256)
     return [
         root,
         convert(10**18*root_K0/a, uint256)
@@ -244,7 +223,6 @@ def _newton_y(
         fprime = yfprime / y
 
         # y -= f / f_prime;  y = (y * fprime - f) / fprime
-        # y = (yfprime + 10**18 * D - 10**18 * S) // fprime + mul1 // fprime * (10**18 - K0) // K0
         y_minus = mul1 / fprime
         y_plus = (
             yfprime + 10**18 * D
@@ -319,8 +297,6 @@ def newton_D(
     for i in range(255):
         D_prev: uint256 = D
 
-        # 10**18 * x[0] * N_COINS / D * x[1] * N_COINS / D * x[2] * N_COINS / D
-        # one safediv so D = 0 is handled.
         K0 = 10**18 * x[0] * N_COINS / D * x[1] * N_COINS / D * x[2] * N_COINS / D
 
         _g1k0 = unsafe_add(gamma, 10**18)
@@ -329,13 +305,10 @@ def newton_D(
         else:
             _g1k0 = unsafe_add(unsafe_sub(K0, _g1k0), 1)
 
-
         # D / (A * N**N) * _g1k0**2 / gamma**2
-        # 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
         mul1 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
 
         # 2*N*K0 / _g1k0
-        # (2 * 10**18) * N_COINS * K0 / _g1k0
         mul2 = (2 * 10**18) * N_COINS * K0 / _g1k0
 
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
@@ -355,9 +328,9 @@ def newton_D(
             D_minus -= D * (mul1 / neg_fprime) / 10**18 * (K0 - 10**18) / K0
 
         if D_plus > D_minus:
-            D = unsafe_sub(D_plus, D_minus)
+            D = D_plus - D_minus
         else:
-            D = unsafe_div(unsafe_sub(D_minus, D_plus), 2)
+            D = (D_minus - D_plus) / 2
 
         if D > D_prev:
             diff = unsafe_sub(D, D_prev)
@@ -369,7 +342,7 @@ def newton_D(
 
             # Test that we are safe with the next newton_y
             for _x in x:
-                frac: uint256 = unsafe_div(unsafe_mul(_x, 10**18), D)
+                frac: uint256 = _x * 10**18 / D
                 assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
 
             return D
@@ -410,24 +383,13 @@ def get_p(
     x2: int256 = xp[1]
     x3: int256 = xp[2]
 
-    # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
     s1: int256 = (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
-
-    # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
     s2: int256 = 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
-
-    # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
     s3: int256 = 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
-
-    # 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
     s4: int256 = 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
 
     a: int256 = s1 + s2 + s4 - s3
-
-    # 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
     b: int256 = 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
-
-    # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
     c: int256 = 27*A*gamma**2*(10**18 + gamma)/D/27/10000
 
     return [
@@ -446,7 +408,6 @@ def _get_dxdy(
     c: int256,
 ) -> uint256:
 
-    # p = 10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18) / x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18)
     p: int256 = (
         (10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18))
         /
@@ -517,7 +478,7 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
     K: uint256 = 10**18
     S: uint256 = x[0] + x[1] + x[2]
 
-    # Could be good to pre-sort x, but it is used only for dynamic fee,
+    # Could be good to pre-sort x, but it is used only for dynamic fee
     for x_i in x:
         K = K * N_COINS * x_i / S
 

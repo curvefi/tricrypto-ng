@@ -1035,6 +1035,7 @@ def tweak_price(
 
         xcp: uint256 = MATH.geometric_mean(xp)
         virtual_price = 10**18 * xcp / total_supply
+
         xcp_profit = unsafe_div(
             old_xcp_profit * virtual_price,
             old_virtual_price

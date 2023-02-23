@@ -1,6 +1,6 @@
 # @version 0.3.7
 # (c) Curve.Fi, 2023
-# Math for 3-coin Curve cryptoswap pools
+# UnsafeMath Implementation of AMM Math for 3-coin Curve Cryptoswap Pools
 #
 # Unless otherwise agreed on, only contracts owned by Curve DAO or
 # Swiss Stake GmbH are allowed to call this contract.

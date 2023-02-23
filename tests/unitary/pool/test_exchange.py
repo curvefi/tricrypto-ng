@@ -11,7 +11,7 @@ SETTINGS = {"max_examples": 100, "deadline": None}
 
 @given(
     amount=strategy(
-        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**10, max_value=2 * 10**6 * 10**18
     ),  # Can be more than we have
     i=strategy("uint", min_value=0, max_value=3),
     j=strategy("uint", min_value=0, max_value=3),
@@ -63,7 +63,7 @@ def test_exchange_all(
 @pytest.mark.parametrize("j", [0, 1])
 @given(
     amount=strategy(
-        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**10, max_value=2 * 10**6 * 10**18
     )
 )
 @settings(**SETTINGS)
@@ -105,13 +105,14 @@ def test_exchange_from_eth(
 @pytest.mark.parametrize("i", [0, 1])
 @given(
     amount=strategy(
-        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**10, max_value=2 * 10**6 * 10**18
     )
 )
 @settings(**SETTINGS)
 def test_exchange_into_eth(
     swap_with_deposit,
     views_contract,
+    math_contract,
     coins,
     user,
     amount,

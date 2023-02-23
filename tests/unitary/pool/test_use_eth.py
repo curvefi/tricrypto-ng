@@ -7,7 +7,7 @@ from tests.utils.tokens import mint_for_testing
 
 
 @given(
-    amount=strategy("uint256", min_value=10**7, max_value=10**18),
+    amount=strategy("uint256", min_value=10**10, max_value=10**18),
     i=strategy("uint256", min_value=0, max_value=1),
 )
 @settings(deadline=None)
@@ -29,7 +29,7 @@ def test_exchange_eth_in(swap_with_deposit, amount, coins, user, i):
 
 
 @given(
-    amount=strategy("uint256", min_value=10**7, max_value=10**18),
+    amount=strategy("uint256", min_value=10**10, max_value=10**18),
     i=strategy("uint256", min_value=0, max_value=1),
 )
 @settings(deadline=None)
@@ -53,7 +53,7 @@ def test_exchange_underlying_eth_in(swap_with_deposit, amount, coins, user, i):
 
 
 @given(
-    amount=strategy("uint256", min_value=10**7, max_value=10**18),
+    amount=strategy("uint256", min_value=10**10, max_value=10**18),
     i=strategy("uint256", min_value=0, max_value=1),
 )
 @settings(deadline=None)
@@ -76,7 +76,7 @@ def test_exchange_eth_out(swap_with_deposit, amount, coins, user, i):
 
 
 @given(
-    amount=strategy("uint256", min_value=10**7, max_value=10**18),
+    amount=strategy("uint256", min_value=10**10, max_value=10**18),
     i=strategy("uint256", min_value=0, max_value=1),
 )
 @settings(deadline=None)

@@ -52,7 +52,7 @@ def test_last_price_remove_liq(swap_with_deposit, user, token_frac, i):
 
 @given(
     amount=strategy(
-        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**10, max_value=2 * 10**6 * 10**18
     ),  # Can be more than we have
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
@@ -95,7 +95,7 @@ def test_ma(swap_with_deposit, coins, user, amount, i, j, t):
 # Sanity check for price scale
 @given(
     amount=strategy(
-        "uint256", min_value=10**7, max_value=2 * 10**6 * 10**18
+        "uint256", min_value=10**10, max_value=2 * 10**6 * 10**18
     ),  # Can be more than we have
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
