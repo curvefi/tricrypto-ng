@@ -8,7 +8,7 @@ from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 100
+MAX_SAMPLES = 200
 STEP_COUNT = 100
 
 
@@ -82,43 +82,25 @@ class StatefulSimulation(StatefulBase):
         if exchange_i == exchange_j:
             return
 
-        exchange_amount_in = (
+        dx = (
             exchange_amount_in
             * 10**18
             // self.trader.price_oracle[exchange_i]
         )
 
-        dy_swap = super().exchange(
-            exchange_amount_in, exchange_i, exchange_j, user
-        )
+        dy_swap = super().exchange(dx, exchange_i, exchange_j, user)
 
         if dy_swap:
 
-            dy_trader = self.trader.buy(
-                exchange_amount_in, exchange_i, exchange_j
-            )
-
-            # we calculate price from a small trade post swap
-            # since this is similar to get_p (analytical price calc):
-            prices = [
-                10**16
-                * 10**18
-                // self.views.internal._get_dy_nofee(
-                    0, 1, 10**16, self.swap
-                )[0],
-                10**16
-                * 10**18
-                // self.views.internal._get_dy_nofee(
-                    0, 2, 10**16, self.swap
-                )[0],
-            ]
+            dy_trader = self.trader.buy(dx, exchange_i, exchange_j)
 
             self.trader.tweak_price(
-                boa.env.vm.state.timestamp, exchange_i, exchange_j, prices
+                boa.env.vm.state.timestamp, exchange_i, exchange_j
             )
 
             # check if output value from exchange is similar
             assert abs(log(dy_swap / dy_trader)) < 1e-3
+
             boa.env.time_travel(12)
 
     @invariant()

@@ -926,8 +926,9 @@ def _exchange(
 
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
-    K0_prev: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[1]
-    self.tweak_price(A_gamma, xp, 0, K0_prev)
+    # K0_prev: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[1]
+    # self.tweak_price(A_gamma, xp, 0, K0_prev)
+    self.tweak_price(A_gamma, xp, 0, 0)
 
     log TokenExchange(sender, i, dx, j, dy, fee)
 
