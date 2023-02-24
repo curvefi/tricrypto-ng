@@ -53,6 +53,7 @@ def get_y(
         if k != i:
             frac: uint256 = x[k] * 10**18 / _D
             assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+            # if the above condition is met, then x[k] > 0 implicitly
 
     j: uint256 = 0
     k: uint256 = 0
@@ -73,11 +74,15 @@ def get_y(
     x_k: int256 = convert(x[k], int256)
 
     a: int256 = 10**36 / 27
+
+    # 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
     b: int256 = (
         10**36 / 9
-        + 2 * 10**18 * gamma / 27
+        + unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)  # <- Safe unsafe ops.
         - D**2 / x_j * gamma**2 * ANN / 27**2 / convert(A_MULTIPLIER, int256) / x_k
     )
+
+    # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = (
         10**36 / 9
         + gamma * (gamma + 4 * 10**18) / 27
@@ -109,19 +114,19 @@ def get_y(
     additional_prec: int256 = 0
     if abs(a) > abs(b):
         additional_prec = abs(a) / abs(b)
-        a = a * additional_prec / divider
-        b = b * additional_prec / divider
-        c = c * additional_prec / divider
-        d = d * additional_prec / divider
+        a = unsafe_div(a * additional_prec, divider)
+        b = unsafe_div(b * additional_prec, divider)
+        c = unsafe_div(c * additional_prec, divider)
+        d = unsafe_div(d * additional_prec, divider)
     else:
         additional_prec = abs(b) / abs(a)
-        a = a * additional_prec / divider
-        b = b * additional_prec / divider
-        c = c * additional_prec / divider
-        d = d * additional_prec / divider
+        a = unsafe_div(a * additional_prec, divider)
+        b = unsafe_div(b * additional_prec, divider)
+        c = unsafe_div(c * additional_prec, divider)
+        d = unsafe_div(d * additional_prec, divider)
 
     delta0: int256 = 3 * a * c / b - b
-    delta1: int256 = 9 * a * c / b - 2 * b - 27 * a**2 / b * d / b
+    delta1: int256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
 
     sqrt_arg: int256 = delta1**2 + 4 * delta0**2 / b * delta0
     sqrt_val: int256 = 0
@@ -139,19 +144,24 @@ def get_y(
     second_cbrt: int256 = 0
     if delta1 > 0:
         second_cbrt = convert(
-            self._cbrt(convert((delta1 + sqrt_val), uint256) / 2), int256
+            self._cbrt(unsafe_div(convert((delta1 + sqrt_val), uint256), 2)),
+            int256
         )
     else:
         second_cbrt = -convert(
-            self._cbrt(convert(-(delta1 - sqrt_val), uint256) / 2), int256
+            self._cbrt(unsafe_div(convert(-(delta1 - sqrt_val), uint256), 2)),
+            int256
         )
 
-    C1: int256 = b_cbrt * b_cbrt / 10**18 * second_cbrt / 10**18
+    C1: int256 = unsafe_div(unsafe_div(b_cbrt * b_cbrt, 10**18) * second_cbrt, 10**18)
 
-    root_K0: int256 = (b + b * delta0 / C1 - C1) / 3
+    root_K0: int256 = unsafe_div(b + b * delta0 / C1 - C1, 3)
     root: uint256 = convert(D * D / 27 / x_k * D / x_j * root_K0 / a, uint256)
 
-    return [root, convert(10**18 * root_K0 / a, uint256)]
+    return [
+        root,
+        convert(unsafe_div(10**18 * root_K0, a), uint256)  # <--- a > 0; safu.
+    ]
 
 
 @internal
@@ -299,7 +309,6 @@ def newton_D(
         # D also not zero here if K0_prev > 0, and we checked if x[0] is gt 0.
 
     # initialise variables:
-    diff: uint256 = 0
     K0: uint256 = 0
     _g1k0: uint256 = 0
     mul1: uint256 = 0
@@ -308,6 +317,8 @@ def newton_D(
     D_plus: uint256 = 0
     D_minus: uint256 = 0
     D_prev: uint256 = 0
+
+    diff: uint256 = 0
 
     for i in range(255):
 
@@ -330,12 +341,12 @@ def newton_D(
             ),
             D,
         )  # <-------- We can convert the entire expression using unsafe math.
-        #        since x_i is not too far from D, so overflow is not expected.
-        #        Also D > 0, since we proved that already. unsafe_div is safe.
-        #            K0 > 0 since we can safely assume that D < 10**18 * x[0].
+        #   since x_i is not too far from D, so overflow is not expected. Also
+        #      D > 0, since we proved that already. unsafe_div is safe. K0 > 0
+        #        since we can safely assume that D < 10**18 * x[0]. K0 is also
+        #                            in the range of 10**18 (it's a property).
 
-        _g1k0 = unsafe_add(gamma, 10**18)  # <---------- safe unsafe_add since
-        #                                                      gamma < 10**18.
+        _g1k0 = unsafe_add(gamma, 10**18)  # <--------- safe to do unsafe_add.
 
         if _g1k0 > K0:  #       The following operations can safely be unsafe.
             _g1k0 = unsafe_add(unsafe_sub(_g1k0, K0), 1)
@@ -367,17 +378,23 @@ def newton_D(
         #    with newton_D. _g1k0 > 0, so the entire expression can be unsafe.
 
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
-        neg_fprime = (
-            S
-            + unsafe_div(S * mul2, 10**18)
-            + unsafe_div(unsafe_mul(mul1, N_COINS), K0)
-            - unsafe_div(unsafe_mul(mul2, D), 10**18)
+        neg_fprime = unsafe_sub(
+            unsafe_add(
+                unsafe_add(
+                    S, unsafe_div(unsafe_mul(S, mul2), 10**18)
+                ), unsafe_div(unsafe_mul(mul1, N_COINS), K0)
+            ),
+            unsafe_div(unsafe_mul(mul2, D), 10**18)
         )  # <--- mul1 is a big number but not huge: safe to unsafely multiply
-        # with N_coins. neg_fprime will be 0 if this expression executes.
+        # with N_coins. neg_fprime > 0 if this expression executes.
+        # mul2 is in the range of 10**18, since K0 is in that range, S * mul2
+        # is safe. The first three sums can be done using unsafe math safely
+        # and since the final expression will be small since mul2 is small, we
+        # can safely do the entire expression unsafely.
 
         # D -= f / fprime
         # D * (neg_fprime + S) / neg_fprime
-        D_plus = unsafe_div(D * (neg_fprime + S), neg_fprime)
+        D_plus = unsafe_div(D * unsafe_add(neg_fprime, S), neg_fprime)
 
         # D*D / neg_fprime
         D_minus = unsafe_div(D * D, neg_fprime)
@@ -419,7 +436,7 @@ def newton_D(
 
             # Test that we are safe with the next newton_y
             for _x in x:
-                frac: uint256 = _x * 10**18 / D
+                frac: uint256 = unsafe_div(_x * 10**18, D)
                 assert (frac > 10**16 - 1) and (frac < 10**20 + 1)  # dev: unsafe values x[i]
 
             return D
@@ -452,35 +469,16 @@ def get_p(
     x2: int256 = convert(_xp[1], int256)
     x3: int256 = convert(_xp[2], int256)
 
-    s1: int256 = (
-        (10**18 + gamma)
-        * (
-            -10**18 +
-            gamma * (
-                -2 * 10**18
-                + (-10**18 + 10**18 * A / 10000) * gamma / 10**18
-            )
-            / 10**18
-        )
-        / 10**18
-    )
-    s2: int256 = (
-        81
-        * (
-            10**18
-            + gamma * (
-                2 * 10**18
-                + gamma
-                + 10**18 * 9 * A / 27 / 10000 * gamma / 10**18
-            )
-            / 10**18
-        )
-        * x1 / D * x2 / D * x3 / D
-    )
-    s3: int256 = (
-        2187 * (10**18 + gamma)
-        * x1 / D * x1 / D * x2 / D * x2 / D * x3 / D * x3 / D
-    )
+    # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
+    s1: int256 = (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
+
+    # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
+    s2: int256 = 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
+
+    # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
+    s3: int256 = 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
+
+    # 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
     s4: int256 = (
         10**18 * 19683
         * x1 / D * x1 / D * x1 / D
@@ -489,11 +487,15 @@ def get_p(
     )
 
     a: int256 = s1 + s2 + s4 - s3
+
+    # 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
     b: int256 = (
         10**18 * 729 * A
         * x1 / D * x2 / D * x3 / D
         * gamma**2 / D / 27 / 10000
     )
+
+    # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
     c: int256 = 27 * A * gamma**2 * (10**18 + gamma) / D / 27 / 10000
 
     return [
@@ -513,22 +515,27 @@ def _get_dxdy(
     c: int256,
 ) -> uint256:
 
+    # (
+    #    (10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18))
+    #    /
+    #    (x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18))
+    # )
     p: int256 = (
         (
             10**18
             * x2
             * (
                 10**18 * a
-                - b * (x2 + x3) / 10**18
-                - c * (2 * x1 + x2 + x3) / 10**18
+                - unsafe_div(b * (x2 + x3), 10**18)
+                - unsafe_div(c * (2 * x1 + x2 + x3), 10**18)
             )
         )
         / (
             x1
             * (
                 -10**18 * a
-                + b * (x1 + x3) / 10**18
-                + c * (x1 + 2 * x2 + x3) / 10**18
+                + unsafe_div(b * (x1 + x3), 10**18)
+                + unsafe_div(c * (x1 + 2 * x2 + x3), 10**18)
             )
         )
     )
