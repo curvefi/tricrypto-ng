@@ -366,7 +366,6 @@ def newton_D(
         #      10**15 * 10**18 + 1, since we get that in get_y which is called
         #    with newton_D. _g1k0 > 0, so the entire expression can be unsafe.
 
-
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
         neg_fprime = (
             S
@@ -374,14 +373,14 @@ def newton_D(
             + unsafe_div(unsafe_mul(mul1, N_COINS), K0)
             - unsafe_div(unsafe_mul(mul2, D), 10**18)
         )  # <--- mul1 is a big number but not huge: safe to unsafely multiply
-        # with N_coins. K0 > 0 since we
+        # with N_coins. neg_fprime will be 0 if this expression executes.
 
         # D -= f / fprime
         # D * (neg_fprime + S) / neg_fprime
-        D_plus = D * (neg_fprime + S) / neg_fprime  # <--- safediv check -----
-        #                                                                    |
-        # D*D / neg_fprime                                                   |
-        D_minus = unsafe_div(D * D, neg_fprime)  # <--- can be unsafe here ---
+        D_plus = unsafe_div(D * (neg_fprime + S), neg_fprime)
+
+        # D*D / neg_fprime
+        D_minus = unsafe_div(D * D, neg_fprime)
 
         # Since we know K0 > 0, and neg_fprime > 0, several unsafe operations
         # are possible in the following. Also, (10**18 - K0) is safe to mul.
@@ -404,7 +403,6 @@ def newton_D(
                 ),
                 K0
             )
-
 
         if D_plus > D_minus:
             D = unsafe_sub(D_plus, D_minus)  # <--------- Safe since we check.
