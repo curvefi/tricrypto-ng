@@ -276,12 +276,16 @@ def newton_D(
     """
     x: uint256[N_COINS] = self._sort(x_unsorted)
     assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
+    assert x[0] > 0, "dev: empty pool"
 
-    S: uint256 = x[0] + x[1] + x[2]
+    # Safe to do unsafe add since we checked largest x's bounds previously
+    S: uint256 = unsafe_add(unsafe_add(x[0], x[1]), x[2])
     D: uint256 = 0
 
     if K0_prev == 0:
-        D = N_COINS * self._geometric_mean(x)
+        # Geometric mean of 3 numbers cannot be larger than the largest number
+        # so the following is safe to do:
+        D = unsafe_mul(N_COINS, self._geometric_mean(x))
     else:
         if S > 10**36:
             D = self._cbrt(x[0] * x[1] / 10**36 * x[2] / K0_prev * 27 * 10**12)
@@ -289,6 +293,10 @@ def newton_D(
             D = self._cbrt(x[0] * x[1] / 10**24 * x[2] / K0_prev * 27 * 10**6)
         else:
             D = self._cbrt(x[0] * x[1] / 10**18 * x[2] / K0_prev * 27)
+
+        # Since we check if prod is 0 in _geometric_mean, and _cbrt of nonzero
+        # is nonzero (as _cbrt(1) == 10**12), D is not zero here.
+        # D also not zero here if K0_prev > 0, and we checked if x[0] is gt 0.
 
     # initialise variables:
     diff: uint256 = 0
@@ -299,10 +307,11 @@ def newton_D(
     neg_fprime: uint256 = 0
     D_plus: uint256 = 0
     D_minus: uint256 = 0
+    D_prev: uint256 = 0
 
     for i in range(255):
 
-        D_prev: uint256 = D
+        D_prev = D
 
         # K0 = 10**18 * x[0] * N_COINS / D * x[1] * N_COINS / D * x[2] * N_COINS / D
         K0 = unsafe_div(
@@ -321,13 +330,14 @@ def newton_D(
             ),
             D,
         )  # <-------- We can convert the entire expression using unsafe math.
-        #         e.g. 10**18 * x_i * N / D is more or less close to 10**18 if
-        #         pool is balanced. Even if the pool isn't balanced, the ratio
-        #                                                   wont be too large.
+        #        since x_i is not too far from D, so overflow is not expected.
+        #        Also D > 0, since we proved that already. unsafe_div is safe.
+        #            K0 > 0 since we can safely assume that D < 10**18 * x[0].
 
         _g1k0 = unsafe_add(gamma, 10**18)  # <---------- safe unsafe_add since
         #                                                      gamma < 10**18.
-        if _g1k0 > K0:
+
+        if _g1k0 > K0:  #       The following operations can safely be unsafe.
             _g1k0 = unsafe_add(unsafe_sub(_g1k0, K0), 1)
         else:
             _g1k0 = unsafe_add(unsafe_sub(K0, _g1k0), 1)
@@ -343,41 +353,63 @@ def newton_D(
                 A_MULTIPLIER,
             ),
             ANN,
-        )  # <------ Since D > 0, gamma is small, _g1k0 is small, and the rest
-        #              are non-zero and small constants, we can safely convert
-        #                                          everything to unsafe maths.
+        )  # <------ Since D > 0, gamma is small, _g1k0 is small, the rest are
+        #         on-zero and small constants, and D has a cap in this method,
+        #                    we can safely convert everything to unsafe maths.
 
         # 2*N*K0 / _g1k0
         # mul2 = (2 * 10**18) * N_COINS * K0 / _g1k0
         mul2 = unsafe_div(
             unsafe_mul(2 * 10**18 * N_COINS, K0),
             _g1k0
-        )  # <---------
+        )  # <--------------- K0 is approximately around D, which has a cap of
+        #      10**15 * 10**18 + 1, since we get that in get_y which is called
+        #    with newton_D. _g1k0 > 0, so the entire expression can be unsafe.
+
 
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
         neg_fprime = (
-            (S + S * mul2 / 10**18)
-            + mul1 * N_COINS / K0
-            - mul2 * D / 10**18
-        )
+            S
+            + unsafe_div(S * mul2, 10**18)
+            + unsafe_div(unsafe_mul(mul1, N_COINS), K0)
+            - unsafe_div(unsafe_mul(mul2, D), 10**18)
+        )  # <--- mul1 is a big number but not huge: safe to unsafely multiply
+        # with N_coins. K0 > 0 since we
 
         # D -= f / fprime
         # D * (neg_fprime + S) / neg_fprime
-        D_plus = D * (neg_fprime + S) / neg_fprime
-        # D*D / neg_fprime
-        D_minus = D * D / neg_fprime
+        D_plus = D * (neg_fprime + S) / neg_fprime  # <--- safediv check -----
+        #                                                                    |
+        # D*D / neg_fprime                                                   |
+        D_minus = unsafe_div(D * D, neg_fprime)  # <--- can be unsafe here ---
 
+        # Since we know K0 > 0, and neg_fprime > 0, several unsafe operations
+        # are possible in the following. Also, (10**18 - K0) is safe to mul.
+        # So the only expressions we keep safe are (D_minus + ...) and (D * ...)
         if 10**18 > K0:
             # D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
-            D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
+            D_minus += unsafe_div(
+                unsafe_mul(
+                    unsafe_div(D * unsafe_div(mul1, neg_fprime), 10**18),
+                    unsafe_sub(10**18, K0)
+                ),
+                K0
+            )
         else:
             # D_minus -= D * (mul1 / neg_fprime) / 10**18 * (K0 - 10**18) / K0
-            D_minus -= D * (mul1 / neg_fprime) / 10**18 * (K0 - 10**18) / K0
+            D_minus -= unsafe_div(
+                unsafe_mul(
+                    unsafe_div(D * unsafe_div(mul1, neg_fprime), 10**18),
+                    unsafe_sub(K0, 10**18)
+                ),
+                K0
+            )
+
 
         if D_plus > D_minus:
-            D = D_plus - D_minus
+            D = unsafe_sub(D_plus, D_minus)  # <--------- Safe since we check.
         else:
-            D = (D_minus - D_plus) / 2
+            D = unsafe_div(unsafe_sub(D_minus, D_plus), 2)
 
         if D > D_prev:
             diff = unsafe_sub(D, D_prev)
@@ -415,27 +447,18 @@ def get_p(
 
     assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe D values"
 
-    xp: int256[N_COINS] = empty(int256[N_COINS])
-    A_gamma: int256[2] = empty(int256[2])
-
     D: int256 = convert(_D, int256)
-    for i in range(N_COINS):
-        xp[i] = convert(_xp[i], int256)
-        if i < N_COINS - 1:
-            A_gamma[i] = convert(_A_gamma[i], int256)
-
-    A: int256 = A_gamma[0]
-    gamma: int256 = A_gamma[1]
-    x1: int256 = xp[0]
-    x2: int256 = xp[1]
-    x3: int256 = xp[2]
+    A: int256 = convert(_A_gamma[0], int256)
+    gamma: int256 = convert(_A_gamma[1], int256)
+    x1: int256 = convert(_xp[0], int256)
+    x2: int256 = convert(_xp[1], int256)
+    x3: int256 = convert(_xp[2], int256)
 
     s1: int256 = (
         (10**18 + gamma)
         * (
-            -10**18
-            + gamma
-            * (
+            -10**18 +
+            gamma * (
                 -2 * 10**18
                 + (-10**18 + 10**18 * A / 10000) * gamma / 10**18
             )
@@ -447,8 +470,7 @@ def get_p(
         81
         * (
             10**18
-            + gamma
-            * (
+            + gamma * (
                 2 * 10**18
                 + gamma
                 + 10**18 * 9 * A / 27 / 10000 * gamma / 10**18
