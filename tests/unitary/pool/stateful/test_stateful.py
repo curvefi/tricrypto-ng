@@ -155,11 +155,10 @@ class ProfitableState(StatefulBase):
                 )
             return
 
-        d_balance = self.get_coin_balance(user, self.coins[exchange_i])
         try:
             admin_balances = self.swap.balanceOf(self.fee_receiver)
             with boa.env.prank(user):
-                self.swap.remove_liquidity_one_coin(
+                d_balance = self.swap.remove_liquidity_one_coin(
                     token_amount, exchange_i, 0
                 )
             _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
@@ -185,9 +184,6 @@ class ProfitableState(StatefulBase):
         )
         self.views.calc_token_amount(_deposit, True)
 
-        d_balance = (
-            self.get_coin_balance(user, self.coins[exchange_i]) - d_balance
-        )
         d_token = d_token - self.token.balanceOf(user)
 
         if check_out_amount:

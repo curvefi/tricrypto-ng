@@ -1086,7 +1086,7 @@ def tweak_price(
                     price_scale[k] * unsafe_sub(norm, adjustment_step)
                     + adjustment_step * price_oracle[k],
                     norm
-                )
+                )  # <- norm is non-zero and gt adjustment_step; unsafe = safe
 
             # ---------------- Update stale xp (using price_scale) with p_new.
             xp = _xp

@@ -42,27 +42,35 @@ class StatefulGas(StatefulBase):
 
     @rule(deposit_amount=deposit_amount, exchange_i=exchange_i, user=user)
     def deposit(self, deposit_amount, exchange_i, user):
+
         amounts = [0] * 3
         if exchange_i > 0:
+
             amounts[exchange_i] = (
                 deposit_amount
                 * 10**18
                 // self.swap.price_oracle(exchange_i - 1)
             )
-        else:
-            amounts[exchange_i] = deposit_amount
-        new_balances = [x + y for x, y in zip(self.balances, amounts)]
 
+        else:
+
+            amounts[exchange_i] = deposit_amount
+
+        new_balances = [x + y for x, y in zip(self.balances, amounts)]
         mint_for_testing(self.coins[exchange_i], user, deposit_amount)
 
         try:
+
             tokens = self.token.balanceOf(user)
             with boa.env.prank(user):
                 self.swap.add_liquidity(amounts, 0)
+
             tokens = self.token.balanceOf(user) - tokens
             self.total_supply += tokens
             self.balances = new_balances
+
         except Exception:
+
             if self.check_limits(amounts):
                 raise
 
@@ -100,11 +108,10 @@ class StatefulGas(StatefulBase):
                 raise
             return
 
-        d_balance = self.get_coin_balance(user, self.coins[exchange_i])
         try:
             admin_balance = self.swap.balanceOf(self.fee_receiver)
             with boa.env.prank(user):
-                self.swap.remove_liquidity_one_coin(
+                d_balance = self.swap.remove_liquidity_one_coin(
                     token_amount, exchange_i, 0
                 )
             _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
@@ -120,10 +127,6 @@ class StatefulGas(StatefulBase):
             ):
                 raise
             return
-
-        d_balance = (
-            self.get_coin_balance(user, self.coins[exchange_i]) - d_balance
-        )
         d_token = d_token - self.token.balanceOf(user)
 
         if update_D:

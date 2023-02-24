@@ -1,5 +1,4 @@
 # @version 0.3.7
-
 # (c) Curve.Fi, 2023
 # SafeMath Implementation of AMM Math for 3-coin Curve Cryptoswap Pools
 #
@@ -73,18 +72,10 @@ def get_y(
     x_k: int256 = convert(x[k], int256)
 
     a: int256 = 10**36 / 27
-    b: int256 = (
-        10**36 / 9
-        + 2 * 10**18 * gamma / 27
-        - D**2 / x_j * gamma**2 * ANN / 27**2 / convert(A_MULTIPLIER, int256) / x_k
-    )
-    c: int256 = (
-        10**36 / 9
-        + gamma * (gamma + 4 * 10**18) / 27
-        + gamma**2 * (x_j + x_k - D) / D * ANN / 27 / convert(A_MULTIPLIER, int256)
-    )
-    d: int256 = (10**18 + gamma)**2 / 27
-    d0: int256 = abs(3 * a * c / b - b)
+    b: int256 = 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
+    c: int256 = 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
+    d: int256 = (10**18 + gamma)**2/27
+    d0: int256 = abs(3*a*c/b - b)
 
     divider: int256 = 0
     if d0 > 10**48:
@@ -120,10 +111,10 @@ def get_y(
         c = c * additional_prec / divider
         d = d * additional_prec / divider
 
-    delta0: int256 = 3 * a * c / b - b
-    delta1: int256 = 9 * a * c / b - 2 * b - 27 * a**2 / b * d / b
+    delta0: int256 = 3*a*c/b - b
+    delta1: int256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
 
-    sqrt_arg: int256 = delta1**2 + 4 * delta0**2 / b * delta0
+    sqrt_arg: int256 = delta1**2 + 4*delta0**2/b*delta0
     sqrt_val: int256 = 0
     if sqrt_arg > 0:
         sqrt_val = convert(isqrt(convert(sqrt_arg, uint256)), int256)
@@ -138,20 +129,19 @@ def get_y(
 
     second_cbrt: int256 = 0
     if delta1 > 0:
-        second_cbrt = convert(
-            self._cbrt(convert((delta1 + sqrt_val), uint256) / 2), int256
-        )
+        second_cbrt = convert(self._cbrt(convert((delta1 + sqrt_val), uint256)/2), int256)
     else:
-        second_cbrt = -convert(
-            self._cbrt(convert(-(delta1 - sqrt_val), uint256) / 2), int256
-        )
+        second_cbrt = -convert(self._cbrt(convert(-(delta1 - sqrt_val), uint256)/2), int256)
 
-    C1: int256 = b_cbrt * b_cbrt / 10**18 * second_cbrt / 10**18
+    C1: int256 = b_cbrt*b_cbrt/10**18*second_cbrt/10**18
 
-    root_K0: int256 = (b + b * delta0 / C1 - C1) / 3
-    root: uint256 = convert(D * D / 27 / x_k * D / x_j * root_K0 / a, uint256)
+    root_K0: int256 = (b + b*delta0/C1 - C1)/3
+    root: uint256 = convert(D*D/27/x_k*D/x_j*root_K0/a, uint256)
 
-    return [root, convert(10**18 * root_K0 / a, uint256)]
+    return [
+        root,
+        convert(10**18*root_K0/a, uint256)
+    ]
 
 
 @internal
@@ -205,6 +195,7 @@ def _newton_y(
     y_plus: uint256 = 0
 
     for j in range(255):
+
         y_prev = y
 
         K0 = K0_i * y * N_COINS / D
@@ -216,7 +207,6 @@ def _newton_y(
         else:
             _g1k0 = K0 - _g1k0 + 1
 
-        # mul1 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
         mul1 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
 
         # 2*K0 / _g1k0
@@ -234,7 +224,9 @@ def _newton_y(
 
         # y -= f / f_prime;  y = (y * fprime - f) / fprime
         y_minus = mul1 / fprime
-        y_plus = (yfprime + 10**18 * D) / fprime + y_minus * 10**18 / K0
+        y_plus = (
+            yfprime + 10**18 * D
+        ) / fprime + y_minus * 10**18 / K0
         y_minus += 10**18 * S / fprime
 
         if y_plus < y_minus:
@@ -277,18 +269,20 @@ def newton_D(
     x: uint256[N_COINS] = self._sort(x_unsorted)
     assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
 
-    S: uint256 = x[0] + x[1] + x[2]
-    D: uint256 = 0
+    S: uint256 = 0
+    for x_i in x:
+        S += x_i
 
+    D: uint256 = 0
     if K0_prev == 0:
         D = N_COINS * self._geometric_mean(x)
     else:
         if S > 10**36:
-            D = self._cbrt(x[0] * x[1] / 10**36 * x[2] / K0_prev * 27 * 10**12)
+            D = self._cbrt(x[0]*x[1]/10**36*x[2]/K0_prev*27*10**12)
         elif S > 10**24:
-            D = self._cbrt(x[0] * x[1] / 10**24 * x[2] / K0_prev * 27 * 10**6)
+            D = self._cbrt(x[0]*x[1]/10**24*x[2]/K0_prev*27*10**6)
         else:
-            D = self._cbrt(x[0] * x[1] / 10**18 * x[2] / K0_prev * 27)
+            D = self._cbrt(x[0]*x[1]/10**18*x[2]/K0_prev*27)
 
     # initialise variables:
     diff: uint256 = 0
@@ -301,71 +295,30 @@ def newton_D(
     D_minus: uint256 = 0
 
     for i in range(255):
-
         D_prev: uint256 = D
 
-        # K0 = 10**18 * x[0] * N_COINS / D * x[1] * N_COINS / D * x[2] * N_COINS / D
-        K0 = unsafe_div(
-            unsafe_mul(
-                unsafe_mul(
-                    unsafe_div(
-                        unsafe_mul(
-                            unsafe_mul(unsafe_div(unsafe_mul(unsafe_mul(10**18, x[0]), N_COINS), D), x[1]),
-                            N_COINS
-                        ),
-                        D
-                    ),
-                    x[2]
-                ),
-                N_COINS,
-            ),
-            D,
-        )  # <-------- We can convert the entire expression using unsafe math.
-        #         e.g. 10**18 * x_i * N / D is more or less close to 10**18 if
-        #         pool is balanced. Even if the pool isn't balanced, the ratio
-        #                                                   wont be too large.
+        K0 = 10**18 * x[0] * N_COINS / D * x[1] * N_COINS / D * x[2] * N_COINS / D
 
-        _g1k0 = unsafe_add(gamma, 10**18)  # <---------- safe unsafe_add since
-        #                                                      gamma < 10**18.
+        _g1k0 = unsafe_add(gamma, 10**18)
         if _g1k0 > K0:
             _g1k0 = unsafe_add(unsafe_sub(_g1k0, K0), 1)
         else:
             _g1k0 = unsafe_add(unsafe_sub(K0, _g1k0), 1)
 
         # D / (A * N**N) * _g1k0**2 / gamma**2
-        # mul1 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
-        mul1 = unsafe_div(
-            unsafe_mul(
-                unsafe_mul(
-                    unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(10**18, D), gamma), _g1k0), gamma),
-                    _g1k0
-                ),
-                A_MULTIPLIER,
-            ),
-            ANN,
-        )  # <------ Since D > 0, gamma is small, _g1k0 is small, and the rest
-        #              are non-zero and small constants, we can safely convert
-        #                                          everything to unsafe maths.
+        mul1 = 10**18 * D / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ANN
 
         # 2*N*K0 / _g1k0
-        # mul2 = (2 * 10**18) * N_COINS * K0 / _g1k0
-        mul2 = unsafe_div(
-            unsafe_mul(2 * 10**18 * N_COINS, K0),
-            _g1k0
-        )  # <---------
+        mul2 = (2 * 10**18) * N_COINS * K0 / _g1k0
 
         # neg_fprime: uint256 = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
-        neg_fprime = (
-            (S + S * mul2 / 10**18)
-            + mul1 * N_COINS / K0
-            - mul2 * D / 10**18
-        )
+        neg_fprime = (S + S * mul2 / 10**18) + mul1 * N_COINS / K0 - mul2 * D / 10**18
 
         # D -= f / fprime
         # D * (neg_fprime + S) / neg_fprime
         D_plus = D * (neg_fprime + S) / neg_fprime
         # D*D / neg_fprime
-        D_minus = D * D / neg_fprime
+        D_minus = D*D / neg_fprime
 
         if 10**18 > K0:
             # D_minus += D * (mul1 / neg_fprime) / 10**18 * (10**18 - K0) / K0
@@ -403,7 +356,7 @@ def get_p(
     _xp: uint256[N_COINS],
     _D: uint256,
     _A_gamma: uint256[2],
-) -> uint256[N_COINS - 1]:
+) -> uint256[N_COINS-1]:
     """
     @notice Calculates dx/dy.
     @dev Output needs to be multiplied with price_scale to get the actual value.
@@ -413,7 +366,7 @@ def get_p(
     @return dy/dx for each coin (Except the first one)
     """
 
-    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe D values"
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe values D"
 
     xp: int256[N_COINS] = empty(int256[N_COINS])
     A_gamma: int256[2] = empty(int256[2])
@@ -421,7 +374,7 @@ def get_p(
     D: int256 = convert(_D, int256)
     for i in range(N_COINS):
         xp[i] = convert(_xp[i], int256)
-        if i < N_COINS - 1:
+        if i < N_COINS-1:
             A_gamma[i] = convert(_A_gamma[i], int256)
 
     A: int256 = A_gamma[0]
@@ -430,57 +383,19 @@ def get_p(
     x2: int256 = xp[1]
     x3: int256 = xp[2]
 
-    s1: int256 = (
-        (10**18 + gamma)
-        * (
-            -10**18
-            + gamma
-            * (
-                -2 * 10**18
-                + (-10**18 + 10**18 * A / 10000) * gamma / 10**18
-            )
-            / 10**18
-        )
-        / 10**18
-    )
-    s2: int256 = (
-        81
-        * (
-            10**18
-            + gamma
-            * (
-                2 * 10**18
-                + gamma
-                + 10**18 * 9 * A / 27 / 10000 * gamma / 10**18
-            )
-            / 10**18
-        )
-        * x1 / D * x2 / D * x3 / D
-    )
-    s3: int256 = (
-        2187 * (10**18 + gamma)
-        * x1 / D * x1 / D * x2 / D * x2 / D * x3 / D * x3 / D
-    )
-    s4: int256 = (
-        10**18 * 19683
-        * x1 / D * x1 / D * x1 / D
-        * x2 / D * x2 / D * x2 / D
-        * x3 / D * x3 / D * x3 / D
-    )
+    s1: int256 = (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
+    s2: int256 = 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
+    s3: int256 = 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
+    s4: int256 = 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
 
     a: int256 = s1 + s2 + s4 - s3
-    b: int256 = (
-        10**18 * 729 * A
-        * x1 / D * x2 / D * x3 / D
-        * gamma**2 / D / 27 / 10000
-    )
-    c: int256 = 27 * A * gamma**2 * (10**18 + gamma) / D / 27 / 10000
+    b: int256 = 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
+    c: int256 = 27*A*gamma**2*(10**18 + gamma)/D/27/10000
 
     return [
         self._get_dxdy(x2, x1, x3, a, b, c),
         self._get_dxdy(x3, x1, x2, a, b, c),
     ]
-
 
 @internal
 @view
@@ -494,23 +409,9 @@ def _get_dxdy(
 ) -> uint256:
 
     p: int256 = (
-        (
-            10**18
-            * x2
-            * (
-                10**18 * a
-                - b * (x2 + x3) / 10**18
-                - c * (2 * x1 + x2 + x3) / 10**18
-            )
-        )
-        / (
-            x1
-            * (
-                -10**18 * a
-                + b * (x1 + x3) / 10**18
-                + c * (x1 + 2 * x2 + x3) / 10**18
-            )
-        )
+        (10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18))
+        /
+        (x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18))
     )
 
     return convert(-p, uint256)
@@ -613,7 +514,9 @@ def _exp(_power: int256) -> uint256:
     x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
 
     y: int256 = unsafe_add(x, 1346386616545796478920950773328)
-    y = unsafe_add(unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442)
+    y = unsafe_add(
+        unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442
+    )
     p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
     p = unsafe_add(unsafe_div(unsafe_mul(p, y), 2**96), 28719021644029726153956944680412240)
     p = unsafe_add(unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96))
@@ -628,7 +531,7 @@ def _exp(_power: int256) -> uint256:
     return shift(
         unsafe_mul(
             convert(unsafe_div(p, q), uint256),
-            3822833074963236453042738258902158003155416615667,
+            3822833074963236453042738258902158003155416615667
         ),
         unsafe_sub(k, 195),
     )
@@ -670,6 +573,7 @@ def _log2(x: uint256) -> int256:
 @internal
 @pure
 def _cbrt(x: uint256) -> uint256:
+
     xx: uint256 = 0
     if x >= 115792089237316195423570985008687907853269 * 10**18:
         xx = x
