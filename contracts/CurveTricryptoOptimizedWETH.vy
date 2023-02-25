@@ -35,7 +35,14 @@ interface Math:
         x: uint256[N_COINS],
         D: uint256,
         i: uint256,
-    ) -> uint256[2]: view
+    ) -> uint256: view
+    def get_K0_prev(
+        ANN: uint256,
+        gamma: uint256,
+        x: uint256[N_COINS],
+        D: uint256,
+        i: uint256,
+    ) -> uint256: view
     def get_p(
         _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[2],
     ) -> uint256[N_COINS-1]: view
@@ -613,7 +620,6 @@ def add_liquidity(
 
         self.tweak_price(A_gamma, xp, D, 0)
 
-
     else:
 
         self.D = D
@@ -722,7 +728,6 @@ def remove_liquidity_one_coin(
     D: uint256 = 0
     p: uint256 = 0
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    K0_prev: uint256 = 0
     approx_fee: uint256 = 0
 
     # ------------------------------------------------------------------------
@@ -891,7 +896,7 @@ def _exchange(
 
     D: uint256 = self.D
     prec_j: uint256 = precisions[j]
-    dy = xp[j] - MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[0]
+    dy = xp[j] - MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
     xp[j] -= dy
     dy -= 1
 
@@ -926,9 +931,8 @@ def _exchange(
 
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
-    # K0_prev: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)[1]
-    # self.tweak_price(A_gamma, xp, 0, K0_prev)
-    self.tweak_price(A_gamma, xp, 0, 0)
+    K0_prev: uint256 = MATH.get_K0_prev(A_gamma[0], A_gamma[1], xp, D, j)
+    self.tweak_price(A_gamma, xp, 0, K0_prev)
 
     log TokenExchange(sender, i, dx, j, dy, fee)
 
@@ -995,9 +999,10 @@ def tweak_price(
         )
 
         for k in range(N_COINS - 1):
-            price_oracle[k] = (
-                last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha
-            ) / 10**18
+            price_oracle[k] = unsafe_div(
+                last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha,
+                10**18
+            )
 
         self.price_oracle_packed = self._pack_prices(price_oracle)
         self.last_prices_timestamp = block.timestamp  # <---- Store timestamp.
@@ -1016,7 +1021,7 @@ def tweak_price(
 
     last_prices = MATH.get_p(_xp, D_unadjusted, A_gamma)
     for k in range(N_COINS - 1):
-        last_prices[k] = last_prices[k] * price_scale[k] / 10**18
+        last_prices[k] = unsafe_div(last_prices[k] * price_scale[k], 10**18)
     self.last_prices_packed = self._pack_prices(last_prices)
 
     # ------- Update profit numbers without price adjustment first -----------
@@ -1094,7 +1099,7 @@ def tweak_price(
                 xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
 
             # ------------------------------------------ Update D with new xp.
-            D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, K0_prev)
+            D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)
 
             for k in range(N_COINS):
                 frac: uint256 = xp[k] * 10**18 / D  # <----- Check validity of
@@ -1252,7 +1257,10 @@ def _A_gamma() -> uint256[2]:
 def _fee(xp: uint256[N_COINS]) -> uint256:
     fee_params: uint256[3] = self._unpack(self.packed_fee_params)
     f: uint256 = MATH.reduction_coefficient(xp, fee_params[2])
-    return (fee_params[0] * f + fee_params[1] * (10**18 - f)) / 10**18
+    return unsafe_div(
+        fee_params[0] * f + fee_params[1] * (10**18 - f),
+        10**18
+    )
 
 
 @internal
@@ -1347,9 +1355,9 @@ def _calc_withdraw_one_coin(
     # ------------------------------------------------------------------------
 
     # --------------------------------- Calculate `y_out`` with `(D - D_fee)`.
-    y_out: uint256[2] = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, i)
-    dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
-    xp[i] = y_out[0]
+    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, i)
+    dy: uint256 = (xp[i] - y) * PRECISION / price_scale_i
+    xp[i] = y
 
     return dy, D, xp, approx_fee
 
