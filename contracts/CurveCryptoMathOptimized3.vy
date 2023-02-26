@@ -93,7 +93,6 @@ def get_y(
         )
     )  # <--- The first two expressions can be unsafe, and unsafely added. The
     #        D**2 in the third expression needs to be safe, and others unsafe.
-    #      Here, for b == 0,
 
     # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = (
@@ -628,7 +627,6 @@ def newton_D(
 
         # D*D / neg_fprime
         D_minus = unsafe_div(D * D, neg_fprime)
-        # D_minus = self._snekmate_mul_div(D, D, neg_fprime, False)
 
         # Since we know K0 > 0, and neg_fprime > 0, several unsafe operations
         # are possible in the following. Also, (10**18 - K0) is safe to mul.
@@ -690,9 +688,7 @@ def get_p(
     @return dy/dx for each coin (Except the first one)
     """
 
-    assert (
-        _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1
-    ), "dev: unsafe D values"
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe D values"
 
     D: int256 = convert(_D, int256)
     A: int256 = convert(_A_gamma[0], int256)
@@ -702,32 +698,64 @@ def get_p(
     x3: int256 = convert(_xp[2], int256)
 
     # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
-    s1: int256 = (
-        (10**18 + gamma)
-        * (
-            -10**18
-            + gamma * (
-                -2 * 10**18
-                + (-10**18 + 10**18 * A / 10000) * gamma / 10**18
+    s1: int256 = unsafe_div(
+        unsafe_mul(
+            unsafe_add(10**18, gamma),
+            unsafe_add(
+                -10**18,
+                unsafe_div(
+                    unsafe_mul(
+                        gamma,
+                        unsafe_add(
+                            -2 * 10**18,
+                            unsafe_div(
+                                unsafe_mul(
+                                    unsafe_add(
+                                        -10**18,
+                                        unsafe_div(unsafe_mul(10**18, A), 10000)
+                                    ),
+                                    gamma
+                                ),
+                                10**18
+                            )
+                        )
+                    ),
+                    10**18
+                )
             )
-            / 10**18
-        )
-        / 10**18
-    )
+        ),
+        10**18
+    )  # <------ The entire expression can be handled safely since the numbers
+    #       are not large and cannot overflow: see MAX_A and MAX_GAMMA values.
+
 
     # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
-    s2: int256 = (
-        81
-        * (
-            10**18
-            + gamma * (
-                2 * 10**18
-                + gamma
-                + 10**18 * 9 * A / 27 / 10000 * gamma / 10**18
+    s2: int256 = unsafe_mul(
+        81,
+        unsafe_add(
+            10**18,
+            unsafe_div(
+                unsafe_mul(
+                    gamma,
+                    unsafe_add(
+                        unsafe_add(2*10**18, gamma),
+                        unsafe_div(
+                            unsafe_mul(
+                                unsafe_div(unsafe_div(unsafe_mul(10**18*9, A), 27), 10000),
+                                gamma
+                            ),
+                            10**18
+                        )
+                    )
+                ),
+                10**18
             )
-            / 10**18
         )
-        * x1 / D * x2 / D * x3 / D
+    )  # <--- We do 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)
+    #  unsafely here, since this is safe to do.
+    s2 = unsafe_div(
+        unsafe_div(unsafe_div(s2 * x1, D) * x2, D) * x3,
+        D
     )
 
     # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
@@ -1058,131 +1086,13 @@ def _geometric_mean(_x: uint256[3]) -> uint256:
 
     # calculates a geometric mean for three numbers.
 
-    prod: uint256 = _x[0] * _x[1] / 10**18 * _x[2] / 10**18
+    prod: uint256 = unsafe_div(
+        unsafe_div(
+            _x[0] * _x[1],
+            10**18
+        ) * _x[2],
+        10**18
+    )
     assert prod > 0
 
     return self._cbrt(prod)
-
-
-@internal
-@pure
-def _snekmate_mul_div(
-    x: uint256, y: uint256, denominator: uint256, roundup: bool
-) -> uint256:
-    """
-    @dev Calculates "(x * y) / denominator" in 512-bit precision,
-         following the selected rounding direction.
-    @notice The implementation is inspired by Remco Bloemen's
-            implementation under the MIT license here:
-            https://xn--2-umb.com/21/muldiv. Furthermore,
-            the rounding direction design pattern is inspired
-            by OpenZeppelin's implementation here:
-            https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/math/Math.sol.
-    @param x The 32-byte multiplicand.
-    @param y The 32-byte multiplier.
-    @param denominator The 32-byte divisor.
-    @param roundup The Boolean variable that specifies whether
-           to round up or not. The default `False` is round down.
-    @return uint256 The 32-byte calculation result.
-    """
-    # Handle division by zero.
-    assert denominator != empty(uint256), "Math: mul_div division by zero"
-
-    # 512-bit multiplication "[prod1 prod0] = x * y".
-    # Compute the product "mod 2**256" and "mod 2**256 - 1".
-    # Then use the Chinese Remainder theorem to reconstruct
-    # the 512-bit result. The result is stored in two 256-bit
-    # variables, where: "product = prod1 * 2**256 + prod0".
-    mm: uint256 = uint256_mulmod(x, y, max_value(uint256))
-    # The least significant 256 bits of the product.
-    prod0: uint256 = unsafe_mul(x, y)
-    # The most significant 256 bits of the product.
-    prod1: uint256 = empty(uint256)
-
-    if (mm < prod0):
-        prod1 = unsafe_sub(unsafe_sub(mm, prod0), 1)
-    else:
-        prod1 = unsafe_sub(mm, prod0)
-
-    # Handling of non-overflow cases, 256 by 256 division.
-    if (prod1 == empty(uint256)):
-        if (roundup and uint256_mulmod(x, y, denominator) > 0):
-            # Calculate "ceil((x * y) / denominator)". The following
-            # line cannot overflow because we have the previous check
-            # "(x * y) % denominator > 0", which accordingly rules out
-            # the possibility of "x * y = 2**256 - 1" and `denominator == 1`.
-            return unsafe_add(unsafe_div(prod0, denominator), 1)
-        else:
-            return unsafe_div(prod0, denominator)
-
-    # Ensure that the result is less than 2**256. Also,
-    # prevents that `denominator == 0`.
-    assert denominator > prod1, "Math: mul_div overflow"
-
-    #######################
-    # 512 by 256 Division #
-    #######################
-
-    # Make division exact by subtracting the remainder
-    # from "[prod1 prod0]". First, compute remainder using
-    # the `uint256_mulmod` operation.
-    remainder: uint256 = uint256_mulmod(x, y, denominator)
-
-    # Second, subtract the 256-bit number from the 512-bit
-    # number.
-    if (remainder > prod0):
-        prod1 = unsafe_sub(prod1, 1)
-    prod0 = unsafe_sub(prod0, remainder)
-
-    # Factor powers of two out of the denominator and calculate
-    # the largest power of two divisor of denominator. Always `>= 1`,
-    # unless the denominator is zero (which is prevented above),
-    # in which case `twos` is zero. For more details, please refer to:
-    # https://cs.stackexchange.com/q/138556.
-
-    # The following line does not overflow because the denominator
-    # cannot be zero at this stage of the function.
-    twos: uint256 = denominator & (unsafe_add(~denominator, 1))
-    # Divide denominator by `twos`.
-    denominator_div: uint256 = unsafe_div(denominator, twos)
-    # Divide "[prod1 prod0]" by `twos`.
-    prod0 = unsafe_div(prod0, twos)
-    # Flip `twos` such that it is "2**256 / twos". If `twos` is zero,
-    # it becomes one.
-    twos = unsafe_add(unsafe_div(unsafe_sub(empty(uint256), twos), twos), 1)
-
-    # Shift bits from `prod1` to `prod0`.
-    prod0 |= unsafe_mul(prod1, twos)
-
-    # Invert the denominator "mod 2**256". Since the denominator is
-    # now an odd number, it has an inverse modulo 2**256, so we have:
-    # "denominator * inverse = 1 mod 2**256". Calculate the inverse by
-    # starting with a seed that is correct for four bits. That is,
-    # "denominator * inverse = 1 mod 2**4".
-    inverse: uint256 = unsafe_mul(3, denominator_div) ^ 2
-
-    # Use Newton-Raphson iteration to improve accuracy. Thanks to Hensel's
-    # lifting lemma, this also works in modular arithmetic by doubling the
-    # correct bits in each step.
-    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**8".
-    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**16".
-    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**32".
-    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**64".
-    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**128".
-    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**256".
-
-    # Since the division is now exact, we can divide by multiplying
-    # with the modular inverse of the denominator. This returns the
-    # correct result "modulo 2**256". Since the preconditions guarantee
-    # that the result is less than 2**256, this is the final result.
-    # We do not need to calculate the high bits of the result and
-    # `prod1` is no longer necessary.
-    result: uint256 = unsafe_mul(prod0, inverse)
-
-    if (roundup and uint256_mulmod(x, y, denominator) > 0):
-        # Calculate "ceil((x * y) / denominator)". The following
-        # line uses intentionally checked arithmetic to prevent
-        # a theoretically possible overflow.
-        result += 1
-
-    return result
