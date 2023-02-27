@@ -748,10 +748,15 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
+    self.tweak_price(A_gamma, xp, D, 0)
+
     log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
 
-    self.tweak_price(A_gamma, xp, D, 0, True)  # <-------- Claim admin fees if
-    #                                              price_scale is not tweaked.
+    self._claim_admin_fees()  # <----------- Because virtual_price can go down
+    #       slightly, there can be instances where the virtual price goes down
+    #           for `remove_liquidity_one_coin` operations. Loss checks happen
+    #            in the previous step, so it is safe to claim admin fees after
+    #                                          removing liquidity in one coin.
 
     return dy
 
@@ -940,7 +945,6 @@ def tweak_price(
     _xp: uint256[N_COINS],
     new_D: uint256,
     K0_prev: uint256 = 0,
-    claim_admin_fee: bool = False,
 ):
     """
     @notice Tweaks price_oracle, last_price and conditionally adjusts
@@ -1124,9 +1128,6 @@ def tweak_price(
                 self.virtual_price = old_virtual_price
 
                 log TweakPrices(p_new, price_oracle, last_prices)
-
-                if claim_admin_fee:
-                    self._claim_admin_fees()
 
                 return  # <------------------------- Return if we've adjusted.
 

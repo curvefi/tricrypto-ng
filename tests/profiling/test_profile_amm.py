@@ -5,7 +5,7 @@ import pytest
 
 from tests.utils.tokens import mint_for_testing
 
-NUM_RUNS = 1000
+NUM_RUNS = 100
 
 
 def _choose_indices():
@@ -81,7 +81,6 @@ def _random_withdraw_one(swaps, total_supply):
     swaps[1].remove_liquidity_one_coin(amount, i, 0)
 
 
-@pytest.mark.skip
 @pytest.mark.profile
 def test_profile_amms(swap_legacy, swap_with_deposit, coins, user):
 
