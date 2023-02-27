@@ -516,15 +516,28 @@ def newton_D(
         D = unsafe_mul(N_COINS, self._geometric_mean(x))
     else:
         if S > 10**36:
-            D = self._cbrt(x[0] * x[1] / 10**36 * x[2] / K0_prev * 27 * 10**12)
+            D = self._cbrt(
+                unsafe_div(
+                    unsafe_div(x[0] * x[1], 10**36) * x[2],
+                    K0_prev
+                ) * 27 * 10**12
+            )
         elif S > 10**24:
-            D = self._cbrt(x[0] * x[1] / 10**24 * x[2] / K0_prev * 27 * 10**6)
+            D = self._cbrt(
+                unsafe_div(
+                    unsafe_div(x[0] * x[1], 10**24) * x[2],
+                    K0_prev
+                ) * 27 * 10**6
+            )
         else:
-            D = self._cbrt(x[0] * x[1] / 10**18 * x[2] / K0_prev * 27)
+            D = self._cbrt(
+                unsafe_div(
+                    unsafe_div(x[0] * x[1], 10**18) * x[2],
+                    K0_prev
+                ) * 27
+            )
 
-        # Since we check if prod is 0 in _geometric_mean, and _cbrt of nonzero
-        # is nonzero (as _cbrt(1) == 10**12), D is not zero here.
-        # D also not zero here if K0_prev > 0, and we checked if x[0] is gt 0.
+        # D not zero here if K0_prev > 0, and we checked if x[0] is gt 0.
 
     # initialise variables:
     K0: uint256 = 0

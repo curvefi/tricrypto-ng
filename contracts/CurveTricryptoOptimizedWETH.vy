@@ -547,8 +547,11 @@ def add_liquidity(
     xp[0] *= precisions[0]
     xp_old[0] *= precisions[0]
     for i in range(1, N_COINS):
-        xp[i] = xp[i] * price_scale[i-1] * precisions[i] / PRECISION
-        xp_old[i] = xp_old[i] * price_scale[i-1] * precisions[i] / PRECISION
+        xp[i] = unsafe_div(xp[i] * price_scale[i-1] * precisions[i], PRECISION)
+        xp_old[i] = unsafe_div(
+            xp_old[i] * unsafe_mul(price_scale[i-1], precisions[i]),
+            PRECISION
+        )
 
     # ---------------- transferFrom token into the pool ----------------------
 
@@ -687,9 +690,10 @@ def remove_liquidity(
             balances[i] = d_balances[i]  # <-- Now it's the amounts going out.
 
     D: uint256 = self.D
-    self.D = D - D * amount / total_supply  # <--------- Reduce D proportional
-    #         to the amount of tokens leaving. Since withdrawals are balanced,
-    #    this is a simple subtraction. If amount == total_supply, D will be 0.
+    self.D = D - unsafe_div(D * amount, total_supply)  # <----------- Reduce D
+    #      proportional to the amount of tokens leaving. Since withdrawals are
+    #       balanced, this is a simple subtraction. If amount == total_supply,
+    #                                                             D will be 0.
 
     # ---------------------------------- Transfers ---------------------------
 
@@ -885,7 +889,7 @@ def _exchange(
         x0 *= prec_i
 
         if i > 0:
-            x0 = x0 * price_scale[i - 1] / PRECISION
+            x0 = unsafe_div(x0 * price_scale[i - 1], PRECISION)
 
         x1: uint256 = xp[i]  # <------------------ Back up old value in xp ...
         xp[i] = x0                                                         # |
@@ -904,7 +908,7 @@ def _exchange(
         dy = dy * PRECISION / price_scale[j - 1]
     dy /= prec_j
 
-    fee: uint256 = self._fee(xp) * dy / 10**10
+    fee: uint256 = unsafe_div(self._fee(xp) * dy, 10**10)
 
     dy -= fee  # <--------------------- Subtract fee from the outgoing amount.
     assert dy >= min_dy, "Slippage"
@@ -914,7 +918,7 @@ def _exchange(
 
     y *= prec_j
     if j > 0:
-        y = y * price_scale[j - 1] / PRECISION
+        y = unsafe_div(y * price_scale[j - 1], PRECISION)
     xp[j] = y  # <------------------------------------------------- Update xp.
 
     # ---------------------- Do Transfers in and out -------------------------
@@ -990,8 +994,8 @@ def tweak_price(
 
         alpha: uint256 = MATH.wad_exp(
             -convert(
-                (
-                    (block.timestamp - last_prices_timestamp) * 10**18 /
+                unsafe_div(
+                    (block.timestamp - last_prices_timestamp) * 10**18,
                     rebalancing_params[2]  # <----------------------- ma_time.
                 ),
                 int256,
@@ -1283,20 +1287,23 @@ def get_xcp(D: uint256) -> uint256:
 @internal
 def _calc_token_fee(amounts: uint256[N_COINS], xp: uint256[N_COINS]) -> uint256:
     # fee = sum(amounts_i - avg(amounts)) * fee' / sum(amounts)
-    fee: uint256 = self._fee(xp) * N_COINS / (4 * (N_COINS - 1))
+    fee: uint256 = unsafe_div(
+        unsafe_mul(self._fee(xp), N_COINS),
+        unsafe_mul(4, unsafe_sub(N_COINS, 1))
+    )
 
     S: uint256 = 0
     for _x in amounts:
         S += _x
 
-    avg: uint256 = S / N_COINS
+    avg: uint256 = unsafe_div(S, N_COINS)
     Sdiff: uint256 = 0
 
     for _x in amounts:
         if _x > avg:
-            Sdiff += _x - avg
+            Sdiff += unsafe_sub(_x, avg)
         else:
-            Sdiff += avg - _x
+            Sdiff += unsafe_sub(avg, _x)
 
     return fee * Sdiff / S + NOISE_FEE
 
@@ -1329,7 +1336,7 @@ def _calc_withdraw_one_coin(
         p: uint256 = (packed_prices & PRICE_MASK)
         if i == k:
             price_scale_i = p * xp[i]
-        xp[k] = xp[k] * xx[k] * p / PRECISION
+        xp[k] = unsafe_div(xp[k] * xx[k] * p, PRECISION)
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if update_D:  # <-------------- D is updated if pool is undergoing a ramp.
