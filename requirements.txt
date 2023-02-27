@@ -13,8 +13,8 @@ ipython
 hypothesis
 pytest
 pytest-xdist
-pytest-check
 pytest-forked
+pytest-repeat
 pdbpp
 hypothesis>=6.68.1
 

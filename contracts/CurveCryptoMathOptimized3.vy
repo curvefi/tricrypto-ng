@@ -93,7 +93,6 @@ def get_y(
         )
     )  # <--- The first two expressions can be unsafe, and unsafely added. The
     #        D**2 in the third expression needs to be safe, and others unsafe.
-    #      Here, for b == 0,
 
     # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = (
@@ -161,8 +160,8 @@ def get_y(
 
     # 9*a*c/b - 2*b - 27*a**2/b*d/b
     delta1: int256 = (
-        unsafe_div(9*a*c, b)
-        - 2*b
+        unsafe_div(unsafe_mul(9, a * c), b)
+        - unsafe_mul(2, b)
         - unsafe_div(unsafe_div(unsafe_mul(27, a**2), b) * d, b)
     )
 
@@ -217,7 +216,7 @@ def get_y(
 
     return [
         convert(root, uint256),
-        convert(10**18*root_K0/a, uint256)
+        convert(unsafe_div(10**18 * root_K0, a), uint256)
     ]
 
 
@@ -689,9 +688,7 @@ def get_p(
     @return dy/dx for each coin (Except the first one)
     """
 
-    assert (
-        _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1
-    ), "dev: unsafe D values"
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe D values"
 
     D: int256 = convert(_D, int256)
     A: int256 = convert(_A_gamma[0], int256)
@@ -701,63 +698,144 @@ def get_p(
     x3: int256 = convert(_xp[2], int256)
 
     # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
-    s1: int256 = (
-        (10**18 + gamma)
-        * (
-            -10**18
-            + gamma * (
-                -2 * 10**18
-                + (-10**18 + 10**18 * A / 10000) * gamma / 10**18
-            )
-            / 10**18
-        )
-        / 10**18
+    # this entire expression can be unsafe:
+    s1: int256 = unsafe_div(
+        unsafe_mul(
+            unsafe_add(10**18, gamma),
+            unsafe_add(
+                -10**18,
+                unsafe_div(
+                    unsafe_mul(
+                        gamma,
+                        unsafe_add(
+                            -2 * 10**18,
+                            unsafe_div(
+                                unsafe_mul(
+                                    unsafe_add(
+                                        -10**18,
+                                        unsafe_div(
+                                            unsafe_mul(10**18, A),
+                                            10000,
+                                        ),
+                                    ),
+                                    gamma,
+                                ),
+                                10**18,
+                            ),
+                        ),
+                    ),
+                    10**18,
+                ),
+            ),
+        ),
+        10**18,
     )
 
     # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
-    s2: int256 = (
-        81
-        * (
-            10**18
-            + gamma * (
-                2 * 10**18
-                + gamma
-                + 10**18 * 9 * A / 27 / 10000 * gamma / 10**18
+    # Multiplication by x1, x2 and x3 needs to be safe:
+    s2: int256 = unsafe_div(
+        unsafe_mul(
+            gamma,
+            unsafe_add(
+                unsafe_add(2 * 10**18, gamma),
+                unsafe_div(
+                    unsafe_mul(
+                        unsafe_div(
+                            unsafe_div(
+                                unsafe_mul(10**18 * 9, A), 27
+                            ),
+                            10000,
+                        ),
+                        gamma,
+                    ),
+                    10**18,
+                ),
             )
-            / 10**18
-        )
-        * x1 / D * x2 / D * x3 / D
+        ),
+        10**18,
+    )
+    s2 = unsafe_div(
+        unsafe_div(
+            unsafe_div(
+                unsafe_mul(81, (10**18 + s2)) * x1, D
+            ) * x2,
+            D,
+        ) * x3,
+        D
     )
 
     # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
-    s3: int256 = (
-        2187
-        * (10**18 + gamma)
-        * x1 / D * x1 / D
-        * x2 / D * x2 / D
-        * x3 / D * x3 / D
+    # Same as before: multiplication by x1, x2 or x3 should be safe
+    s3: int256 = unsafe_mul(2187, unsafe_add(10**18, gamma))
+    s3 = unsafe_div(
+        unsafe_div(
+            unsafe_div(s3 * x1, D) * x2, D
+        ) * x3,
+        D
+    )
+    s3 = unsafe_div(
+        unsafe_div(
+            unsafe_div(s3 * x1, D) * x2, D
+        ) * x3,
+        D
     )
 
     # 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
-    s4: int256 = (
-        10**18
-        * 19683
-        * x1 / D * x1 / D * x1 / D
-        * x2 / D * x2 / D * x2 / D
-        * x3 / D * x3 / D * x3 / D
+    # Same as before.
+    s4: int256 = 10**18 * 19683 * x1
+    s4 = unsafe_div(unsafe_div(s4, D) * x2, D) * x3
+    s4 = unsafe_div(
+        unsafe_div(
+            unsafe_div(
+                unsafe_div(
+                    unsafe_div(
+                        unsafe_div(
+                            unsafe_div(s4, D) * x1,
+                            D
+                        ) * x2,
+                        D
+                    ) * x3,
+                    D,
+                ) * x1,
+                D
+            ) * x2,
+            D
+        ) * x3,
+        D
     )
 
     a: int256 = s1 + s2 + s4 - s3
 
     # 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
-    b: int256 = (
-        10**18 * 729 * A
-        * x1 / D * x2 / D * x3 / D
-        * gamma**2 / D / 27 / 10000
+    b: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_div(
+                unsafe_div(
+                    unsafe_div(
+                        unsafe_mul(10**18 * 27, A),
+                        10000,
+                    ) * x1,
+                    D,
+                ) * x2,
+                D,
+            ) * x3,
+            D,
+        ) * gamma**2,
+        D,
     )
 
     # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
-    c: int256 = 27 * A * gamma**2 * (10**18 + gamma) / D / 27 / 10000
+    # entire expression can be unsafe:
+    c: int256 = unsafe_div(
+        unsafe_mul(
+            unsafe_mul(
+                unsafe_div(A, 10000),
+                gamma**2
+            ),
+            unsafe_add(10**18, gamma),
+        ),
+        D,
+    )
 
     return [
         self._get_dxdy(x2, x1, x3, a, b, c),
@@ -788,15 +866,15 @@ def _get_dxdy(
             * (
                 10**18 * a
                 - unsafe_div(b * (x2 + x3), 10**18)
-                - unsafe_div(c * (2 * x1 + unsafe_add(x2, x3)), 10**18)
-            )  #                                ^-- we safeadd 2*x2 + x3 later
+                - unsafe_div(c * (unsafe_mul(2, x1) + unsafe_add(x2, x3)), 10**18)
+            )  #
         )
         / (
             x1
             * (
                 unsafe_mul(-10**18, a)  # <--- since we did safemul before
                 + unsafe_div(b * (x1 + x3), 10**18)
-                + unsafe_div(c * (x1 + 2 * x2 + x3), 10**18)
+                + unsafe_div(c * (unsafe_mul(2, x2) + unsafe_add(x1, x3)), 10**18)
             )
         )
     )
@@ -862,13 +940,12 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
     # K = prod(x) / (sum(x) / N)**N
     # (all normalized to 1e18)
 
-    K: uint256 = 10**18
     S: uint256 = x[0] + x[1] + x[2]
 
     # Could be good to pre-sort x, but it is used only for dynamic fee
-    K = K * N_COINS * x[0] / S
-    K = K * N_COINS * x[1] / S
-    K = K * N_COINS * x[2] / S
+    K: uint256 = 10**18 * N_COINS * x[0] / S
+    K = unsafe_div(K * N_COINS * x[1], S)  # <- unsafe div is safu.
+    K = unsafe_div(K * N_COINS * x[2], S)
 
     if fee_gamma > 0:
         K = fee_gamma * 10**18 / (fee_gamma + 10**18 - K)
@@ -1057,7 +1134,12 @@ def _geometric_mean(_x: uint256[3]) -> uint256:
 
     # calculates a geometric mean for three numbers.
 
-    prod: uint256 = _x[0] * _x[1] / 10**18 * _x[2] / 10**18
-    assert prod > 0
+    prod: uint256 = unsafe_div(
+        unsafe_div(_x[0] * _x[1], 10**18) * _x[2],
+        10**18
+    )
+
+    if prod == 0:
+        return 0
 
     return self._cbrt(prod)

@@ -156,6 +156,7 @@ def test_add_liquidity_eth(swap, coins, user, amount_usd, use_eth):
     frac=strategy("uint256", min_value=10**10, max_value=10**18),
     use_eth=strategy("bool"),
 )
+@settings(deadline=None)
 def test_remove_liquidity_eth(swap_with_deposit, coins, user, frac, use_eth):
 
     token_amount = swap_with_deposit.balanceOf(user) * frac // 10**18
@@ -185,6 +186,7 @@ def test_remove_liquidity_eth(swap_with_deposit, coins, user, frac, use_eth):
     i=strategy("uint8", min_value=0, max_value=1),
     use_eth=strategy("bool"),
 )
+@settings(deadline=None)
 def test_remove_liquidity_one_coin_eth(
     swap_with_deposit, coins, user, frac, i, use_eth
 ):
