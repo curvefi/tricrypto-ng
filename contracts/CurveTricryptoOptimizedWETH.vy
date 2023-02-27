@@ -75,14 +75,14 @@ event TokenExchange:
     bought_id: uint256
     tokens_bought: uint256
     fee: uint256
-    price_scale: uint256[N_COINS-1]
+    packed_price_scale: uint256
 
 event AddLiquidity:
     provider: indexed(address)
     token_amounts: uint256[N_COINS]
     fee: uint256
     token_supply: uint256
-    price_scale: uint256[N_COINS-1]
+    packed_price_scale: uint256
 
 event RemoveLiquidity:
     provider: indexed(address)
@@ -95,7 +95,7 @@ event RemoveLiquidityOne:
     coin_index: uint256
     coin_amount: uint256
     approx_fee: uint256
-    price_scale: uint256[N_COINS-1]
+    packed_price_scale: uint256
 
 event CommitNewParameters:
     deadline: indexed(uint256)
@@ -530,9 +530,8 @@ def add_liquidity(
     # --------------------- Get prices, balances -----------------------------
 
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
-    price_scale: uint256[N_COINS-1] = (
-        self._unpack_prices(self.price_scale_packed)
-    )
+    packed_price_scale: uint256 = self.price_scale_packed
+    price_scale: uint256[N_COINS-1] = self._unpack_prices(packed_price_scale)
 
     # -------------------------------------- Update balances and calculate xp.
     xp_old: uint256[N_COINS] = xp
@@ -619,7 +618,7 @@ def add_liquidity(
         token_supply += d_token
         self.mint(receiver, d_token)
 
-        price_scale = self.tweak_price(A_gamma, xp, D, 0)
+        packed_price_scale = self.tweak_price(A_gamma, xp, D, 0)
 
     else:
 
@@ -630,7 +629,9 @@ def add_liquidity(
 
     assert d_token >= min_mint_amount, "Slippage"
 
-    log AddLiquidity(receiver, amounts, d_token_fee, token_supply, price_scale)
+    log AddLiquidity(
+        receiver, amounts, d_token_fee, token_supply, packed_price_scale
+    )
 
     return d_token
 
@@ -750,9 +751,11 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    price_scale: uint256[N_COINS-1] = self.tweak_price(A_gamma, xp, D, 0)
+    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
 
-    log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee, price_scale)
+    log RemoveLiquidityOne(
+        msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
+    )
 
     self._claim_admin_fees()  # <----------- Because virtual_price can go down
     #       slightly, there can be instances where the virtual price goes down
@@ -866,8 +869,9 @@ def _exchange(
     xp[i] = x0 + dx
     self.balances[i] = xp[i]
 
+    packed_price_scale: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS - 1] = self._unpack_prices(
-        self.price_scale_packed
+        packed_price_scale
     )
 
     xp[0] *= precisions[0]
@@ -934,9 +938,9 @@ def _exchange(
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
     K0_prev: uint256 = MATH.get_K0_prev(A_gamma[0], A_gamma[1], xp, D, j)
-    price_scale = self.tweak_price(A_gamma, xp, 0, K0_prev)
+    packed_price_scale = self.tweak_price(A_gamma, xp, 0, K0_prev)
 
-    log TokenExchange(sender, i, dx, j, dy, fee, price_scale)
+    log TokenExchange(sender, i, dx, j, dy, fee, packed_price_scale)
 
     return dy
 
@@ -947,7 +951,7 @@ def tweak_price(
     _xp: uint256[N_COINS],
     new_D: uint256,
     K0_prev: uint256 = 0,
-) -> uint256[2]:
+) -> uint256:
     """
     @notice Tweaks price_oracle, last_price and conditionally adjusts
             price_scale. This is called whenever there is an unbalanced
@@ -958,7 +962,7 @@ def tweak_price(
     @param _xp Array of current balances.
     @param new_D New D value.
     @param K0_prev Initial guess for `newton_D`.
-    @returns (if tweaked) price_scale
+    @returns uint256 (if tweaked) price_scale (packed)
     """
 
     # ---------------------------- Read storage ------------------------------
@@ -972,8 +976,9 @@ def tweak_price(
     last_prices: uint256[N_COINS - 1] = self._unpack_prices(
         self.last_prices_packed
     )
+    packed_price_scale: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS - 1] = self._unpack_prices(
-        self.price_scale_packed
+        packed_price_scale
     )
 
     total_supply: uint256 = self.totalSupply
@@ -1126,17 +1131,20 @@ def tweak_price(
                 2 * old_virtual_price - 10**18 > xcp_profit
             ):
 
-                self.price_scale_packed = self._pack_prices(p_new)
                 self.D = D
                 self.virtual_price = old_virtual_price
 
-                return p_new
+                # reuse old_virtual_price
+                packed_price_scale = self._pack_prices(p_new)
+                self.price_scale_packed = packed_price_scale
+
+                return packed_price_scale
 
     # --------- price_scale was not adjusted. Update the profit counter and D.
     self.D = D_unadjusted
     self.virtual_price = virtual_price
 
-    return price_scale
+    return packed_price_scale
 
 
 @internal
