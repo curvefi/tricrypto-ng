@@ -75,12 +75,14 @@ event TokenExchange:
     bought_id: uint256
     tokens_bought: uint256
     fee: uint256
+    price_scale: uint256[N_COINS-1]
 
 event AddLiquidity:
     provider: indexed(address)
     token_amounts: uint256[N_COINS]
     fee: uint256
     token_supply: uint256
+    price_scale: uint256[N_COINS-1]
 
 event RemoveLiquidity:
     provider: indexed(address)
@@ -93,6 +95,7 @@ event RemoveLiquidityOne:
     coin_index: uint256
     coin_amount: uint256
     approx_fee: uint256
+    price_scale: uint256[N_COINS-1]
 
 event CommitNewParameters:
     deadline: indexed(uint256)
@@ -127,11 +130,6 @@ event StopRampA:
 event ClaimAdminFee:
     admin: indexed(address)
     tokens: uint256
-
-event TweakPrices:
-    price_scale: uint256[N_COINS-1]
-    price_oracle: uint256[N_COINS-1]
-    last_prices: uint256[N_COINS-1]
 
 
 # ----------------------- Storage/State Variables ----------------------------
@@ -621,7 +619,7 @@ def add_liquidity(
         token_supply += d_token
         self.mint(receiver, d_token)
 
-        self.tweak_price(A_gamma, xp, D, 0)
+        price_scale = self.tweak_price(A_gamma, xp, D, 0)
 
     else:
 
@@ -632,7 +630,7 @@ def add_liquidity(
 
     assert d_token >= min_mint_amount, "Slippage"
 
-    log AddLiquidity(receiver, amounts, d_token_fee, token_supply)
+    log AddLiquidity(receiver, amounts, d_token_fee, token_supply, price_scale)
 
     return d_token
 
@@ -752,9 +750,9 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    self.tweak_price(A_gamma, xp, D, 0)
+    price_scale: uint256[N_COINS-1] = self.tweak_price(A_gamma, xp, D, 0)
 
-    log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee)
+    log RemoveLiquidityOne(msg.sender, token_amount, i, dy, approx_fee, price_scale)
 
     self._claim_admin_fees()  # <----------- Because virtual_price can go down
     #       slightly, there can be instances where the virtual price goes down
@@ -936,9 +934,9 @@ def _exchange(
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
     K0_prev: uint256 = MATH.get_K0_prev(A_gamma[0], A_gamma[1], xp, D, j)
-    self.tweak_price(A_gamma, xp, 0, K0_prev)
+    price_scale = self.tweak_price(A_gamma, xp, 0, K0_prev)
 
-    log TokenExchange(sender, i, dx, j, dy, fee)
+    log TokenExchange(sender, i, dx, j, dy, fee, price_scale)
 
     return dy
 
@@ -949,7 +947,7 @@ def tweak_price(
     _xp: uint256[N_COINS],
     new_D: uint256,
     K0_prev: uint256 = 0,
-):
+) -> uint256[2]:
     """
     @notice Tweaks price_oracle, last_price and conditionally adjusts
             price_scale. This is called whenever there is an unbalanced
@@ -960,6 +958,7 @@ def tweak_price(
     @param _xp Array of current balances.
     @param new_D New D value.
     @param K0_prev Initial guess for `newton_D`.
+    @returns (if tweaked) price_scale
     """
 
     # ---------------------------- Read storage ------------------------------
@@ -1131,15 +1130,13 @@ def tweak_price(
                 self.D = D
                 self.virtual_price = old_virtual_price
 
-                log TweakPrices(p_new, price_oracle, last_prices)
-
-                return  # <------------------------- Return if we've adjusted.
+                return p_new
 
     # --------- price_scale was not adjusted. Update the profit counter and D.
     self.D = D_unadjusted
     self.virtual_price = virtual_price
 
-    log TweakPrices(price_scale, price_oracle, last_prices)
+    return price_scale
 
 
 @internal
