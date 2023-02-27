@@ -699,35 +699,9 @@ def get_p(
 
     # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
     s1: int256 = unsafe_div(
-        unsafe_mul(
-            unsafe_add(10**18, gamma),
-            unsafe_add(
-                -10**18,
-                unsafe_div(
-                    unsafe_mul(
-                        gamma,
-                        unsafe_add(
-                            -2 * 10**18,
-                            unsafe_div(
-                                unsafe_mul(
-                                    unsafe_add(
-                                        -10**18,
-                                        unsafe_div(unsafe_mul(10**18, A), 10000)
-                                    ),
-                                    gamma
-                                ),
-                                10**18
-                            )
-                        )
-                    ),
-                    10**18
-                )
-            )
-        ),
+        unsafe_mul(unsafe_add(10**18, gamma), unsafe_add(-10**18, unsafe_div(unsafe_mul(gamma, unsafe_add(-2 * 10**18, unsafe_div(unsafe_mul(unsafe_add(-10**18, unsafe_div(unsafe_mul(10**18, A), 10000)), gamma), 10**18))), 10**18))),
         10**18
-    )  # <------ The entire expression can be handled safely since the numbers
-    #       are not large and cannot overflow: see MAX_A and MAX_GAMMA values.
-
+    )  # <--- The entire expression can be safely unsafe.
 
     # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
     s2: int256 = unsafe_mul(
@@ -757,6 +731,20 @@ def get_p(
         unsafe_div(unsafe_div(s2 * x1, D) * x2, D) * x3,
         D
     )
+    # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
+    # s2: int256 = (
+    #     81
+    #     * (
+    #         10**18
+    #         + gamma * (
+    #             2 * 10**18
+    #             + gamma
+    #             + 10**18 * 9 * A / 27 / 10000 * gamma / 10**18
+    #         )
+    #         / 10**18
+    #     )
+    #     * x1 / D * x2 / D * x3 / D
+    # )
 
     # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
     s3: int256 = (
