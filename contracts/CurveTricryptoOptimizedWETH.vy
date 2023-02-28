@@ -6,8 +6,8 @@
 @license MIT
 @author Curve.Fi
 @notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
-@dev View methods for `get_dy`, `get_dx`, `calc_token_amounts` etc. are available
-     in the `views_implementation` of the Factory.
+@dev View methods for `get_dy`, `get_dx`, `calc_token_amounts` etc. are
+     available in the `views_implementation` of the Factory.
 @dev All prices in the AMM are with respect to the first token in the pool.
 """
 

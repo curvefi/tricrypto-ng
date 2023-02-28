@@ -1,7 +1,7 @@
 # @version 0.3.7
 
 # (c) Curve.Fi, 2023
-# SafeMath Implementation of AMM Math for 3-coin Curve Cryptoswap Pools
+# AMM Math for 3-coin Curve Cryptoswap Pools
 #
 # Unless otherwise agreed on, only contracts owned by Curve DAO or
 # Swiss Stake GmbH are allowed to call this contract.
@@ -609,7 +609,7 @@ def newton_D(
             ),
             ANN,
         )  # <------ Since D > 0, gamma is small, _g1k0 is small, the rest are
-        #         on-zero and small constants, and D has a cap in this method,
+        #        non-zero and small constants, and D has a cap in this method,
         #                    we can safely convert everything to unsafe maths.
 
         # 2*N*K0 / _g1k0
