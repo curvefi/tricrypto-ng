@@ -40,7 +40,6 @@ def get_y(
     @param x Balances multiplied by prices and precisions of all coins.
     @param _D Invariant.
     @param i Index of coin to calculate y.
-    @return y Calculated y.
     """
 
     # Safety checks
@@ -259,12 +258,11 @@ def newton_D(
     @notice Finding the invariant via newtons method using good initial guesses.
     @dev ANN is higher by the factor A_MULTIPLIER
     @dev ANN is already A * N**N
-    @param ANN: the A * N**N value
-    @param gamma: the gamma value
-    @param x_unsorted: the array of coin balances (not sorted)
-    @param K0_prev: apriori for newton's method derived from get_y_int. Defaults
+    @param ANN the A * N**N value
+    @param gamma the gamma value
+    @param x_unsorted the array of coin balances (not sorted)
+    @param K0_prev apriori for newton's method derived from get_y_int. Defaults
                     to zero (no apriori)
-    @return the invariant
     """
     x: uint256[N_COINS] = self._sort(x_unsorted)
     assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
@@ -363,7 +361,6 @@ def get_p(
     @param _xp Balances of the pool.
     @param _D Current value of D.
     @param _A_gamma Amplification coefficient and gamma.
-    @return dy/dx for each coin (Except the first one)
     """
 
     assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe values D"
@@ -427,7 +424,6 @@ def cbrt(x: uint256) -> uint256:
     @notice Calculate the cubic root of a number in 1e18 precision
     @dev Consumes around 1500 gas units
     @param x The number to calculate the cubic root of
-    @return The cubic root of the number
     """
     return self._cbrt(x)
 
@@ -438,7 +434,6 @@ def geometric_mean(_x: uint256[3]) -> uint256:
     """
     @notice Calculate the geometric mean of a list of numbers in 1e18 precision.
     @param _x list of 3 numbers to sort
-    @returns  The geometric mean of the list of numbers
     """
     return self._geometric_mean(_x)
 
@@ -461,7 +456,6 @@ def wad_exp(_power: int256) -> uint256:
     """
     @notice Calculates the e**x with 1e18 precision
     @param _power The number to calculate the exponential of
-    @return The exponential of the given number
     """
     return self._exp(_power)
 

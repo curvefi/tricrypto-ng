@@ -106,8 +106,10 @@ def test_second_deposit(
         f >= 1.1e16 and f <= 0.9e20 for f in [_x * 10**18 // _D for _x in xp]
     )
 
-    for c, v in zip(coins, amounts):
-        mint_for_testing(c, user, v)
+    for coin, q in zip(coins, amounts):
+        mint_for_testing(coin, user, 10**30)
+        with boa.env.prank(user):
+            coin.approve(swap_with_deposit, 2**256 - 1)
 
     try:
 
@@ -285,8 +287,7 @@ def test_immediate_withdraw_one(
 
             if frac > 1.1e16 and frac < 0.9e20:
                 raise
-            else:
-                return
+            return  # dont continue tests
 
         d_balances = [
             d_balances[k] - swap_with_deposit.balances(k) for k in range(3)

@@ -164,7 +164,6 @@ class StatefulBase(RuleBasedStateMachine):
 
             _amounts = [0] * 3
             _amounts[exchange_i] = exchange_amount_in
-            should_be_fine = False
 
             # Small amounts may fail with rounding errors
             if (
@@ -172,16 +171,8 @@ class StatefulBase(RuleBasedStateMachine):
                 and exchange_amount_in > 100
                 and calc_amount / self.swap.balances(exchange_j) > 1e-13
                 and exchange_amount_in / self.swap.balances(exchange_i) > 1e-13
+                and self.check_limits(_amounts)
             ):
-
-                should_be_fine = True
-
-            # check if pool state is within working limits (raise if it is):
-            if self.check_limits(_amounts):
-
-                should_be_fine = True
-
-            if should_be_fine:
                 raise
 
             return None

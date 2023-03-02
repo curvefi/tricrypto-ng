@@ -417,7 +417,6 @@ def exchange(
     @param min_dy Minimum amount of output coin to receive
     @param use_eth True if the input coin is native token, False otherwise
     @param receiver Address to send the output coin to. Default is msg.sender
-    @returns dy Amount of output coin received
     """
     return self._exchange(
         msg.sender,
@@ -450,7 +449,6 @@ def exchange_underlying(
     @param dx Amount of input coin being swapped in
     @param min_dy Minimum amount of output coin to receive
     @param receiver Address to send the output coin to. Default is msg.sender
-    @returns dy Amount of output coin received
     """
     return self._exchange(
         msg.sender,
@@ -490,7 +488,6 @@ def exchange_extended(
     @param sender Address to transfer input coin from
     @param receiver Address to send the output coin to
     @param cb Callback signature
-    @returns dy Amount of output coin received
     """
 
     assert cb != empty(bytes32)  # dev: No callback specified
@@ -514,7 +511,6 @@ def add_liquidity(
     @param min_mint_amount Minimum amount of LP to mint.
     @param use_eth True if native token is being added to the pool.
     @param receiver Address to send the LP tokens to. Default is msg.sender
-    @returns d_token Amount of LP tokens minted
     """
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -751,17 +747,11 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
+    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0, True)
 
     log RemoveLiquidityOne(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
     )
-
-    self._claim_admin_fees()  # <----------- Because virtual_price can go down
-    #       slightly, there can be instances where the virtual price goes down
-    #           for `remove_liquidity_one_coin` operations. Loss checks happen
-    #            in the previous step, so it is safe to claim admin fees after
-    #                                          removing liquidity in one coin.
 
     return dy
 
@@ -951,6 +941,7 @@ def tweak_price(
     _xp: uint256[N_COINS],
     new_D: uint256,
     K0_prev: uint256 = 0,
+    claim_fees: bool = False
 ) -> uint256:
     """
     @notice Tweaks price_oracle, last_price and conditionally adjusts
@@ -962,7 +953,7 @@ def tweak_price(
     @param _xp Array of current balances.
     @param new_D New D value.
     @param K0_prev Initial guess for `newton_D`.
-    @returns uint256 (if tweaked) price_scale (packed)
+    @param claim_fees Claim fees if True.
     """
 
     # ---------------------------- Read storage ------------------------------
@@ -1073,7 +1064,10 @@ def tweak_price(
         norm: uint256 = 0
         ratio: uint256 = 0
         for k in range(N_COINS - 1):
-            ratio = price_oracle[k] * 10**18 / price_scale[k]
+
+            ratio = unsafe_div(price_oracle[k] * 10**18, price_scale[k])
+            # unsafe_div because we did safediv before ----^
+
             if ratio > 10**18:
                 ratio = unsafe_sub(ratio, 10**18)
             else:
@@ -1104,7 +1098,8 @@ def tweak_price(
             # ---------------- Update stale xp (using price_scale) with p_new.
             xp = _xp
             for k in range(N_COINS - 1):
-                xp[k + 1] = _xp[k + 1] * p_new[k] / price_scale[k]
+                xp[k + 1] = unsafe_div(_xp[k + 1] * p_new[k], price_scale[k])
+                # unsafe_div because we did safediv before ----^
 
             # ------------------------------------------ Update D with new xp.
             D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)
@@ -1121,9 +1116,9 @@ def tweak_price(
 
             # ---------- Calculate new virtual_price using new xp and D. Reuse
             #              `old_virtual_price` (but it has new virtual_price).
-            old_virtual_price = (
-                10**18 * MATH.geometric_mean(xp) / total_supply
-            )
+            old_virtual_price = unsafe_div(
+                10**18 * MATH.geometric_mean(xp), total_supply
+            )  # <----- unsafe_div because we did safediv before (if vp>1e18)
 
             # ---------------------------- Proceed if we've got enough profit.
             if (
@@ -1137,6 +1132,9 @@ def tweak_price(
                 # reuse old_virtual_price
                 packed_price_scale = self._pack_prices(p_new)
                 self.price_scale_packed = packed_price_scale
+
+                if claim_fees:
+                    self._claim_admin_fees()
 
                 return packed_price_scale
 
@@ -1162,11 +1160,12 @@ def _claim_admin_fees():
     #         `self.balances` yet: pool balances only account for incoming and
     #                  outgoing tokens excluding fees. Following 'gulps' fees:
 
+    coins: address[N_COINS] = self.coins
     for i in range(N_COINS):
-        if self.coins[i] == WETH20:
+        if coins[i] == WETH20:
             self.balances[i] = self.balance
         else:
-            self.balances[i] = ERC20(self.coins[i]).balanceOf(self)
+            self.balances[i] = ERC20(coins[i]).balanceOf(self)
 
     #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
     #                         and the pool gulps nothing in the previous step.
@@ -1185,14 +1184,15 @@ def _claim_admin_fees():
         #      3. Since half of the profits go to rebalancing the pool, we
         #         are left with half; so divide by 2.
 
-        fees: uint256 = (xcp_profit - xcp_profit_a) * ADMIN_FEE / (2 * 10**10)
-        #                   ^             Rebalancing costs --------^
-        #                   ^---------------- Accrued profit since last claim.
+        fees: uint256 = unsafe_div(
+            unsafe_sub(xcp_profit, xcp_profit_a) * 5 * 10**9, #* ADMIN_FEE,
+            2 * 10**10
+        )
 
         # -------------------------- Claim admin fees by minting admin's share
         #                                            of the pool in LP tokens.
         receiver: address = Factory(self.factory).fee_receiver()
-        if receiver != empty(address):
+        if receiver != empty(address) and fees > 0:
 
             frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
             claimed: uint256 = self.mint_relative(receiver, frac)
@@ -1553,7 +1553,6 @@ def mint(_to: address, _value: uint256) -> bool:
          proper events are emitted.
     @param _to The account that will receive the created tokens.
     @param _value The amount that will be created.
-    @returns bool True if the operation was successful.
     """
     self.totalSupply += _value
     self.balanceOf[_to] += _value
@@ -1568,7 +1567,6 @@ def mint_relative(_to: address, frac: uint256) -> uint256:
     @dev Increases supply by factor of (1 + frac/1e18) and mints it for _to
     @param _to The account that will receive the created tokens.
     @param frac The fraction of the current supply to mint.
-    @returns d_supply The amount minted.
     """
     supply: uint256 = self.totalSupply
     d_supply: uint256 = supply * frac / 10**18
@@ -1586,7 +1584,6 @@ def burnFrom(_to: address, _value: uint256) -> bool:
     @dev Burn an amount of the token from a given account.
     @param _to The account whose tokens will be burned.
     @param _value The amount that will be burned.
-    @returns bool True if the operation was successful.
     """
     self.totalSupply -= _value
     self.balanceOf[_to] -= _value
@@ -1705,7 +1702,6 @@ def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
     @notice Calculates output tokens with fee
     @param token_amount LP Token amount to burn
     @param i token in which liquidity is withdrawn
-    @returns Num received ith tokens
     """
 
     return self._calc_withdraw_one_coin(

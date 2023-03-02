@@ -105,9 +105,11 @@ celerybeat.pid
 env/
 venv/
 profile-venv/
+profilingenv/
 ENV/
 env.bak/
 venv.bak/
+apeenv/
 
 # Spyder project settings
 .spyderproject
@@ -139,9 +141,8 @@ reports/
 .vscode
 *.csv
 
-# data
+# misc
 /data
 todo.txt
-
-# misc
-requirements-profiling.txt
+node_modules
+*.json

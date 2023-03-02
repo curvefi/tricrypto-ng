@@ -19,6 +19,7 @@ interface LiquidityGauge:
 
 
 event TricryptoPoolDeployed:
+    pool: address
     coins: address[N_COINS]
     A: uint256
     gamma: uint256
@@ -30,7 +31,6 @@ event TricryptoPoolDeployed:
     ma_exp_time: uint256
     initial_prices: uint256[N_COINS-1]
     deployer: address
-    implementation: address
 
 event LiquidityGaugeDeployed:
     pool: address
@@ -85,7 +85,7 @@ MAX_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER * 100000
 PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
-WETH: immutable(address)
+WETH: public(immutable(address))
 math: public(immutable(address))
 
 admin: public(address)
@@ -261,6 +261,7 @@ def deploy_pool(
             self.market_counts[key] = length + 1
 
     log TricryptoPoolDeployed(
+        pool,
         _coins,
         A,
         gamma,
@@ -272,7 +273,6 @@ def deploy_pool(
         ma_exp_time,
         initial_prices,
         msg.sender,
-        pool_implementation
     )
 
     return pool
