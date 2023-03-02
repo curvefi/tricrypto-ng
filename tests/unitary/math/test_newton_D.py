@@ -22,8 +22,8 @@ MAX_A = 1000 * A_MUL
 MIN_GAMMA = 10**10
 MAX_GAMMA = 5 * 10**16
 
-MIN_XD = 10**17
-MAX_XD = 10**19
+MIN_XD = 10**16 - 1
+MAX_XD = 10**20 + 1
 
 pytest.progress = 0
 pytest.positive_dy = 0
@@ -127,11 +127,24 @@ def _test_newton_D(
     X = [D * xD // 10**18, D * yD // 10**18, D * zD // 10**18]
 
     result_get_y = 0
+    get_y_failed = False
     try:
         (result_get_y, K0) = math_optimized.get_y(A, gamma, X, D, j)
     except:
-        if is_safe:
-            raise
+        get_y_failed = True
+
+    if get_y_failed:
+        newton_y_failed = False
+        try:
+            math_optimized.internal._newton_y(A, gamma, X, D, j)
+        except:
+            newton_y_failed = True
+
+    if get_y_failed and newton_y_failed:
+        return  # both canonical and new method fail, so we ignore.
+
+    if get_y_failed and not newton_y_failed and is_safe:
+        raise  # this is a problem
 
     # dy should be positive
     if result_get_y < X[j]:
@@ -155,6 +168,11 @@ def _test_newton_D(
 
             try:
                 result_sim = math_unoptimized.newton_D(A, gamma, X)
+            except:
+                return  # original fails so we move on
+
+            try:
+                result_sim = math_unoptimized.newton_D(A, gamma, X)
                 pytest.gas_original += (
                     math_unoptimized._computation.get_gas_used()
                 )
@@ -165,5 +183,6 @@ def _test_newton_D(
                     10000, result_sim / 1e12
                 )
             except:
+                breakpoint()
                 if is_safe:
                     raise

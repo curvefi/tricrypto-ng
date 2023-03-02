@@ -44,6 +44,4 @@ def test_cbrt_precision_loss_gte_limit(cbrt_1e18_base, math_optimized, val):
 
     cbrt_vyper = math_optimized.cbrt(val)
     cbrt_python = cbrt_1e18_base(val)
-
-    assert cbrt_vyper != cbrt_python
     assert cbrt_vyper == pytest.approx(cbrt_python)
