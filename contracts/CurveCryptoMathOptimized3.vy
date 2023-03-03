@@ -10,9 +10,6 @@
 @title CurveTricryptoMathOptimized
 @license MIT
 @author Curve.Fi
-@custom:coauthor G. V. Ovichinnikov
-@custom:coauthor F. A. Skomorokhov
-@custom:coauthor pcaversaccio (Snekmate)
 @notice Curve AMM Math for 3 unpegged assets (e.g. ETH, BTC, USD).
 """
 
@@ -1188,14 +1185,17 @@ def _snekmate_mul_div(
     x: uint256, y: uint256, denominator: uint256, roundup: bool
 ) -> uint256:
     """
-    @dev Calculates "(x * y) / denominator" in 512-bit precision,
+    @notice Calculates "(x * y) / denominator" in 512-bit precision,
          following the selected rounding direction.
-    @notice The implementation is inspired by Remco Bloemen's
-            implementation under the MIT license here:
-            https://xn--2-umb.com/21/muldiv.
-            Furthermore, the rounding direction design pattern is
-            inspired by OpenZeppelin's implementation here:
-            https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/math/Math.sol.
+    @dev This implementation is derived from Snekmate, which is authored
+         by pcaversaccio (Snekmate), distributed under the AGPL-3.0 license.
+         https://github.com/pcaversaccio/snekmate
+    @dev The implementation is inspired by Remco Bloemen's
+         implementation under the MIT license here:
+         https://xn--2-umb.com/21/muldiv.
+         Furthermore, the rounding direction design pattern is
+         inspired by OpenZeppelin's implementation here:
+         https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/math/Math.sol.
     @param x The 32-byte multiplicand.
     @param y The 32-byte multiplier.
     @param denominator The 32-byte divisor.
