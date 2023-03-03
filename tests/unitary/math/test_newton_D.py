@@ -1,7 +1,6 @@
 # flake8: noqa
 import sys
 import time
-from datetime import timedelta
 
 import pytest
 from hypothesis import given, settings
@@ -61,7 +60,7 @@ pytest.gas_new = 0
     out_fee=st.sampled_from([int(4.0e-3 * 10**10), int(10.0e-3 * 10**10)]),
     fee_gamma=st.sampled_from([int(1e-2 * 1e18), int(2e-6 * 1e18)]),
 )
-@settings(max_examples=MAX_SAMPLES, deadline=timedelta(seconds=1000))
+@settings(max_examples=MAX_SAMPLES, deadline=None)
 def test_newton_D(
     math_optimized,
     math_unoptimized,

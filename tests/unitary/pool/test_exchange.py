@@ -112,7 +112,6 @@ def test_exchange_from_eth(
 def test_exchange_into_eth(
     swap_with_deposit,
     views_contract,
-    math_contract,
     coins,
     user,
     amount,

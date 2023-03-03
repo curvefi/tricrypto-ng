@@ -1,6 +1,5 @@
 # flake8: noqa
 import time
-from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -44,7 +43,7 @@ pytest.t_start = time.time()
     gamma=st.integers(min_value=MIN_GAMMA, max_value=MAX_GAMMA),
     j=st.integers(min_value=0, max_value=2),
 )
-@settings(max_examples=MAX_SAMPLES, deadline=timedelta(seconds=1000))
+@settings(max_examples=MAX_SAMPLES, deadline=None)
 def test_get_y(math_unoptimized, math_optimized, A, D, xD, yD, zD, gamma, j):
     pytest.current_case_id += 1
     X = [D * xD // 10**18, D * yD // 10**18, D * zD // 10**18]
