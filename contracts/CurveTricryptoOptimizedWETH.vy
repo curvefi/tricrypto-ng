@@ -6,8 +6,6 @@
 @license MIT
 @author Curve.Fi
 @notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
-@dev View methods for `get_dy`, `get_dx`, `calc_token_amounts` etc. are
-     available in the `views_implementation` of the Factory.
 @dev All prices in the AMM are with respect to the first token in the pool.
 """
 
@@ -667,14 +665,14 @@ def remove_liquidity(
     #           In this situation, all tokens are withdrawn and the invariant
     #           is reset.
 
-    if amount == total_supply:  # <----------------------------------- Case 1.
+    if amount == total_supply:  # <----------------------------------- Case 2.
 
         for i in range(N_COINS):
 
             d_balances[i] = balances[i]
             self.balances[i] = 0  # <------------------------- Empty the pool.
 
-    else:  # <-------------------------------------------------------- Case 2.
+    else:  # <-------------------------------------------------------- Case 1.
 
         amount -= 1  # <---- To prevent rounding errors, favor LPs a tiny bit.
 
@@ -1594,6 +1592,114 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 
 # ------------------------- AMM View Functions -------------------------------
 
+@internal
+@view
+def _calc_D_ramp(
+    balances: uint256[N_COINS],
+    price_scale: uint256[N_COINS-1],
+    A_gamma: uint256[2],
+    precisions: uint256[N_COINS]
+) -> uint256:
+
+    # get D and check if we're ramping:
+    D: uint256 = self.D
+    if self.future_A_gamma_time > block.timestamp:
+        _xp: uint256[N_COINS] = balances
+        _xp[0] *= precisions[0]
+        for k in range(N_COINS - 1):
+            _xp[k + 1] = (
+                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
+            )
+        D = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, 0)
+
+    return D
+
+
+@external
+@view
+def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
+    """
+    @notice Get amount of coin[j] tokens received for swapping in dx amount of coin[i]
+    @param i index of input token. Check pool.coins(i) to get coin address at ith index
+    @param j index of output token
+    @param dx amount of input coin[i] tokens
+    """
+
+    _xp: uint256[N_COINS] = self.balances
+    price_scale: uint256[N_COINS-1] = self._unpack_prices(self.price_scale_packed)
+    A_gamma: uint256[2] = self._A_gamma()
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    _D: uint256 = self._calc_D_ramp(_xp, price_scale, A_gamma, precisions)
+
+    # adjust xp with input dx
+    _xp[i] += dx
+    _xp[0] *= precisions[0]
+    for k in range(N_COINS - 1):
+        _xp[k + 1] = _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
+
+    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, j)
+
+    dy: uint256 = _xp[j] - y - 1
+    _xp[j] = y
+    if j > 0:
+        dy = dy * PRECISION / price_scale[j - 1]
+    dy /= precisions[j]
+    dy -= self._fee(_xp) * dy / 10**10
+
+    return dy
+
+
+@external
+@view
+def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
+    """
+    @notice Get amount of coin[i] tokens to input for swapping out dy amount
+            of coin[j]
+    @dev This is an approximate method, but estimates very close to the input
+         amount. It is also very expensive to call on-chain. This is because
+         dy contains fee element, which needs to be iteratively removed.
+    @param i index of input token. Check pool.coins(i) to get coin address at
+           ith index
+    @param j index of output token
+    @param dy amount of input coin[j] tokens received
+    """
+
+    balances: uint256[N_COINS] = self.balances
+    price_scale: uint256[N_COINS-1] = self._unpack_prices(self.price_scale_packed)
+    A_gamma: uint256[2] = self._A_gamma()
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    _D: uint256 = self._calc_D_ramp(balances, price_scale, A_gamma, precisions)
+
+    x: uint256 = 0
+    dx: uint256 = 0
+    _dy: uint256 = dy  # <------------ _dy will have less fee element than dy.
+    fee_dy: uint256 = 0  # <-------- the amount of fee removed from dy in each
+    #                                                               iteration.
+    _xp: uint256[N_COINS] = empty(uint256[N_COINS])
+    for k in range(20):  # <----- 5 iterations
+
+        _xp = balances  # <---------------------------------------- reset xp.
+
+        # Adjust xp with output dy. dy contains fee element, which needs to be
+        # iteratively sieved out:
+        _xp[j] -= _dy
+        _xp[0] *= precisions[0]
+        for l in range(N_COINS - 1):
+            _xp[l + 1] = _xp[l + 1] * price_scale[l] * precisions[l + 1] / PRECISION
+
+        # calculate x for given xp
+        x = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, i)
+        dx = x - _xp[i]
+
+        if i > 0:
+            dx = dx * PRECISION / price_scale[i - 1]
+        dx /= precisions[i]
+
+        fee_dy = self._fee(_xp) * _dy / 10**10  # <----- Fee amount to remove.
+        _dy = dy + fee_dy  # <--------------------- Sieve out fee_dy from _dy.
+
+    return dx
+
 
 @external
 @view
@@ -1738,6 +1844,61 @@ def gamma() -> uint256:
     @notice Returns the current pool gamma parameter.
     """
     return self._A_gamma()[1]
+
+
+@view
+@external
+def mid_fee() -> uint256:
+    """
+    @notice Returns the current mid fee
+    """
+    return self._unpack(self.packed_fee_params)[0]
+
+
+@view
+@external
+def out_fee() -> uint256:
+    """
+    @notice Returns the current out fee
+    """
+    return self._unpack(self.packed_fee_params)[1]
+
+
+@view
+@external
+def fee_gamma() -> uint256:
+    """
+    @notice Returns the current fee gamma
+    """
+    return self._unpack(self.packed_fee_params)[2]
+
+
+@view
+@external
+def allowed_extra_profit() -> uint256:
+    """
+    @notice Returns the current allowed extra profit
+    """
+    return self._unpack(self.packed_rebalancing_params)[0]
+
+
+@view
+@external
+def adjustment_step() -> uint256:
+    """
+    @notice Returns the current adjustment step
+    """
+    return self._unpack(self.packed_rebalancing_params)[1]
+
+
+@view
+@external
+def ma_time() -> uint256:
+    """
+    @notice Returns the current moving average time in seconds
+    @dev To get time in seconds, the parameter is multipled by ln(2)
+    """
+    return self._unpack(self.packed_rebalancing_params)[2] * 693 / 1000
 
 
 @view
