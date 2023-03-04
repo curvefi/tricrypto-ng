@@ -645,7 +645,6 @@ def remove_liquidity(
     @param min_amounts Minimum amounts of tokens to withdraw
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
-    @return d_balances Amounts of tokens withdrawn
     """
     amount: uint256 = _amount
     balances: uint256[N_COINS] = self.balances
@@ -716,7 +715,6 @@ def remove_liquidity_one_coin(
     @param min_amount Minimum amount of token to withdraw.
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
-    @return dy Amount of token withdrawn
     """
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -772,7 +770,6 @@ def _pack(x: uint256[3]) -> uint256:
     """
     @notice Packs 3 integers with values <= 10**18 into a uint256
     @param x The uint256[3] to pack
-    @return The packed uint256
     """
     return shift(x[0], 128) | shift(x[1], 64) | x[2]
 
@@ -783,7 +780,6 @@ def _unpack(_packed: uint256) -> uint256[3]:
     """
     @notice Unpacks a uint256 into 3 integers (values must be <= 10**18)
     @param val The uint256 to unpack
-    @return The unpacked uint256[3]
     """
     return [
         shift(_packed, -128) & 18446744073709551615,
@@ -798,7 +794,6 @@ def _pack_prices(prices_to_pack: uint256[N_COINS-1]) -> uint256:
     """
     @notice Packs N_COINS-1 prices into a uint256.
     @param prices_to_pack The prices to pack
-    @return The packed uint256
     """
     packed_prices: uint256 = 0
     p: uint256 = 0
@@ -816,7 +811,6 @@ def _unpack_prices(_packed_prices: uint256) -> uint256[2]:
     """
     @notice Unpacks N_COINS-1 prices from a uint256.
     @param _packed_prices The packed prices
-    @return The unpacked prices
     """
     unpacked_prices: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
     packed_prices: uint256 = _packed_prices
@@ -1676,7 +1670,7 @@ def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
     fee_dy: uint256 = 0  # <-------- the amount of fee removed from dy in each
     #                                                               iteration.
     _xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    for k in range(20):  # <----- 5 iterations
+    for k in range(20):
 
         _xp = balances  # <---------------------------------------- reset xp.
 
@@ -1706,8 +1700,8 @@ def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
 @nonreentrant("lock")
 def lp_price() -> uint256:
     """
-    @notice Calculates the current price of the LP token.
-    @return The price of the LP token w.r.t the coin at 0th index.
+    @notice Calculates the current price of the LP token w.r.t coin at the
+            0th index
     """
 
     price_oracle: uint256[N_COINS-1] = self._unpack_prices(
