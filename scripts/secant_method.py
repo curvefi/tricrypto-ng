@@ -167,8 +167,8 @@ def _C(A, gamma, S, P, D, log_d=False):
 
     # d3 = (-81 - 54 * g) * (P / D)**2  / D # D^3
     # d3 = (-81 * 10**18 - 54 * gamma) * P // D * P // D * 10**18 // D
-    # d3 = d3_overflowing(gamma, P, D)
-    d3 = d3_non_overflowing(gamma, P, D)
+    d3 = d3_overflowing(gamma, P, D)
+    # d3 = d3_non_overflowing(gamma, P, D)
 
     # d4 = 729 * (P / D / D)**3 # D^0
     d4 = P * 10**18 // D * 10**18 // D
@@ -225,8 +225,9 @@ D_secant = secant_D(ANN, gamma, x_unsorted)
 print()
 print("----------------------------------------------------------")
 print()
+print("------------ PYTHON IMPLEMENTATION ------------")
 print()
-print("D secant method     :", D_secant)
+print("D secant method     :", D_secant, "(overflowing version)")
 print("D Newton's method   :", D_newton)
 print(
     "Python Implementation: abs(D_newton - D_secant) / abs(D_newton)",
@@ -241,22 +242,31 @@ print()
 print("-------------------- CONTRACTS ---------------------------")
 print()
 
-math = boa.load("contracts/CurveCryptoMath3Reference.vy")
+math_impl = {
+    "REFERENCE IMPLEMENTATION": "contracts/CurveCryptoMath3Reference.vy",
+    "OPTIMIZED IMPLEMENTATION": "contracts/CurveCryptoMathOptimized3.vy",
+}
 
-D_newton_contract = math.newton_D(ANN, gamma, x_unsorted)
-D_newton_gas = math._computation.get_gas_used()
-D_secant_contract = math.secant_D(ANN, gamma, x_unsorted)
-D_secant_gas = math._computation.get_gas_used()
+for typ, loc in math_impl.items():
 
-print(f"D_newton_contract (cost: {D_newton_gas} gas):", D_newton_contract)
-print(f"D_secant_contract (cost: {D_secant_gas} gas):", D_secant_contract)
+    print(f"------------ {typ} ------------")
 
-print(
-    "Vyper Implementation: abs(D_newton - D_secant) / abs(D_newton)",
-    abs(D_newton_contract - D_secant_contract) / abs(D_newton_contract),
-)
-print(
-    "Difference (D_secant - D_newton) / 10**18:",
-    (D_secant_contract - D_newton_contract) / 10**18,
-)
-print()
+    math = boa.load(loc)
+
+    D_newton_contract = math.newton_D(ANN, gamma, x_unsorted)
+    D_newton_gas = math._computation.get_gas_used()
+    D_secant_contract = math.secant_D(ANN, gamma, x_unsorted)
+    D_secant_gas = math._computation.get_gas_used()
+
+    print(f"D_newton_contract (cost: {D_newton_gas} gas):", D_newton_contract)
+    print(f"D_secant_contract (cost: {D_secant_gas} gas):", D_secant_contract)
+
+    print(
+        "Vyper Implementation: abs(D_newton - D_secant) / abs(D_newton)",
+        abs(D_newton_contract - D_secant_contract) / abs(D_newton_contract),
+    )
+    print(
+        "Difference (D_secant - D_newton) / 10**18:",
+        (D_secant_contract - D_newton_contract) / 10**18,
+    )
+    print()

@@ -455,9 +455,6 @@ def secant_D(
     raise "Secant method did not converge"
 
 
-
-
-
 @external
 @view
 def get_p(

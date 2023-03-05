@@ -492,6 +492,228 @@ def _newton_y(
 
 @external
 @view
+def secant_D(
+    ANN: uint256, _gamma: uint256, x_unsorted: uint256[N_COINS]
+) -> uint256:
+    """
+    @notice Finding the invariant via secant method.
+    @dev ANN is higher by the factor A_MULTIPLIER
+    @dev ANN is already A * N**N
+    @param ANN the A * N**N value
+    @param gamma the gamma value
+    @param x_unsorted the array of coin balances (not sorted)
+    """
+
+    x: uint256[N_COINS] = self._sort(x_unsorted)
+    assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
+    assert x[0] > 0, "dev: empty pool"
+
+    # ANN / N**N / A_MULTIPLIER
+    A: int256 = convert(unsafe_div(unsafe_div(ANN, 27), A_MULTIPLIER), int256)
+    gamma: int256 = convert(_gamma, int256)
+    gamma_1: int256 = 10**18 + gamma
+    gamma2: int256 = gamma**2
+
+    # x[0] + x[1] + x[2]
+    S: int256 = convert(
+        unsafe_add(unsafe_add(x[0], x[1]), x[2]),
+        int256
+    )
+
+    # x[0] * x[1] * x[2]
+    # x[0] * x[1] / 10**18 * x[2] / 10**18
+    P: int256 = convert(
+        unsafe_div(unsafe_div(x[0] * x[1], 10**18) * x[2], 10**18),
+        int256
+    )
+    P_1e18: int256 = P * 10**18
+
+    # S / 1.1
+    # S * 10**18 / (11 * 10**17)
+    D_prev_2: int256 = unsafe_div(S * 10**18, 11 * 10**17)
+
+    # ------------------------------------------------------------------ #
+    # Calculate C_D_prev_2:
+    d0: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_div(
+                unsafe_div(
+                    unsafe_div(-D_prev_2 * D_prev_2, 10**18) * D_prev_2,
+                    10**18
+                ) * gamma_1,
+                10**18
+            ) * gamma_1,
+            10**18
+        ),
+        27
+    )
+
+    # (3 * P + 4 * g * P + P * g**2 - 27 * A * g**2 * P) # D^6
+    # (3 * 10**18 + 4 * gamma + (1 - 27 * A) * gamma2 ) * P / 10**18
+    # need not calculate d1 any more since it is a constant
+    d1: int256 = unsafe_div(
+        (
+            3 * 10**18
+            + unsafe_mul(4, gamma)
+            + unsafe_div(unsafe_mul(unsafe_sub(1, 27 * A), gamma2), 10**18)
+        ) * P,
+        10**18
+    )
+
+    # 27 * A * g**2 * (P / D) * S # D^5
+    # 27 * A * gamma2 * P / 10**18 * S / D
+    _d2: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_mul(27 * A, gamma2),
+            10**18
+        ) * P,
+        10**18
+    ) * S
+    d2: int256 = unsafe_div(_d2, D_prev_2)
+
+    # (-81 - 54 * g) * (P / D)**2 / D # D^3
+    # (-81 * 10**18 - 54 * gamma) * P / D * P / D * 10**18 / D
+    _d3: int256 = unsafe_sub(-81 * 10**18, unsafe_mul(54, gamma))
+    d3: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_div(
+                unsafe_div(_d3 * P, D_prev_2),
+                10**10
+            ) * P,
+            D_prev_2
+        ) * 10**18,
+        D_prev_2
+    ) * 10**10
+
+    # 729 * (P / D / D)**3 # D^0
+    # d4 = (P * 10**18 / D * 10**18 / D)
+    # d4 = 729 * (d4 * d4 / 10**18 * d4 / 10**18)
+    d4: int256 = unsafe_div(
+        unsafe_mul(unsafe_div(P_1e18, D_prev_2), 10**18),
+        D_prev_2
+    )
+    d4 = 729 * unsafe_div(unsafe_div(d4 * d4, 10**18) * d4, 10**18)
+
+    C_D_prev_2: int256 = unsafe_add(
+        unsafe_add(unsafe_add(d0, d4), unsafe_add(d1, d3)),
+        d2
+    )  # <--- we can do unsafe add for all, since (d0, d4), (d1, d3) pairs
+    #                 are actuall of similar magnitude but opposing signs.
+    # ------------------------------------------------------------------ #
+
+    C_D_prev: int256 = 0
+    D_prev: int256 = 0
+    inv: int256 = 0
+    frac: uint256 = 0
+    D: int256 = S
+
+    for i in range(255):
+
+        D_prev = D
+
+        # ------------------------------------------------------------------ #
+        # Calculate C_D_prev (repeats previous expressions) but with more
+        # libera unsafe math, since convergence in secant method between linear
+        # and quadratic (so we expect similar values between iterations), and
+        # we did safemul (with unsafe div wherever possible) before.
+
+        d0 = unsafe_div(
+            unsafe_div(
+                unsafe_mul(
+                    unsafe_div(
+                        unsafe_mul(
+                            unsafe_div(
+                                unsafe_mul(
+                                    unsafe_div(
+                                        unsafe_mul(-D_prev, D_prev),
+                                        10**18
+                                    ),
+                                    D_prev
+                                ),
+                                10**18
+                            ),
+                            gamma_1
+                        ),
+                        10**18
+                    ),
+                    gamma_1
+                ),
+                10**18
+            ),
+            27
+        )
+
+        d2 = unsafe_div(_d2, D_prev)
+
+        d3 = unsafe_mul(
+            unsafe_div(
+                unsafe_mul(
+                    unsafe_div(
+                        unsafe_mul(
+                            unsafe_div(
+                                unsafe_div(unsafe_mul(_d3, P), D_prev),
+                                10**10
+                            ),
+                            P
+                        ),
+                        D_prev
+                    ),
+                    10**18
+                ),
+                D_prev
+            ),
+            10**10
+        )
+
+        d4 = unsafe_div(
+            unsafe_mul(unsafe_div(P_1e18, D_prev), 10**18),
+            D_prev
+        )
+        d4 = unsafe_mul(
+            729, unsafe_div(
+                unsafe_mul(unsafe_div(unsafe_mul(d4, d4), 10**18), d4),
+                10**18
+            )
+        )
+
+        C_D_prev = unsafe_add(
+            unsafe_add(unsafe_add(d0, d4), unsafe_add(d1, d3)),
+            d2
+        )
+        # ------------------------------------------------------------------ #
+
+        # C_D_prev - C_D_prev_2
+        # We can use unsafe math because these values will always be comparable
+        inv = unsafe_sub(C_D_prev, C_D_prev_2)
+
+        # D_prev - C_D_prev * (D_prev - D_prev_2) / inv
+        D = unsafe_sub(
+            D_prev,
+            unsafe_div(
+                unsafe_mul(C_D_prev, unsafe_sub(D_prev, D_prev_2)),
+                inv
+            )
+        )
+
+        if abs(unsafe_sub(D, D_prev)) < max(100, unsafe_div(D, 10**10)):
+
+            D_final: uint256 = convert(D, uint256)
+
+            # Test that we are safe with the next get_y
+            for _x in x:
+                frac = unsafe_div(unsafe_mul(_x, 10**18), D_final)
+                assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+
+            return D_final
+
+        C_D_prev_2 = C_D_prev
+        D_prev_2 = D_prev
+
+    raise "Secant method did not converge"
+
+
+@external
+@view
 def newton_D(
     ANN: uint256,
     gamma: uint256,
