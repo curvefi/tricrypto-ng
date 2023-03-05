@@ -348,6 +348,116 @@ def newton_D(
     raise "Did not converge"
 
 
+@internal
+@pure
+def _calculate_C(
+    A: int256, gamma: int256, S: int256, P: int256, D: int256
+) -> int256:
+
+    d0: int256 = (
+        -D * D / 10**18 * D / 10**18
+        * (10**18 + gamma) / 10**18 * (10**18 + gamma) / 10**18 / 27
+    )
+
+    # (3 * P + 4 * g * P + P * g**2 - 27 * A * g**2 * P) # D^6
+    # (3 * 10**18 + 4 * gamma + (1 - 27 * A) * gamma2 ) * P / 10**18
+    # need not calculate d1 any more since it is a constant
+    d1: int256 = (3 * 10**18 + 4 * gamma + (1 - 27 * A) * gamma**2 / 10**18 ) * P / 10**18
+
+    # 27 * A * g**2 * (P / D) * S # D^5
+    # 27 * A * gamma2 * P / 10**18 * S / D
+    _d2: int256 = 27 * A * gamma**2 / 10**18 * P / 10**18 * S
+    d2: int256 = _d2 / D
+
+    # (-81 - 54 * g) * (P / D)**2 / D # D^3
+    # (-81 * 10**18 - 54 * gamma) * P / D * P / D * 10**18 / D
+    d3: int256 = (-81 * 10**18 - 54 * gamma) * P
+    d3 = d3 / D * P / D * 10**18 / D
+
+    # 729 * (P / D / D)**3 # D^0
+    # d4 = (P * 10**18 / D * 10**18 / D)
+    # d4 = 729 * (d4 * d4 / 10**18 * d4 / 10**18)
+    d4: int256 = P * 10**18 / D * 10**18 / D
+    d4 = 729 * (d4 * d4 / 10**18 * d4 / 10**18)
+
+    return d0 + d1 + d2 + d3 + d4
+
+
+@external
+@view
+def secant_D(
+    ANN: uint256, _gamma: uint256, x_unsorted: uint256[N_COINS]
+) -> uint256:
+    """
+    @notice Finding the invariant via secant method.
+    @dev ANN is higher by the factor A_MULTIPLIER
+    @dev ANN is already A * N**N
+    @param ANN the A * N**N value
+    @param gamma the gamma value
+    @param x_unsorted the array of coin balances (not sorted)
+    """
+
+    x: uint256[N_COINS] = self._sort(x_unsorted)
+    assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
+    assert x[0] > 0, "dev: empty pool"
+
+    A: int256 = convert(ANN / 27 / A_MULTIPLIER, int256)
+    gamma: int256 = convert(_gamma, int256)
+
+    # x[0] + x[1] + x[2]
+    S: int256 = convert(x[0] + x[1] + x[2], int256)
+
+    # x[0] * x[1] * x[2]
+    # x[0] * x[1] / 10**18 * x[2] / 10**18
+    P: int256 = convert(x[0] * x[1] / 10**18 * x[2] / 10**18, int256)
+
+    # S / 1.1
+    # S * 10**18 / (11 * 10**17)
+    D_prev_2: int256 = S * 10**18 / (11 * 10**17)
+
+    # Calculate C_D_prev_2:
+    C_D_prev_2: int256 = self._calculate_C(A, gamma, S, P, D_prev_2)
+
+    C_D_prev: int256 = 0
+    D_prev: int256 = 0
+    inv: int256 = 0
+    frac: uint256 = 0
+    D: int256 = S
+
+    for i in range(255):
+
+        D_prev = D
+
+        # Calculate C_D_prev (repeats previous expressions):
+        C_D_prev = self._calculate_C(A, gamma, S, P, D_prev)
+
+        # C_D_prev - C_D_prev_2
+        # We can use unsafe math because these values will always be comparable
+        inv = C_D_prev - C_D_prev_2
+
+        # D_prev - C_D_prev * (D_prev - D_prev_2) / inv
+        D = D_prev - C_D_prev * (D_prev - D_prev_2) / inv
+
+        if abs(D - D_prev) < max(100, D / 10**10):
+
+            D_final: uint256 = convert(D, uint256)
+
+            # Test that we are safe with the next get_y
+            for _x in x:
+                frac = _x * 10**18 / D_final
+                assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+
+            return D_final
+
+        C_D_prev_2 = C_D_prev
+        D_prev_2 = D_prev
+
+    raise "Secant method did not converge"
+
+
+
+
+
 @external
 @view
 def get_p(
@@ -653,3 +763,131 @@ def _geometric_mean(_x: uint256[3]) -> uint256:
     assert prod > 0
 
     return self._cbrt(prod)
+
+
+
+@internal
+@pure
+def _snekmate_mul_div(
+    x: uint256, y: uint256, denominator: uint256, roundup: bool
+) -> uint256:
+    """
+    @notice Calculates "(x * y) / denominator" in 512-bit precision,
+         following the selected rounding direction.
+    @dev This implementation is derived from Snekmate, which is authored
+         by pcaversaccio (Snekmate), distributed under the AGPL-3.0 license.
+         https://github.com/pcaversaccio/snekmate
+    @dev The implementation is inspired by Remco Bloemen's
+         implementation under the MIT license here:
+         https://xn--2-umb.com/21/muldiv.
+         Furthermore, the rounding direction design pattern is
+         inspired by OpenZeppelin's implementation here:
+         https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/math/Math.sol.
+    @param x The 32-byte multiplicand.
+    @param y The 32-byte multiplier.
+    @param denominator The 32-byte divisor.
+    @param roundup The Boolean variable that specifies whether
+           to round up or not. The default `False` is round down.
+    @return uint256 The 32-byte calculation result.
+    """
+    # Handle division by zero.
+    assert denominator != empty(uint256), "Math: mul_div division by zero"
+
+    # 512-bit multiplication "[prod1 prod0] = x * y".
+    # Compute the product "mod 2**256" and "mod 2**256 - 1".
+    # Then use the Chinese Remainder theorem to reconstruct
+    # the 512-bit result. The result is stored in two 256-bit
+    # variables, where: "product = prod1 * 2**256 + prod0".
+    mm: uint256 = uint256_mulmod(x, y, max_value(uint256))
+    # The least significant 256 bits of the product.
+    prod0: uint256 = unsafe_mul(x, y)
+    # The most significant 256 bits of the product.
+    prod1: uint256 = empty(uint256)
+
+    if (mm < prod0):
+        prod1 = unsafe_sub(unsafe_sub(mm, prod0), 1)
+    else:
+        prod1 = unsafe_sub(mm, prod0)
+
+    # Handling of non-overflow cases, 256 by 256 division.
+    if (prod1 == empty(uint256)):
+        if (roundup and uint256_mulmod(x, y, denominator) != empty(uint256)):
+            # Calculate "ceil((x * y) / denominator)". The following
+            # line cannot overflow because we have the previous check
+            # "(x * y) % denominator != 0", which accordingly rules out
+            # the possibility of "x * y = 2**256 - 1" and `denominator == 1`.
+            return unsafe_add(unsafe_div(prod0, denominator), 1)
+        else:
+            return unsafe_div(prod0, denominator)
+
+    # Ensure that the result is less than 2**256. Also,
+    # prevents that `denominator == 0`.
+    assert denominator > prod1, "Math: mul_div overflow"
+
+    #######################
+    # 512 by 256 Division #
+    #######################
+
+    # Make division exact by subtracting the remainder
+    # from "[prod1 prod0]". First, compute remainder using
+    # the `uint256_mulmod` operation.
+    remainder: uint256 = uint256_mulmod(x, y, denominator)
+
+    # Second, subtract the 256-bit number from the 512-bit
+    # number.
+    if (remainder > prod0):
+        prod1 = unsafe_sub(prod1, 1)
+    prod0 = unsafe_sub(prod0, remainder)
+
+    # Factor powers of two out of the denominator and calculate
+    # the largest power of two divisor of denominator. Always `>= 1`,
+    # unless the denominator is zero (which is prevented above),
+    # in which case `twos` is zero. For more details, please refer to:
+    # https://cs.stackexchange.com/q/138556.
+
+    # The following line does not overflow because the denominator
+    # cannot be zero at this stage of the function.
+    twos: uint256 = denominator & (unsafe_add(~denominator, 1))
+    # Divide denominator by `twos`.
+    denominator_div: uint256 = unsafe_div(denominator, twos)
+    # Divide "[prod1 prod0]" by `twos`.
+    prod0 = unsafe_div(prod0, twos)
+    # Flip `twos` such that it is "2**256 / twos". If `twos` is zero,
+    # it becomes one.
+    twos = unsafe_add(unsafe_div(unsafe_sub(empty(uint256), twos), twos), 1)
+
+    # Shift bits from `prod1` to `prod0`.
+    prod0 |= unsafe_mul(prod1, twos)
+
+    # Invert the denominator "mod 2**256". Since the denominator is
+    # now an odd number, it has an inverse modulo 2**256, so we have:
+    # "denominator * inverse = 1 mod 2**256". Calculate the inverse by
+    # starting with a seed that is correct for four bits. That is,
+    # "denominator * inverse = 1 mod 2**4".
+    inverse: uint256 = unsafe_mul(3, denominator_div) ^ 2
+
+    # Use Newton-Raphson iteration to improve accuracy. Thanks to Hensel's
+    # lifting lemma, this also works in modular arithmetic by doubling the
+    # correct bits in each step.
+    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**8".
+    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**16".
+    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**32".
+    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**64".
+    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**128".
+    inverse = unsafe_mul(inverse, unsafe_sub(2, unsafe_mul(denominator_div, inverse))) # Inverse "mod 2**256".
+
+    # Since the division is now exact, we can divide by multiplying
+    # with the modular inverse of the denominator. This returns the
+    # correct result modulo 2**256. Since the preconditions guarantee
+    # that the result is less than 2**256, this is the final result.
+    # We do not need to calculate the high bits of the result and
+    # `prod1` is no longer necessary.
+    result: uint256 = unsafe_mul(prod0, inverse)
+
+    if (roundup and uint256_mulmod(x, y, denominator) != empty(uint256)):
+        # Calculate "ceil((x * y) / denominator)". The following
+        # line uses intentionally checked arithmetic to prevent
+        # a theoretically possible overflow.
+        result += 1
+
+    return result

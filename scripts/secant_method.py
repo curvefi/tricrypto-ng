@@ -25,7 +25,8 @@ def geometric_mean(x):
 print()
 print("--------------- INPUTS ------------------------")
 
-multiplier = 10**9
+# multiplier = 10**9
+multiplier = 1
 
 x = int(random.uniform(0.6, 1.5) * 1e18 * multiplier)
 y = int(random.uniform(0.6, 1.5) * 1e18 * multiplier)
@@ -100,21 +101,19 @@ print("--------------- SECANT METHOD ------------------------")
 print()
 
 
-def _C(A, gamma, S, P, D):
+def _C(A, gamma, S, P, D, log_d=False):
 
     gamma2 = gamma**2 // 10**18
 
     # d0 = -1.0 / 27 * D**3 * (1.0 + g)**2 # D^9
+    # fmt: off
     d0 = (
-        -D
-        * D
-        // 10**18
-        * D
-        // 10**18
-        * (10**18 + gamma) ** 2
-        // 10**36
+        -D * D // 10**18 * D // 10**18
+        * (10**18 + gamma) // 10**18
+        * (10**18 + gamma) // 10**18
         // 27
     )
+    # fmt: on
 
     # d1 = (3 * P + 4 * g * P + P * g**2 - 27 * A * g**2 * P) # D^6
     d1 = (3 * 10**18 + 4 * gamma + (1 - 27 * A) * gamma2) * P // 10**18
@@ -124,10 +123,21 @@ def _C(A, gamma, S, P, D):
 
     # d3 = (-81 - 54 * g) * (P / D)**2  / D # D^3
     d3 = (-81 * 10**18 - 54 * gamma) * P // D * P // D * 10**18 // D
+    # d3 = (-81 * 10**18 - 54 * gamma) * P // D // D * P // D * 10**18
 
     # d4 = 729 * (P / D / D)**3 # D^0
     d4 = P * 10**18 // D * 10**18 // D
     d4 = 729 * (d4 * d4 // 10**18 * d4 // 10**18)
+
+    if log_d:
+        print()
+        print("--------- C Calculations")
+        print("d0:", d0)
+        print("d1:", d1)
+        print("d2:", d2)
+        print("d3:", d3)
+        print("d4:", d4)
+        print("------------------")
 
     return d0 + d1 + d2 + d3 + d4
 
@@ -144,7 +154,7 @@ def secant_D(ANN, gamma, x_unsorted):
     D_prev_2 = S * 10**18 // (11 * 10**17)
     D = S
 
-    C_D_prev_2 = _C(A, gamma, S, P, D_prev_2)
+    C_D_prev_2 = _C(A, gamma, S, P, D_prev_2, False)
 
     for i in range(255):
 
@@ -182,7 +192,7 @@ print()
 print("-------------------- CONTRACTS ---------------------------")
 print()
 
-math = boa.load("contracts/CurveCryptoMathOptimized3.vy")
+math = boa.load("contracts/CurveCryptoMath3Reference.vy")
 
 D_newton_contract = math.newton_D(ANN, gamma, x_unsorted)
 D_newton_gas = math._computation.get_gas_used()
@@ -195,5 +205,9 @@ print(f"D_secant_contract (cost: {D_secant_gas} gas):", D_secant_contract)
 print(
     "Vyper Implementation: abs(D_newton - D_secant) / abs(D_newton)",
     abs(D_newton_contract - D_secant_contract) / abs(D_newton_contract),
+)
+print(
+    "Difference (D_secant - D_newton) / 10**18:",
+    (D_secant - D_newton) // 10**18,
 )
 print()
