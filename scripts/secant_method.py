@@ -25,8 +25,8 @@ def geometric_mean(x):
 print()
 print("--------------- INPUTS ------------------------")
 
-# multiplier = 10**9
-multiplier = 1
+multiplier = 10**9
+# multiplier = 1
 
 x = int(random.uniform(0.6, 1.5) * 1e18 * multiplier)
 y = int(random.uniform(0.6, 1.5) * 1e18 * multiplier)
@@ -101,6 +101,50 @@ print("--------------- SECANT METHOD ------------------------")
 print()
 
 
+def _check_safety(val):
+    assert val < 2**256 - 1
+    assert val != 0
+    return val
+
+
+def d3_overflowing(gamma, P, D):
+    # fmt: off
+    return (
+        (-81 * 10**18 - 54 * gamma) * P // D
+        * P // D * 10**18 // D
+    )
+    # fmt: on
+
+
+def d3_non_overflowing(gamma, P, D):
+
+    result = _check_safety((-81 * 10**18 - 54 * gamma) * P)
+    result = _check_safety(result // D)
+    result = _check_safety(result // 10**10)
+    result = _check_safety(result * P)
+    result = _check_safety(result // D)
+    result = _check_safety(result * 10**18)
+    result = _check_safety(result // D)
+    result = _check_safety(result * 10**10)
+
+    # _d3_overflowing = d3_overflowing(gamma, P, D)
+    # print()
+    # print("d3 overflowing version    :", _d3_overflowing)
+    # print("d3 non-overflowing version:", result)
+    # print(
+    #     "abs(d3_overflowing - d3_non_overflowing) / abs(d3_overflowing)",
+    #     abs(_d3_overflowing - result) / abs(_d3_overflowing),
+    # )
+    # print()
+
+    # fmt: off
+    return (
+        (-81 * 10**18 - 54 * gamma) * P // D // 10**10
+        * P // D * 10**18 // D * 10**10
+    )
+    # fmt: on
+
+
 def _C(A, gamma, S, P, D, log_d=False):
 
     gamma2 = gamma**2 // 10**18
@@ -122,8 +166,9 @@ def _C(A, gamma, S, P, D, log_d=False):
     d2 = 27 * A * gamma2 * P // 10**18 * S // D
 
     # d3 = (-81 - 54 * g) * (P / D)**2  / D # D^3
-    d3 = (-81 * 10**18 - 54 * gamma) * P // D * P // D * 10**18 // D
-    # d3 = (-81 * 10**18 - 54 * gamma) * P // D // D * P // D * 10**18
+    # d3 = (-81 * 10**18 - 54 * gamma) * P // D * P // D * 10**18 // D
+    # d3 = d3_overflowing(gamma, P, D)
+    d3 = d3_non_overflowing(gamma, P, D)
 
     # d4 = 729 * (P / D / D)**3 # D^0
     d4 = P * 10**18 // D * 10**18 // D
@@ -180,13 +225,17 @@ D_secant = secant_D(ANN, gamma, x_unsorted)
 print()
 print("----------------------------------------------------------")
 print()
+print()
+print("D secant method     :", D_secant)
+print("D Newton's method   :", D_newton)
 print(
     "Python Implementation: abs(D_newton - D_secant) / abs(D_newton)",
     abs(D_newton - D_secant) / abs(D_newton),
 )
-print()
-print("D secant method     :", D_secant)
-print("D Newton's method   :", D_newton)
+print(
+    "Difference (D_secant - D_newton) / 10**18:",
+    (D_secant - D_newton) / 10**18,
+)
 
 print()
 print("-------------------- CONTRACTS ---------------------------")
@@ -208,6 +257,6 @@ print(
 )
 print(
     "Difference (D_secant - D_newton) / 10**18:",
-    (D_secant - D_newton) // 10**18,
+    (D_secant_contract - D_newton_contract) / 10**18,
 )
 print()
