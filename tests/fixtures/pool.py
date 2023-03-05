@@ -91,7 +91,7 @@ def swap(
 @pytest.fixture(scope="module")
 def hyper_swap(
     tricrypto_factory,
-    amm_interface,
+    hyperamm_interface,
     coins,
     params,
     deployer,
@@ -113,7 +113,7 @@ def hyper_swap(
             params["initial_prices"],
         )
 
-    return amm_interface.at(swap)
+    return hyperamm_interface.at(swap)
 
 
 @pytest.fixture(scope="module")

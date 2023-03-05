@@ -244,7 +244,11 @@ def swap_hyperoptimised(deployer, factory, coins, params, user, project):
         sender=deployer,
     )
 
-    pool_address = tx.events[0].pool
+    try:
+        pool_address = tx.events[0].pool
+    except AttributeError:  # <--- janky way to handle blueprints in ape.
+        pool_address = tx.events[1].pool
+
     pool = project.CurveTricryptoHyperOptimizedWETH.at(pool_address)
 
     for coin in coins:
