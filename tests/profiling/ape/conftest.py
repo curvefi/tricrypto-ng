@@ -92,7 +92,7 @@ def _get_deposit_amounts(amount_per_token_usd, initial_prices, coins):
 
 
 @pytest.fixture(scope="module")
-def token_legacy(deployer, user):
+def token_legacy():
     token = Contract("0xc4ad29ba4b3c580e6d59105fff484999997675ff")
     return token
 
@@ -145,6 +145,9 @@ def factory(deployer, fee_receiver, owner, weth, project):
     amm_blueprint = deploy_blueprint(
         project.CurveTricryptoOptimizedWETH, deployer, project
     )
+    hyperoptimised_amm_blueprint = deploy_blueprint(
+        project.CurveTricryptoHyperOptimizedWETH, deployer, project
+    )
     gauge_blueprint = deploy_blueprint(
         project.LiquidityGauge, deployer, project
     )
@@ -159,6 +162,9 @@ def factory(deployer, fee_receiver, owner, weth, project):
     )
 
     factory.set_pool_implementation(amm_blueprint, 0, sender=owner)
+    factory.set_pool_implementation(
+        hyperoptimised_amm_blueprint, 1, sender=owner
+    )
     factory.set_gauge_implementation(gauge_blueprint, sender=owner)
     factory.set_views_implementation(views_contract, sender=owner)
 
@@ -185,9 +191,7 @@ def params(swap_legacy):
 
 
 @pytest.fixture(scope="module")
-def swap_optimised(
-    deployer, factory, coins, params, user, swap_legacy, project
-):
+def swap_optimised(deployer, factory, coins, params, user, project):
 
     tx = factory.deploy_pool(
         "Curve.fi USDC-BTC-ETH",
@@ -215,6 +219,40 @@ def swap_optimised(
     amounts = _get_deposit_amounts(
         10**6, [10**18] + params["initial_prices"], coins
     )
-    pool.add_liquidity(amounts, 0, False, sender=user)  # <--- this borks
+    pool.add_liquidity(amounts, 0, False, sender=user)
+
+    return pool
+
+
+@pytest.fixture(scope="module")
+def swap_hyperoptimised(deployer, factory, coins, params, user, project):
+
+    tx = factory.deploy_pool(
+        "Curve.fi USDC-BTC-ETH",
+        "USDCBTCETH",
+        [coin.address for coin in coins],
+        1,  # <-------- 1st implementation index
+        params["A"],
+        params["gamma"],
+        params["mid_fee"],
+        params["out_fee"],
+        params["fee_gamma"],
+        params["allowed_extra_profit"],
+        params["adjustment_step"],
+        params["ma_time"],
+        params["initial_prices"],
+        sender=deployer,
+    )
+
+    pool_address = tx.events[0].pool
+    pool = project.CurveTricryptoHyperOptimizedWETH.at(pool_address)
+
+    for coin in coins:
+        coin.approve(pool, 2**256 - 1, sender=user)
+
+    amounts = _get_deposit_amounts(
+        10**6, [10**18] + params["initial_prices"], coins
+    )
+    pool.add_liquidity(amounts, 0, False, sender=user)
 
     return pool

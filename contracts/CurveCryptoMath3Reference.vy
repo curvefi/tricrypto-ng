@@ -393,7 +393,7 @@ def secant_D(
     @dev ANN is higher by the factor A_MULTIPLIER
     @dev ANN is already A * N**N
     @param ANN the A * N**N value
-    @param gamma the gamma value
+    @param _gamma the gamma value
     @param x_unsorted the array of coin balances (not sorted)
     """
 

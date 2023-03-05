@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-NUM_RUNS = 100
+NUM_RUNS = 10
 
 
 def _choose_indices():
@@ -94,10 +94,12 @@ def _random_withdraw_one(swaps, user, token):
     )
 
 
-@pytest.mark.skip
+# @pytest.mark.skip
 @pytest.mark.apetests
-def test_profile_amms(swap_legacy, swap_optimised, token_legacy, user, coins):
-    swaps = [swap_optimised, swap_legacy]
+def test_profile_amms(
+    swap_legacy, swap_hyperoptimised, token_legacy, user, coins
+):
+    swaps = [swap_hyperoptimised, swap_legacy]
     for k in range(NUM_RUNS):
 
         # deposit:
