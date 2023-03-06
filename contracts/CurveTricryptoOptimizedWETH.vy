@@ -749,6 +749,8 @@ def remove_liquidity_one_coin(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
     )
 
+    self._claim_admin_fees()
+
     return dy
 
 
@@ -1124,9 +1126,6 @@ def tweak_price(
                 # reuse old_virtual_price
                 packed_price_scale = self._pack_prices(p_new)
                 self.price_scale_packed = packed_price_scale
-
-                if claim_fees:
-                    self._claim_admin_fees()
 
                 return packed_price_scale
 
