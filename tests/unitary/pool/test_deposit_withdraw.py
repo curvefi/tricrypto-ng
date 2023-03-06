@@ -3,7 +3,7 @@ import pytest
 from boa.test import strategy
 from hypothesis import given, settings
 
-from tests.fixtures.pool import INITIAL_PRICES
+from tests.fixtures.pool import INITIAL_PRICES, _get_deposit_amounts
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
@@ -306,3 +306,70 @@ def test_immediate_withdraw_one(
         # a withdrawal succeeded
         views_contract.get_dy(0, 1, 10**16, swap_with_deposit)
         views_contract.get_dy(0, 2, 10**16, swap_with_deposit)
+
+
+@given(
+    init_dep=strategy(
+        "decimal", min_value=0.0004149281674800498, max_value=10**6
+    ),
+    donation=strategy("uint256", min_value=1, max_value=10**6),
+    user_deposit=strategy("uint256", min_value=10**5, max_value=10**6),
+)
+@settings(**SETTINGS)
+def test_send_tokens_and_claim_fees_before_second_deposit(
+    swap, coins, user, deployer, init_dep, donation, user_deposit
+):
+    for coin in coins:
+        for acc in [deployer, user]:
+            with boa.env.prank(acc):
+                coin.approve(swap, 2**256 - 1)
+
+    # deployer deposits very small amount
+    precisions = [10 ** coin.decimals() for coin in coins]
+
+    deposit_amounts = [
+        int(init_dep * precision * 10**18) // price
+        for price, precision in zip(INITIAL_PRICES, precisions)
+    ]
+
+    for coin, quantity in zip(coins, deposit_amounts):
+        mint_for_testing(coin, deployer, quantity)
+
+    with boa.env.prank(deployer):
+        swap.add_liquidity(deposit_amounts, 0)
+
+    # deployer sends funds to pool and claims admin fees
+    quantities = _get_deposit_amounts(donation, INITIAL_PRICES, coins)
+    for coin, quantity in zip(coins, quantities):
+        mint_for_testing(coin, deployer, quantity)
+
+    deployer_balance = swap.balanceOf(deployer)
+
+    try:
+        with boa.env.prank(deployer):
+            for coin in coins:
+                coin.transfer(swap, coin.balanceOf(deployer))
+            swap.claim_admin_fees()
+
+    except:  # noqa
+        return  # works as expected ...
+
+    # user deposits:
+    quantities = _get_deposit_amounts(user_deposit, INITIAL_PRICES, coins)
+    for coin, quantity in zip(coins, quantities):
+        mint_for_testing(coin, user, quantity)
+
+    user_balances_before = [c.balanceOf(user) for c in coins]
+
+    with boa.env.prank(user):
+        user_lp_token_minted = swap.add_liquidity(user_balances_before, 0)
+
+    # deployer withdraws all
+    with boa.env.prank(deployer):
+        swap.remove_liquidity(deployer_balance, [0, 0, 0])
+
+    # user withdraws all
+    with boa.env.prank(user):
+        swap.remove_liquidity(user_lp_token_minted, [0, 0, 0])
+
+    # todo: convert the above to a stateful test
