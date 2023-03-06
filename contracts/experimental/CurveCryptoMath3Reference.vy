@@ -348,6 +348,113 @@ def newton_D(
     raise "Did not converge"
 
 
+@internal
+@pure
+def _calculate_C(
+    A: int256, gamma: int256, S: int256, P: int256, D: int256
+) -> int256:
+
+    d0: int256 = (
+        -D * D / 10**18 * D / 10**18
+        * (10**18 + gamma) / 10**18 * (10**18 + gamma) / 10**18 / 27
+    )
+
+    # (3 * P + 4 * g * P + P * g**2 - 27 * A * g**2 * P) # D^6
+    # (3 * 10**18 + 4 * gamma + (1 - 27 * A) * gamma2 ) * P / 10**18
+    # need not calculate d1 any more since it is a constant
+    d1: int256 = (3 * 10**18 + 4 * gamma + (1 - 27 * A) * gamma**2 / 10**18 ) * P / 10**18
+
+    # 27 * A * g**2 * (P / D) * S # D^5
+    # 27 * A * gamma2 * P / 10**18 * S / D
+    _d2: int256 = 27 * A * gamma**2 / 10**18 * P / 10**18 * S
+    d2: int256 = _d2 / D
+
+    # (-81 - 54 * g) * (P / D)**2 / D # D^3
+    # (-81 * 10**18 - 54 * gamma) * P / D * P / D * 10**18 / D
+    d3: int256 = (-81 * 10**18 - 54 * gamma) * P
+    d3 = d3 / D / 10**10 * P / D * 10**18 / D * 10**10
+
+    # 729 * (P / D / D)**3 # D^0
+    # d4 = (P * 10**18 / D * 10**18 / D)
+    # d4 = 729 * (d4 * d4 / 10**18 * d4 / 10**18)
+    d4: int256 = P * 10**18 / D * 10**18 / D
+    d4 = 729 * (d4 * d4 / 10**18 * d4 / 10**18)
+
+    return d0 + d1 + d2 + d3 + d4
+
+
+@external
+@view
+def secant_D(
+    ANN: uint256, _gamma: uint256, x_unsorted: uint256[N_COINS]
+) -> uint256:
+    """
+    @notice Finding the invariant via secant method.
+    @dev ANN is higher by the factor A_MULTIPLIER
+    @dev ANN is already A * N**N
+    @param ANN the A * N**N value
+    @param _gamma the gamma value
+    @param x_unsorted the array of coin balances (not sorted)
+    """
+
+    x: uint256[N_COINS] = self._sort(x_unsorted)
+    assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
+    assert x[0] > 0, "dev: empty pool"
+
+    A: int256 = convert(ANN / 27 / A_MULTIPLIER, int256)
+    gamma: int256 = convert(_gamma, int256)
+
+    # x[0] + x[1] + x[2]
+    S: int256 = convert(x[0] + x[1] + x[2], int256)
+
+    # x[0] * x[1] * x[2]
+    # x[0] * x[1] / 10**18 * x[2] / 10**18
+    P: int256 = convert(x[0] * x[1] / 10**18 * x[2] / 10**18, int256)
+
+    # S / 1.1
+    # S * 10**18 / (11 * 10**17)
+    D_prev_2: int256 = S * 10**18 / (11 * 10**17)
+
+    # Calculate C_D_prev_2:
+    C_D_prev_2: int256 = self._calculate_C(A, gamma, S, P, D_prev_2)
+
+    C_D_prev: int256 = 0
+    D_prev: int256 = 0
+    inv: int256 = 0
+    frac: uint256 = 0
+    D: int256 = S
+
+    for i in range(255):
+
+        D_prev = D
+
+        # Calculate C_D_prev (repeats previous expressions):
+        C_D_prev = self._calculate_C(A, gamma, S, P, D_prev)
+
+        # C_D_prev - C_D_prev_2
+        # We can use unsafe math because these values will always be comparable
+        inv = C_D_prev - C_D_prev_2
+
+        # D_prev - C_D_prev * (D_prev - D_prev_2) / inv
+        D = D_prev - C_D_prev * (D_prev - D_prev_2) / inv
+
+        if abs(D - D_prev) < max(100, D / 10**10):
+
+            D_final: uint256 = convert(D, uint256)
+
+            # Test that we are safe with the next get_y
+            for _x in x:
+                frac = _x * 10**18 / D_final
+                assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+
+            return D_final
+
+        C_D_prev_2 = C_D_prev
+        D_prev_2 = D_prev
+
+    raise "Secant method did not converge"
+
+
 @external
 @view
 def get_p(
