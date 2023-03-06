@@ -1771,27 +1771,6 @@ def last_prices(k: uint256) -> uint256:
 
 @external
 @view
-def get_p(k: uint256) -> uint256:
-    """
-    @notice Returns state price of the coin at index `k` w.r.t the coin
-            at index 0.
-    @param k The index of the coin.
-    """
-
-    last_prices: uint256[N_COINS-1] = MATH.get_p(
-        self.xp(), self.D, self._A_gamma()
-    )
-    price_scale: uint256[N_COINS-1] = self._unpack_prices(
-        self.price_scale_packed
-    )
-    for i in range(N_COINS - 1):
-        last_prices[k] = unsafe_div(last_prices[k] * price_scale[k], 10**18)
-
-    return last_prices[k]
-
-
-@external
-@view
 def price_scale(k: uint256) -> uint256:
     """
     @notice Returns the price scale of the coin at index `k` w.r.t the coin
