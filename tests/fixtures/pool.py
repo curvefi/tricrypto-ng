@@ -90,18 +90,18 @@ def swap(
 
 @pytest.fixture(scope="module")
 def hyper_swap(
-    tricrypto_factory,
+    tricrypto_factory_experimental,
     hyperamm_interface,
     coins,
     params,
     deployer,
 ):
     with boa.env.prank(deployer):
-        swap = tricrypto_factory.deploy_pool(
+        swap = tricrypto_factory_experimental.deploy_pool(
             "Curve.fi USDC-BTC-ETH",
             "USDCBTCETH",
             [coin.address for coin in coins],
-            1,  # <-------- 0th implementation index
+            0,  # <-------- 0th implementation index
             params["A"],
             params["gamma"],
             params["mid_fee"],
