@@ -20,4 +20,10 @@ hardhat:
   fork:
     ethereum:
       mainnet:
-        upstream_provider: alchemy
+        upstream_provider: geth
+        # upstream_provider: alchemy
+
+geth:
+  ethereum:
+    mainnet:
+      uri: http://localhost:9090
