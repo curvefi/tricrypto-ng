@@ -1,4 +1,4 @@
-name: curve-metaregistry
+name: curve-tricrypto-ng
 
 plugins:
   - name: vyper
