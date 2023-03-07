@@ -743,7 +743,7 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0, True)
+    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
 
     log RemoveLiquidityOne(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
@@ -935,7 +935,6 @@ def tweak_price(
     _xp: uint256[N_COINS],
     new_D: uint256,
     K0_prev: uint256 = 0,
-    claim_fees: bool = False
 ) -> uint256:
     """
     @notice Tweaks price_oracle, last_price and conditionally adjusts
@@ -947,7 +946,6 @@ def tweak_price(
     @param _xp Array of current balances.
     @param new_D New D value.
     @param K0_prev Initial guess for `newton_D`.
-    @param claim_fees Claim fees if True.
     """
 
     # ---------------------------- Read storage ------------------------------
