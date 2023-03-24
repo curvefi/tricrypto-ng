@@ -89,6 +89,46 @@ def swap(
 
 
 @pytest.fixture(scope="module")
+def swap_multiprecision(
+    tricrypto_factory,
+    amm_interface,
+    tricrypto_coins,
+    deployer,
+):
+
+    _params = {
+        "A": 1707629,
+        "gamma": 11809167828997,
+        "mid_fee": 3000000,
+        "out_fee": 30000000,
+        "allowed_extra_profit": 2000000000000,
+        "fee_gamma": 500000000000000,
+        "adjustment_step": 490000000000000,
+        "ma_time": 600,
+        "initial_prices": [21894513622432734092261, 1546874643304938916307],
+    }
+
+    with boa.env.prank(deployer):
+        swap = tricrypto_factory.deploy_pool(
+            "Curve.fi USDT<>WBTC<>ETH",
+            "tricrypto3",
+            [coin.address for coin in tricrypto_coins],
+            0,
+            _params["A"],
+            _params["gamma"],
+            _params["mid_fee"],
+            _params["out_fee"],
+            _params["fee_gamma"],
+            _params["allowed_extra_profit"],
+            _params["adjustment_step"],
+            _params["ma_time"],
+            _params["initial_prices"],
+        )
+
+    return amm_interface.at(swap)
+
+
+@pytest.fixture(scope="module")
 def hyper_swap(
     tricrypto_factory_experimental,
     hyperamm_interface,

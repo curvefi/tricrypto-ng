@@ -84,15 +84,17 @@ def get_y(
         - unsafe_div(
             unsafe_div(
                 unsafe_div(
-                    unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN),
+                    unsafe_mul(
+                        unsafe_div(unsafe_mul(D, D), x_j),
+                        gamma**2
+                    ) * ANN,
                     27**2
                 ),
                 convert(A_MULTIPLIER, int256)
             ),
             x_k,
         )
-    )  # <--- The first two expressions can be unsafe, and unsafely added. The
-    #        D**2 in the third expression needs to be safe, and others unsafe.
+    )  # <------- The first two expressions can be unsafe, and unsafely added.
 
     # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = (
@@ -103,7 +105,7 @@ def get_y(
         + unsafe_div(
             unsafe_div(
                 unsafe_mul(
-                    unsafe_div(gamma**2 * (unsafe_add(x_j, x_k) - D), D),
+                    unsafe_div(gamma**2 * unsafe_sub(unsafe_add(x_j, x_k), D), D),
                     ANN
                 ),
                 27
@@ -112,8 +114,7 @@ def get_y(
         )
     )  # <--------- Same as above with the first two expressions. In the third
     #   expression, x_j + x_k will not overflow since we know their range from
-    #    previous assert statements. We leave one safesub with D, and the rest
-    #                                                    can safely be unsafe.
+    #                                              previous assert statements.
 
     # (10**18 + gamma)**2/27
     d: int256 = unsafe_div(unsafe_add(10**18, gamma)**2, 27)
@@ -160,15 +161,15 @@ def get_y(
 
     # 9*a*c/b - 2*b - 27*a**2/b*d/b
     delta1: int256 = (
-        unsafe_div(unsafe_mul(9, a * c), b)
+        unsafe_div(9 * a * c, b)
         - unsafe_mul(2, b)
-        - unsafe_div(unsafe_div(unsafe_mul(27, a**2), b) * d, b)
+        - unsafe_div(unsafe_div(27 * a**2, b) * d, b)
     )
 
     # delta1**2 + 4*delta0**2/b*delta0
     sqrt_arg: int256 = (
         delta1**2 +
-        unsafe_div(unsafe_mul(4, delta0**2), b) * delta0
+        unsafe_div(4 * delta0**2, b) * delta0
     )
 
     sqrt_val: int256 = 0
@@ -224,166 +225,6 @@ def get_y(
     # due to precision issues, get_y can be off by 2 wei or so wrt _newton_y
 
     return out
-
-
-@external
-@view
-def get_K0_prev(
-    _ANN: uint256, _gamma: uint256, x: uint256[N_COINS], _D: uint256, i: uint256
-) -> uint256:
-
-    # No safuty checks here since get_K0_prev must be called after get_y
-    # (so the safuty checks have already been executed)
-
-    j: uint256 = 0
-    k: uint256 = 0
-    if i == 0:
-        j = 1
-        k = 2
-    elif i == 1:
-        j = 0
-        k = 2
-    elif i == 2:
-        j = 0
-        k = 1
-
-    ANN: int256 = convert(_ANN, int256)
-    gamma: int256 = convert(_gamma, int256)
-    D: int256 = convert(_D, int256)
-    x_j: int256 = convert(x[j], int256)
-    x_k: int256 = convert(x[k], int256)
-
-    a: int256 = 10**36 / 27
-
-    # 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
-    b: int256 = unsafe_sub(
-        unsafe_add(
-            10**36 / 9,
-            unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)
-        ),
-        unsafe_div(
-            unsafe_div(
-                unsafe_div(
-                    unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN),
-                    27**2
-                ),
-                convert(A_MULTIPLIER, int256)
-            ),
-            x_k,
-        ),
-    )
-
-    # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
-    c: int256 = unsafe_add(
-        unsafe_add(
-            10**36 / 9,
-            unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27)
-        ),
-        unsafe_div(
-            unsafe_div(
-                unsafe_mul(
-                    unsafe_div(gamma**2 * (unsafe_sub(unsafe_add(x_j, x_k), D)), D),
-                    ANN
-                ),
-                27
-            ),
-            convert(A_MULTIPLIER, int256),
-        ),
-    )
-
-    # (10**18 + gamma)**2/27
-    d: int256 = unsafe_div(unsafe_add(10**18, gamma)**2, 27)
-
-    # abs(3*a*c/b - b)
-    d0: int256 = abs(unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b))
-
-    divider: int256 = 0
-    if d0 > 10**48:
-        divider = 10**30
-    elif d0 > 10**44:
-        divider = 10**26
-    elif d0 > 10**40:
-        divider = 10**22
-    elif d0 > 10**36:
-        divider = 10**18
-    elif d0 > 10**32:
-        divider = 10**14
-    elif d0 > 10**28:
-        divider = 10**10
-    elif d0 > 10**24:
-        divider = 10**6
-    elif d0 > 10**20:
-        divider = 10**2
-    else:
-        divider = 1
-
-    additional_prec: int256 = 0
-    if abs(a) > abs(b):
-        additional_prec = abs(a) / abs(b)
-        # a * additional_prec / divider
-        a = unsafe_div(unsafe_mul(a, additional_prec), divider)
-        b = unsafe_div(unsafe_mul(b, additional_prec), divider)
-        c = unsafe_div(unsafe_mul(c, additional_prec), divider)
-        d = unsafe_div(unsafe_mul(d, additional_prec), divider)
-    else:
-        additional_prec = abs(b) / abs(a)
-        # a * additional_prec / divider
-        a = unsafe_div(unsafe_div(a, additional_prec), divider)
-        b = unsafe_div(unsafe_div(b, additional_prec), divider)
-        c = unsafe_div(unsafe_div(c, additional_prec), divider)
-        d = unsafe_div(unsafe_div(d, additional_prec), divider)
-
-    # 3*a*c/b - b
-    delta0: int256 = unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b)
-
-    # 9*a*c/b - 2*b - 27*a**2/b*d/b
-    delta1: int256 = unsafe_sub(
-        unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(9, a), c), b), unsafe_mul(2, b)),
-        unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(27, a**2), b), d), b),
-    )
-
-    # delta1**2 + 4*delta0**2/b*delta0
-    sqrt_arg: int256 = unsafe_add(
-        delta1**2,
-        unsafe_mul(unsafe_div(unsafe_mul(4, delta0**2), b), delta0),
-    )
-    if sqrt_arg < 0:
-        return 0
-
-    sqrt_val: int256 = 0
-    sqrt_val = convert(isqrt(convert(sqrt_arg, uint256)), int256)
-
-    b_cbrt: int256 = 0
-    if b >= 0:
-        b_cbrt = convert(self._cbrt(convert(b, uint256)), int256)
-    else:
-        b_cbrt = -convert(self._cbrt(convert(-b, uint256)), int256)
-
-    second_cbrt: int256 = 0
-    if delta1 > 0:
-        # convert(self.cbrt(convert((delta1 + sqrt_val), uint256)/2), int256)
-        second_cbrt = convert(
-            self._cbrt(unsafe_div(convert((unsafe_add(delta1, sqrt_val)), uint256), 2)),
-            int256,
-        )
-    else:
-        # -convert(self.cbrt(convert(-(delta1 - sqrt_val), uint256)/2), int256)
-        second_cbrt = -convert(
-            self._cbrt(unsafe_div(convert(-unsafe_sub(delta1, sqrt_val), uint256), 2)),
-            int256,
-        )
-
-    # b_cbrt*b_cbrt/10**18*second_cbrt/10**18
-    C1: int256 = unsafe_div(unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18)
-
-    # (b + b*delta0/C1 - C1)/3
-    root_K0: int256 = unsafe_div(
-        unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1),
-        3
-    )
-    K0_prev: uint256 = convert(unsafe_div(10**18 * root_K0, a), uint256)  # a > 0; safu.
-
-    return K0_prev
 
 
 @internal
@@ -906,10 +747,7 @@ def _get_partial_derivative(
     if denominator > 0:
         sign_denom = 1
 
-    assert unsafe_div(
-        unsafe_mul(sign_num_a, sign_num_b),
-        sign_denom
-    ) < 0, "dev: partial derivative cannot be positive"
+    assert unsafe_div(unsafe_mul(sign_num_a, sign_num_b), sign_denom) < 0, "dev: partial derivative cannot be positive"
 
     return self._snekmate_mul_div(
         convert(abs(numerator_a), uint256),

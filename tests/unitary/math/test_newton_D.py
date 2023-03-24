@@ -182,6 +182,5 @@ def _test_newton_D(
                     10000, result_sim / 1e12
                 )
             except:
-                breakpoint()
                 if is_safe:
                     raise

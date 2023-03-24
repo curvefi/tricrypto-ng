@@ -33,14 +33,7 @@ interface Math:
         x: uint256[N_COINS],
         D: uint256,
         i: uint256,
-    ) -> uint256: view
-    def get_K0_prev(
-        ANN: uint256,
-        gamma: uint256,
-        x: uint256[N_COINS],
-        D: uint256,
-        i: uint256,
-    ) -> uint256: view
+    ) -> uint256[2]: view
     def get_p(
         _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[2],
     ) -> uint256[N_COINS-1]: view
@@ -164,6 +157,7 @@ balances: public(uint256[N_COINS])
 D: public(uint256)
 xcp_profit: public(uint256)
 xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
+
 virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
 #                          The cached `virtual_price` is also used internally.
 
@@ -520,6 +514,9 @@ def add_liquidity(
     old_D: uint256 = 0
 
     assert amounts[0] + amounts[1] + amounts[2] > 0, "dev: no coins to add"
+
+    self._claim_admin_fees()  # <---- Claiming fees reduces virtual_price. So,
+    #       claim fees before adding liquidity; depositor is not micro-rugged.
 
     # --------------------- Get prices, balances -----------------------------
 
@@ -886,7 +883,8 @@ def _exchange(
 
     D: uint256 = self.D
     prec_j: uint256 = precisions[j]
-    dy = xp[j] - MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
+    y_out: uint256[2] = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
+    dy = xp[j] - y_out[0]
     xp[j] -= dy
     dy -= 1
 
@@ -921,8 +919,7 @@ def _exchange(
 
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
-    K0_prev: uint256 = MATH.get_K0_prev(A_gamma[0], A_gamma[1], xp, D, j)
-    packed_price_scale = self.tweak_price(A_gamma, xp, 0, K0_prev)
+    packed_price_scale = self.tweak_price(A_gamma, xp, 0, y_out[1])
 
     log TokenExchange(sender, i, dx, j, dy, fee, packed_price_scale)
 
@@ -1143,6 +1140,14 @@ def _claim_admin_fees():
 
     xcp_profit: uint256 = self.xcp_profit  # <---------- Current pool profits.
     xcp_profit_a: uint256 = self.xcp_profit_a  # <- Profits at previous claim.
+    total_supply: uint256 = self.totalSupply
+
+    # Do not claim admin fees if:
+    # 1. insufficient profits accrued since last claim, and
+    # 2. there are less than 10**18 (or 1 unit of) lp tokens, else it can lead
+    #    to manipulated virtual prices.
+    if xcp_profit <= xcp_profit_a or total_supply < 10**18:
+        return
 
     #      Claim tokens belonging to the admin here. This is done by 'gulping'
     #       pool tokens that have accrued as fees, but not accounted in pool's
@@ -1161,36 +1166,32 @@ def _claim_admin_fees():
 
     vprice: uint256 = self.virtual_price
 
-    # ----------- If pool has accrued profits since last claim, claim profits.
-    if xcp_profit > xcp_profit_a:
+    #  Admin fees are calculated as follows.
+    #      1. Calculate accrued profit since last claim. `xcp_profit`
+    #         is the current profits. `xcp_profit_a` is the profits
+    #         at the previous claim.
+    #      2. Take out admin's share, which is hardcoded at 5 * 10**9.
+    #         (50% => half of 100% => 10**10 / 2 => 5 * 10**9).
+    #      3. Since half of the profits go to rebalancing the pool, we
+    #         are left with half; so divide by 2.
 
-        #  Admin fees are calculated is as follows.
-        #      1. Calculate accrued profit since last claim. `xcp_profit`
-        #         is the current profits. `xcp_profit_a` is the profits
-        #         at the previous claim.
-        #      2. Take out admin's share, which is hardcoded at 5 * 10**9.
-        #         (50% => half of 100% => 10**10 / 2 => 5 * 10**9).
-        #      3. Since half of the profits go to rebalancing the pool, we
-        #         are left with half; so divide by 2.
+    fees: uint256 = unsafe_div(
+        unsafe_sub(xcp_profit, xcp_profit_a) * ADMIN_FEE, 2 * 10**10
+    )
 
-        fees: uint256 = unsafe_div(
-            unsafe_sub(xcp_profit, xcp_profit_a) * 5 * 10**9, #* ADMIN_FEE,
-            2 * 10**10
-        )
+    # ------------------------------ Claim admin fees by minting admin's share
+    #                                                of the pool in LP tokens.
+    receiver: address = Factory(self.factory).fee_receiver()
+    if receiver != empty(address) and fees > 0:
 
-        # -------------------------- Claim admin fees by minting admin's share
-        #                                            of the pool in LP tokens.
-        receiver: address = Factory(self.factory).fee_receiver()
-        if receiver != empty(address) and fees > 0:
+        frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
+        claimed: uint256 = self.mint_relative(receiver, frac)
 
-            frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
-            claimed: uint256 = self.mint_relative(receiver, frac)
+        xcp_profit -= fees * 2
 
-            xcp_profit -= fees * 2
+        self.xcp_profit = xcp_profit
 
-            self.xcp_profit = xcp_profit
-
-            log ClaimAdminFee(receiver, claimed)
+        log ClaimAdminFee(receiver, claimed)
 
     # ------------------------------------------- Recalculate D b/c we gulped.
     D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
@@ -1202,9 +1203,7 @@ def _claim_admin_fees():
     #                                     in a small decrease in pool's value.
 
     self.virtual_price = 10**18 * self.get_xcp(D) / self.totalSupply
-
-    if xcp_profit > xcp_profit_a:
-        self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
+    self.xcp_profit_a = xcp_profit  # <------------ Cache last claimed profit.
 
 
 @internal
@@ -1356,7 +1355,7 @@ def _calc_withdraw_one_coin(
     # ------------------------------------------------------------------------
 
     # --------------------------------- Calculate `y_out`` with `(D - D_fee)`.
-    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, i)
+    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, i)[0]
     dy: uint256 = (xp[i] - y) * PRECISION / price_scale_i
     xp[i] = y
 
@@ -1628,7 +1627,7 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     for k in range(N_COINS - 1):
         _xp[k + 1] = _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
 
-    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, j)
+    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, j)[0]
 
     dy: uint256 = _xp[j] - y - 1
     _xp[j] = y
@@ -1679,7 +1678,7 @@ def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
             _xp[l + 1] = _xp[l + 1] * price_scale[l] * precisions[l + 1] / PRECISION
 
         # calculate x for given xp
-        x = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, i)
+        x = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, i)[0]
         dx = x - _xp[i]
 
         if i > 0:
