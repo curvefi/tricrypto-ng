@@ -1,3 +1,4 @@
+import contextlib
 from math import log
 
 import boa
@@ -55,7 +56,7 @@ class StatefulBase(RuleBasedStateMachine):
         for coin, q in zip(self.coins, self.initial_deposit):
             mint_for_testing(coin, user, q)
 
-        with boa.env.prank(user):
+        with boa.env.prank(user), self.upkeep_on_claim():
             self.swap.add_liquidity(self.initial_deposit, 0)
 
         assert self.token.totalSupply() > 0
@@ -125,7 +126,11 @@ class StatefulBase(RuleBasedStateMachine):
         user=user,
     )
     def exchange(self, exchange_amount_in, exchange_i, exchange_j, user):
-        return self._exchange(exchange_amount_in, exchange_i, exchange_j, user)
+        out = self._exchange(exchange_amount_in, exchange_i, exchange_j, user)
+        if out:
+            self.swap_out = out
+            return
+        self.swap_out = None
 
     def _exchange(
         self,
@@ -256,3 +261,15 @@ class StatefulBase(RuleBasedStateMachine):
         current_profit = self.calculate_up_only_profit()
         assert current_profit >= self.previous_pool_profit
         self.previous_pool_profit = current_profit
+
+    @contextlib.contextmanager
+    def upkeep_on_claim(self):
+
+        admin_balance = self.swap.balanceOf(self.fee_receiver)
+        try:
+            yield
+        finally:
+            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
+            if _claimed > 0:
+                self.total_supply += _claimed
+                self.xcp_profit = self.swap.xcp_profit()
