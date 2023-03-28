@@ -158,11 +158,12 @@ def get_y(
         d = unsafe_div(d * additional_prec, divider)
 
     # 3*a*c/b - b
-    delta0: int256 = unsafe_div(unsafe_mul(3, a) * c, b) - b
+    _3ac: int256 = unsafe_mul(3, a) * c
+    delta0: int256 = unsafe_div(_3ac, b) - b
 
     # 9*a*c/b - 2*b - 27*a**2/b*d/b
     delta1: int256 = (
-        unsafe_div(9 * a * c, b)
+        unsafe_div(3 * _3ac, b)
         - unsafe_mul(2, b)
         - unsafe_div(unsafe_div(27 * a**2, b) * d, b)
     )
