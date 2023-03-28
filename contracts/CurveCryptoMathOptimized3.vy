@@ -72,6 +72,7 @@ def get_y(
     D: int256 = convert(_D, int256)
     x_j: int256 = convert(x[j], int256)
     x_k: int256 = convert(x[k], int256)
+    gamma2: int256 = unsafe_mul(gamma, gamma)
 
     a: int256 = 10**36 / 27
 
@@ -86,7 +87,7 @@ def get_y(
                 unsafe_div(
                     unsafe_mul(
                         unsafe_div(unsafe_mul(D, D), x_j),
-                        gamma**2
+                        gamma2
                     ) * ANN,
                     27**2
                 ),
@@ -105,7 +106,7 @@ def get_y(
         + unsafe_div(
             unsafe_div(
                 unsafe_mul(
-                    unsafe_div(gamma**2 * unsafe_sub(unsafe_add(x_j, x_k), D), D),
+                    unsafe_div(gamma2 * unsafe_sub(unsafe_add(x_j, x_k), D), D),
                     ANN
                 ),
                 27
@@ -556,6 +557,7 @@ def get_p(
     x1: int256 = convert(_xp[0], int256)
     x2: int256 = convert(_xp[1], int256)
     x3: int256 = convert(_xp[2], int256)
+    gamma2: int256 = unsafe_mul(gamma, gamma)
 
     # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
     # this entire expression can be unsafe:
@@ -680,21 +682,30 @@ def get_p(
                 D,
             ) * x3,
             D,
-        ) * gamma**2,
+        ) * gamma2,
         D,
     )
 
     # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
     # entire expression can be unsafe:
     c: int256 = unsafe_div(
-        unsafe_mul(
-            unsafe_mul(
-                unsafe_div(ANN, 10000),
-                gamma**2
+        unsafe_div(
+            unsafe_div(
+                unsafe_mul(
+                    27,
+                    unsafe_mul(
+                        ANN,
+                        unsafe_mul(
+                            gamma2,
+                            unsafe_add(10**18, gamma)
+                        )
+                    )
+                ),
+                D
             ),
-            unsafe_add(10**18, gamma),
+            27
         ),
-        D,
+        10000
     )
 
     return [

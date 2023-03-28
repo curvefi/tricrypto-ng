@@ -146,3 +146,4 @@ reports/
 todo.txt
 node_modules
 *.json
+/audits
