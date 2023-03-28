@@ -77,10 +77,10 @@ MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
 
 MIN_GAMMA: constant(uint256) = 10 ** 10
-MAX_GAMMA: constant(uint256) = 2 * 10 ** 16
+MAX_GAMMA: constant(uint256) = 5 * 10**16
 
-MIN_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER / 10
-MAX_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER * 100000
+MIN_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER / 100
+MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
