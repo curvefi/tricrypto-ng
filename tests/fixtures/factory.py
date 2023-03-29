@@ -75,13 +75,13 @@ def tricrypto_factory(
             fee_receiver,
             owner,
             weth,
-            math_contract,
         )
 
     with boa.env.prank(owner):
         factory.set_pool_implementation(amm_implementation, 0)
         factory.set_gauge_implementation(gauge_implementation)
         factory.set_views_implementation(views_contract)
+        factory.set_math_implementation(math_contract)
 
     return factory
 
@@ -103,12 +103,12 @@ def tricrypto_factory_experimental(
             fee_receiver,
             owner,
             weth,
-            math_experimental_contract,
         )
 
     with boa.env.prank(owner):
         factory.set_pool_implementation(hyperamm_implementation, 0)
         factory.set_gauge_implementation(gauge_implementation)
         factory.set_views_implementation(views_contract)
+        factory.set_math_implementation(math_experimental_contract)
 
     return factory

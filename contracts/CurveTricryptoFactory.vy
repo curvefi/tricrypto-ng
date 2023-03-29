@@ -86,7 +86,6 @@ PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
 WETH: public(immutable(address))
-math: public(immutable(address))
 
 admin: public(address)
 future_admin: public(address)
@@ -97,6 +96,7 @@ fee_receiver: public(address)
 pool_implementations: public(HashMap[uint256, address])
 gauge_implementation: public(address)
 views_implementation: public(address)
+math_implementation: public(address)
 
 # mapping of coins -> pools for trading
 # a mapping key is generated for each pair of addresses via
@@ -110,14 +110,9 @@ pool_list: public(address[4294967296])   # master list of pools
 
 
 @external
-def __init__(
-    _fee_receiver: address,
-    _admin: address,
-    _weth: address,
-    _math: address,
-):
+def __init__(_fee_receiver: address, _admin: address, _weth: address):
+
     WETH = _weth
-    math = _math
 
     self.fee_receiver = _fee_receiver
     self.admin = _admin
@@ -228,7 +223,7 @@ def deploy_pool(
         _name,
         _symbol,
         _coins,
-        math,
+        self.math_implementation,
         WETH,
         packed_precisions,
         packed_A_gamma,
@@ -356,6 +351,17 @@ def set_views_implementation(_views_implementation: address):
     log UpdateViewsImplementation(self.views_implementation, _views_implementation)
     self.views_implementation = _views_implementation
 
+
+@external
+def set_math_implementation(_math_implementation: address):
+    """
+    @notice Set math implementation
+    @param _math_implementation Address of the new math contract
+    """
+    assert msg.sender == self.admin  # dev: admin only
+
+    log UpdateMathImplementation(self.math_implementation, _math_implementation)
+    self.math_implementation = _math_implementation
 
 
 @external
