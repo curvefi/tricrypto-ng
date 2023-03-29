@@ -578,7 +578,7 @@ def get_p(
                                         -10**18,
                                         unsafe_div(
                                             unsafe_mul(10**18, ANN),
-                                            A_MULTIPLIER,
+                                            convert(A_MULTIPLIER, int256),
                                         ),
                                     ),
                                     gamma,
@@ -607,7 +607,7 @@ def get_p(
                             unsafe_div(
                                 unsafe_mul(10**18 * 9, ANN), 27
                             ),
-                            A_MULTIPLIER,
+                            convert(A_MULTIPLIER, int256),
                         ),
                         gamma,
                     ),
@@ -676,7 +676,7 @@ def get_p(
                 unsafe_div(
                     unsafe_div(
                         unsafe_mul(10**18 * 27, ANN),
-                        A_MULTIPLIER,
+                        convert(A_MULTIPLIER, int256),
                     ) * x1,
                     D,
                 ) * x2,
@@ -706,7 +706,7 @@ def get_p(
             ),
             27
         ),
-        A_MULTIPLIER
+        convert(A_MULTIPLIER, int256)
     )
 
     return [
