@@ -729,8 +729,7 @@ def remove_liquidity_one_coin(
         token_amount,
         i,
         (self.future_A_gamma_time > block.timestamp),  # <------- During ramps
-        True  #                                           we need to update D.
-    )
+    )  #                                                  we need to update D.
 
     assert dy >= min_amount, "Slippage"
 
@@ -740,7 +739,7 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
+    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, 0, 0)
 
     log RemoveLiquidityOne(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
@@ -1308,7 +1307,6 @@ def _calc_withdraw_one_coin(
     token_amount: uint256,
     i: uint256,
     update_D: bool,
-    calc_price: bool,
 ) -> (uint256, uint256, uint256[N_COINS], uint256):
 
     token_supply: uint256 = self.totalSupply
@@ -1801,7 +1799,10 @@ def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
     """
 
     return self._calc_withdraw_one_coin(
-        self._A_gamma(), token_amount, i, True, False
+        self._A_gamma(),
+        token_amount,
+        i,
+        (self.future_A_gamma_time > block.timestamp)
     )[0]
 
 
