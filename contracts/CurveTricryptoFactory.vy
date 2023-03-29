@@ -184,7 +184,7 @@ def deploy_pool(
     assert ma_exp_time > 86  # 60 / ln(2)
     assert min(initial_prices[0], initial_prices[1]) > 10**6
     assert max(initial_prices[0], initial_prices[1]) < 10**30
-    assert _coins[0] != _coins[1] and _coins[1] != _coins[2], "Duplicate coins"
+    assert _coins[0] != _coins[1] and _coins[1] != _coins[2] and _coins[0] != _coins[2], "Duplicate coins"
 
     name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
     symbol: String[32] = concat(_symbol, "-f")
