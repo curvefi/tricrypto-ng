@@ -1000,8 +1000,8 @@ def tweak_price(
 
     # ------------------ If new_D is set to 0, calculate it ------------------
 
-    D_unadjusted: uint256 = new_D  # <- Withdrawal methods know new D already.
-    if new_D == 0:  # <----------------- _exchange method does not know new D.
+    D_unadjusted: uint256 = new_D
+    if new_D == 0:  #  remove_liquidity_one_coin and _exchange set new_D to 0.
         D_unadjusted = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
 
     # ----------------------- Calculate last_prices --------------------------
@@ -1339,11 +1339,19 @@ def _calc_withdraw_one_coin(
 
     # -------------------------------- Fee Calc ------------------------------
 
-    #          Charge the fee on D, not on y. This reduces invariant LESS than
-    #                                                       charging the user.
-    fee: uint256 = self._fee(xp)
-    dD: uint256 = token_amount * D / token_supply
+    # Charge fees on D. Roughly calculate xp[i] after withdrawal and use that
+    # to calculate fee. Precision is not paramount here: we just want a
+    # behavior where the higher the imbalance caused the more fee the AMM
+    # charges.
 
+    # xp is adjusted assuming xp[0] ~= xp[1] ~= x[2], which is usually not the
+    # case ---------------------------------------------------------
+    #                                                              |
+    xp_imprecise: uint256[N_COINS] = xp  #                         |
+    xp_imprecise[i] -= xp[i] * N_COINS * token_amount / D  # <------
+    fee: uint256 = self._fee(xp_imprecise)
+
+    dD: uint256 = token_amount * D / token_supply
     D_fee: uint256 = fee * dD / (2 * 10**10) + 1  # <-------- Actual fee on D.
     approx_fee: uint256 = N_COINS * D_fee * xx[i] / D  # <---------- Calculate
     #                    `approx_fee`` (assuming balanced state) in ith token.
