@@ -152,10 +152,10 @@ def get_y(
         d = unsafe_div(d * additional_prec, divider)
     else:
         additional_prec = abs(unsafe_div(b, a))
-        a = unsafe_div(unsafe_mul(a, additional_prec), divider)
-        b = unsafe_div(b * additional_prec, divider)
-        c = unsafe_div(c * additional_prec, divider)
-        d = unsafe_div(d * additional_prec, divider)
+        a = unsafe_div(a / additional_prec, divider)
+        b = unsafe_div(unsafe_div(b, additional_prec), divider)
+        c = unsafe_div(unsafe_div(c, additional_prec), divider)
+        d = unsafe_div(unsafe_div(d, additional_prec), divider)
 
     # 3*a*c/b - b
     _3ac: int256 = unsafe_mul(3, a) * c
