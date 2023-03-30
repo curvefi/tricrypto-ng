@@ -105,10 +105,10 @@ def get_y(
         d = d * additional_prec / divider
     else:
         additional_prec = abs(b) / abs(a)
-        a = a * additional_prec / divider
-        b = b * additional_prec / divider
-        c = c * additional_prec / divider
-        d = d * additional_prec / divider
+        a = a / additional_prec / divider
+        b = b / additional_prec / divider
+        c = c / additional_prec / divider
+        d = d / additional_prec / divider
 
     delta0: int256 = 3*a*c/b - b
     delta1: int256 = 9*a*c/b - 2*b - 27*a**2/b*d/b
