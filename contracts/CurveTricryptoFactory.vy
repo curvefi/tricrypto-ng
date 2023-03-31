@@ -241,19 +241,9 @@ def deploy_pool(
     self.pool_data[pool].coins = _coins
 
     # add coins to market:
-    for coin_a in _coins:
-        for coin_b in _coins:
-
-            if coin_a == coin_b:
-                continue
-
-            key: uint256 = (
-                convert(coin_a, uint256) ^ convert(coin_b, uint256)
-            )
-
-            length = self.market_counts[key]
-            self.markets[key][length] = pool
-            self.market_counts[key] = length + 1
+    self._add_coins_to_market(_coins[0], _coins[1], pool)
+    self._add_coins_to_market(_coins[0], _coins[2], pool)
+    self._add_coins_to_market(_coins[1], _coins[2], pool)
 
     log TricryptoPoolDeployed(
         pool,
@@ -271,6 +261,18 @@ def deploy_pool(
     )
 
     return pool
+
+
+@internal
+def _add_coins_to_market(coin_a: address, coin_b: address, pool: address):
+
+    key: uint256 = (
+        convert(coin_a, uint256) ^ convert(coin_b, uint256)
+    )
+
+    length: uint256 = self.market_counts[key]
+    self.markets[key][length] = pool
+    self.market_counts[key] = length + 1
 
 
 @external
@@ -497,3 +499,18 @@ def get_eth_index(_pool: address) -> uint256:
             return i
     a: uint256 = max_value(uint256)
     return a
+
+
+@view
+@external
+def get_market_counts(coin_a: address, coin_b: address) -> uint256:
+    """
+    @notice Gets the number of markets with the specified coins.
+    @return Number of pools with the input coins
+    """
+
+    key: uint256 = (
+        convert(coin_a, uint256) ^ convert(coin_b, uint256)
+    )
+
+    return self.market_counts[key]
