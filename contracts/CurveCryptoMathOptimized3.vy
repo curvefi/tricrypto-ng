@@ -239,10 +239,7 @@ def _newton_y(
     # This is the original method; get_y replaces it, but defaults to
     # this version conditionally.
 
-    # Safety checks
-    assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"
-    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
-    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1, "dev: unsafe values D"
+    # We can ignore safuty checks since they are already done in get_y
 
     frac: uint256 = 0
     for k in range(3):
