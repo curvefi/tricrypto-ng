@@ -41,7 +41,7 @@ event UpdateFeeReceiver:
     _new_fee_receiver: address
 
 event UpdatePoolImplementation:
-    _implementtion_id: uint256
+    _implemention_id: uint256
     _old_pool_implementation: address
     _new_pool_implementation: address
 
@@ -63,7 +63,6 @@ event TransferOwnership:
 
 
 struct PoolArray:
-    token: address
     liquidity_gauge: address
     coins: address[N_COINS]
     decimals: uint256[N_COINS]
