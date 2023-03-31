@@ -72,7 +72,6 @@ N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 # Limits
-MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
 
 MIN_GAMMA: constant(uint256) = 10 ** 10
@@ -163,21 +162,27 @@ def deploy_pool(
     # Validate parameters
     assert A > MIN_A-1
     assert A < MAX_A+1
+
     assert gamma > MIN_GAMMA-1
     assert gamma < MAX_GAMMA+1
-    assert mid_fee > MIN_FEE-1
-    assert mid_fee < MAX_FEE-1
+
+    assert mid_fee < MAX_FEE-1  # mid_fee can be zero
     assert out_fee >= mid_fee
     assert out_fee < MAX_FEE-1
-    assert allowed_extra_profit < 10**16+1
     assert fee_gamma < 10**18+1
     assert fee_gamma > 0
+
+    assert allowed_extra_profit < 10**18+1
+
     assert adjustment_step < 10**18+1
     assert adjustment_step > 0
+
     assert ma_exp_time < 872542  # 7 * 24 * 60 * 60 / ln(2)
     assert ma_exp_time > 86  # 60 / ln(2)
+
     assert min(initial_prices[0], initial_prices[1]) > 10**6
     assert max(initial_prices[0], initial_prices[1]) < 10**30
+
     assert _coins[0] != _coins[1] and _coins[1] != _coins[2] and _coins[0] != _coins[2], "Duplicate coins"
 
     name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
