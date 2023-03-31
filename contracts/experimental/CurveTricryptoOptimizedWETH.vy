@@ -2,10 +2,12 @@
 # (c) Curve.Fi, 2023
 
 """
-@title CurveTricryptoOptimizedWETH
+@title CurveTricryptoHyperOptimizedWETH
 @license MIT
 @author Curve.Fi
 @notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
+@dev Differs from the Optimized version since it uses Secant method for
+     calculating the invariant instead of Newton's method.
 @dev All prices in the AMM are with respect to the first token in the pool.
 """
 
@@ -21,11 +23,10 @@ interface Math:
     def reduction_coefficient(
         x: uint256[N_COINS], fee_gamma: uint256
     ) -> uint256: view
-    def newton_D(
+    def secant_D(
         ANN: uint256,
         gamma: uint256,
         x_unsorted: uint256[N_COINS],
-        K0_prev: uint256
     ) -> uint256: view
     def get_y(
         ANN: uint256,
@@ -33,7 +34,7 @@ interface Math:
         x: uint256[N_COINS],
         D: uint256,
         i: uint256,
-    ) -> uint256[2]: view
+    ) -> uint256: view
     def get_p(
         _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[2],
     ) -> uint256[N_COINS-1]: view
@@ -157,7 +158,6 @@ balances: public(uint256[N_COINS])
 D: public(uint256)
 xcp_profit: public(uint256)
 xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
-
 virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
 #                          The cached `virtual_price` is also used internally.
 
@@ -515,9 +515,6 @@ def add_liquidity(
 
     assert amounts[0] + amounts[1] + amounts[2] > 0, "dev: no coins to add"
 
-    self._claim_admin_fees()  # <---- Claiming fees reduces virtual_price. So,
-    #       claim fees before adding liquidity; depositor is not micro-rugged.
-
     # --------------------- Get prices, balances -----------------------------
 
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
@@ -582,13 +579,13 @@ def add_liquidity(
     if self.future_A_gamma_time > block.timestamp:  # <--- A_gamma is ramping.
 
         # ----- Recalculate the invariant if A or gamma are undergoing a ramp.
-        old_D = MATH.newton_D(A_gamma[0], A_gamma[1], xp_old, 0)
+        old_D = MATH.secant_D(A_gamma[0], A_gamma[1], xp_old)
 
     else:
 
         old_D = self.D
 
-    D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)
+    D: uint256 = MATH.secant_D(A_gamma[0], A_gamma[1], xp)
 
     token_supply: uint256 = self.totalSupply
     if old_D > 0:
@@ -609,7 +606,7 @@ def add_liquidity(
         token_supply += d_token
         self.mint(receiver, d_token)
 
-        packed_price_scale = self.tweak_price(A_gamma, xp, D, 0)
+        packed_price_scale = self.tweak_price(A_gamma, xp, D, False)
 
     else:
 
@@ -729,7 +726,8 @@ def remove_liquidity_one_coin(
         token_amount,
         i,
         (self.future_A_gamma_time > block.timestamp),  # <------- During ramps
-    )  #                                                  we need to update D.
+        True  #                                           we need to update D.
+    )
 
     assert dy >= min_amount, "Slippage"
 
@@ -739,13 +737,11 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, 0, 0)
+    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, True)
 
     log RemoveLiquidityOne(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
     )
-
-    self._claim_admin_fees()
 
     return dy
 
@@ -875,15 +871,14 @@ def _exchange(
 
         x1: uint256 = xp[i]  # <------------------ Back up old value in xp ...
         xp[i] = x0                                                         # |
-        self.D = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)              # |
+        self.D = MATH.secant_D(A_gamma[0], A_gamma[1], xp)                 # |
         xp[i] = x1  # <-------------------------------------- ... and restore.
 
     # ----------------------- Calculate dy and fees --------------------------
 
     D: uint256 = self.D
     prec_j: uint256 = precisions[j]
-    y_out: uint256[2] = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
-    dy = xp[j] - y_out[0]
+    dy = xp[j] - MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
     xp[j] -= dy
     dy -= 1
 
@@ -916,9 +911,9 @@ def _exchange(
     ########################## -------> TRANSFER OUT
     self._transfer_out(self.coins[j], dy, use_eth, receiver)
 
-    # ------ Tweak price_scale with good initial guess for newton_D ----------
+    # ------ Tweak price_scale ---------
 
-    packed_price_scale = self.tweak_price(A_gamma, xp, 0, y_out[1])
+    packed_price_scale = self.tweak_price(A_gamma, xp, 0, False)
 
     log TokenExchange(sender, i, dx, j, dy, fee, packed_price_scale)
 
@@ -930,7 +925,7 @@ def tweak_price(
     A_gamma: uint256[2],
     _xp: uint256[N_COINS],
     new_D: uint256,
-    K0_prev: uint256 = 0,
+    claim_fees: bool = False
 ) -> uint256:
     """
     @notice Tweaks price_oracle, last_price and conditionally adjusts
@@ -941,7 +936,7 @@ def tweak_price(
     @param A_gamma Array of A and gamma parameters.
     @param _xp Array of current balances.
     @param new_D New D value.
-    @param K0_prev Initial guess for `newton_D`.
+    @param claim_fees Claim fees if True.
     """
 
     # ---------------------------- Read storage ------------------------------
@@ -1000,9 +995,9 @@ def tweak_price(
 
     # ------------------ If new_D is set to 0, calculate it ------------------
 
-    D_unadjusted: uint256 = new_D
-    if new_D == 0:  #  remove_liquidity_one_coin and _exchange set new_D to 0.
-        D_unadjusted = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
+    D_unadjusted: uint256 = new_D  # <- Withdrawal methods know new D already.
+    if new_D == 0:  # <----------------- _exchange method does not know new D.
+        D_unadjusted = MATH.secant_D(A_gamma[0], A_gamma[1], _xp)
 
     # ----------------------- Calculate last_prices --------------------------
 
@@ -1090,7 +1085,7 @@ def tweak_price(
                 # unsafe_div because we did safediv before ----^
 
             # ------------------------------------------ Update D with new xp.
-            D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)
+            D: uint256 = MATH.secant_D(A_gamma[0], A_gamma[1], xp)
 
             for k in range(N_COINS):
                 frac: uint256 = xp[k] * 10**18 / D  # <----- Check validity of
@@ -1121,6 +1116,9 @@ def tweak_price(
                 packed_price_scale = self._pack_prices(p_new)
                 self.price_scale_packed = packed_price_scale
 
+                if claim_fees:
+                    self._claim_admin_fees()
+
                 return packed_price_scale
 
     # --------- price_scale was not adjusted. Update the profit counter and D.
@@ -1139,14 +1137,6 @@ def _claim_admin_fees():
 
     xcp_profit: uint256 = self.xcp_profit  # <---------- Current pool profits.
     xcp_profit_a: uint256 = self.xcp_profit_a  # <- Profits at previous claim.
-    total_supply: uint256 = self.totalSupply
-
-    # Do not claim admin fees if:
-    # 1. insufficient profits accrued since last claim, and
-    # 2. there are less than 10**18 (or 1 unit of) lp tokens, else it can lead
-    #    to manipulated virtual prices.
-    if xcp_profit <= xcp_profit_a or total_supply < 10**18:
-        return
 
     #      Claim tokens belonging to the admin here. This is done by 'gulping'
     #       pool tokens that have accrued as fees, but not accounted in pool's
@@ -1165,35 +1155,39 @@ def _claim_admin_fees():
 
     vprice: uint256 = self.virtual_price
 
-    #  Admin fees are calculated as follows.
-    #      1. Calculate accrued profit since last claim. `xcp_profit`
-    #         is the current profits. `xcp_profit_a` is the profits
-    #         at the previous claim.
-    #      2. Take out admin's share, which is hardcoded at 5 * 10**9.
-    #         (50% => half of 100% => 10**10 / 2 => 5 * 10**9).
-    #      3. Since half of the profits go to rebalancing the pool, we
-    #         are left with half; so divide by 2.
+    # ----------- If pool has accrued profits since last claim, claim profits.
+    if xcp_profit > xcp_profit_a:
 
-    fees: uint256 = unsafe_div(
-        unsafe_sub(xcp_profit, xcp_profit_a) * ADMIN_FEE, 2 * 10**10
-    )
+        #  Admin fees are calculated is as follows.
+        #      1. Calculate accrued profit since last claim. `xcp_profit`
+        #         is the current profits. `xcp_profit_a` is the profits
+        #         at the previous claim.
+        #      2. Take out admin's share, which is hardcoded at 5 * 10**9.
+        #         (50% => half of 100% => 10**10 / 2 => 5 * 10**9).
+        #      3. Since half of the profits go to rebalancing the pool, we
+        #         are left with half; so divide by 2.
 
-    # ------------------------------ Claim admin fees by minting admin's share
-    #                                                of the pool in LP tokens.
-    receiver: address = Factory(self.factory).fee_receiver()
-    if receiver != empty(address) and fees > 0:
+        fees: uint256 = unsafe_div(
+            unsafe_sub(xcp_profit, xcp_profit_a) * 5 * 10**9, #* ADMIN_FEE,
+            2 * 10**10
+        )
 
-        frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
-        claimed: uint256 = self.mint_relative(receiver, frac)
+        # -------------------------- Claim admin fees by minting admin's share
+        #                                            of the pool in LP tokens.
+        receiver: address = Factory(self.factory).fee_receiver()
+        if receiver != empty(address) and fees > 0:
 
-        xcp_profit -= fees * 2
+            frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
+            claimed: uint256 = self.mint_relative(receiver, frac)
 
-        self.xcp_profit = xcp_profit
+            xcp_profit -= fees * 2
 
-        log ClaimAdminFee(receiver, claimed)
+            self.xcp_profit = xcp_profit
+
+            log ClaimAdminFee(receiver, claimed)
 
     # ------------------------------------------- Recalculate D b/c we gulped.
-    D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
+    D: uint256 = MATH.secant_D(A_gamma[0], A_gamma[1], self.xp())
     self.D = D
 
     # ------------------- Recalculate virtual_price following admin fee claim.
@@ -1202,7 +1196,9 @@ def _claim_admin_fees():
     #                                     in a small decrease in pool's value.
 
     self.virtual_price = 10**18 * self.get_xcp(D) / self.totalSupply
-    self.xcp_profit_a = xcp_profit  # <------------ Cache last claimed profit.
+
+    if xcp_profit > xcp_profit_a:
+        self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
 
 
 @internal
@@ -1307,6 +1303,7 @@ def _calc_withdraw_one_coin(
     token_amount: uint256,
     i: uint256,
     update_D: bool,
+    calc_price: bool,
 ) -> (uint256, uint256, uint256[N_COINS], uint256):
 
     token_supply: uint256 = self.totalSupply
@@ -1331,7 +1328,7 @@ def _calc_withdraw_one_coin(
         packed_prices = shift(packed_prices, -PRICE_SIZE)
 
     if update_D:  # <-------------- D is updated if pool is undergoing a ramp.
-        D0 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)
+        D0 = MATH.secant_D(A_gamma[0], A_gamma[1], xp)
     else:
         D0 = self.D
 
@@ -1339,29 +1336,21 @@ def _calc_withdraw_one_coin(
 
     # -------------------------------- Fee Calc ------------------------------
 
-    # Charge fees on D. Roughly calculate xp[i] after withdrawal and use that
-    # to calculate fee. Precision is not paramount here: we just want a
-    # behavior where the higher the imbalance caused the more fee the AMM
-    # charges.
-
-    # xp is adjusted assuming xp[0] ~= xp[1] ~= x[2], which is usually not the
-    # case ---------------------------------------------------------
-    #                                                              |
-    xp_imprecise: uint256[N_COINS] = xp  #                         |
-    xp_imprecise[i] -= xp[i] * N_COINS * token_amount / D  # <------
-    fee: uint256 = self._fee(xp_imprecise)
-
+    #          Charge the fee on D, not on y. This reduces invariant LESS than
+    #                                                       charging the user.
+    fee: uint256 = self._fee(xp)
     dD: uint256 = token_amount * D / token_supply
+
     D_fee: uint256 = fee * dD / (2 * 10**10) + 1  # <-------- Actual fee on D.
     approx_fee: uint256 = N_COINS * D_fee * xx[i] / D  # <---------- Calculate
-    #                     `approx_fee` (assuming balanced state) in ith token.
+    #                    `approx_fee`` (assuming balanced state) in ith token.
 
     D -= (dD - D_fee)  # <----------------------------------- Charge fee on D.
 
     # ------------------------------------------------------------------------
 
     # --------------------------------- Calculate `y_out`` with `(D - D_fee)`.
-    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, i)[0]
+    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, i)
     dy: uint256 = (xp[i] - y) * PRECISION / price_scale_i
     xp[i] = y
 
@@ -1606,7 +1595,7 @@ def _calc_D_ramp(
             _xp[k + 1] = (
                 _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
             )
-        D = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, 0)
+        D = MATH.secant_D(A_gamma[0], A_gamma[1], _xp)
 
     return D
 
@@ -1633,7 +1622,7 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     for k in range(N_COINS - 1):
         _xp[k + 1] = _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
 
-    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, j)[0]
+    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, j)
 
     dy: uint256 = _xp[j] - y - 1
     _xp[j] = y
@@ -1684,7 +1673,7 @@ def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
             _xp[l + 1] = _xp[l + 1] * price_scale[l] * precisions[l + 1] / PRECISION
 
         # calculate x for given xp
-        x = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, i)[0]
+        x = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, i)
         dx = x - _xp[i]
 
         if i > 0:
@@ -1807,10 +1796,7 @@ def calc_withdraw_one_coin(token_amount: uint256, i: uint256) -> uint256:
     """
 
     return self._calc_withdraw_one_coin(
-        self._A_gamma(),
-        token_amount,
-        i,
-        (self.future_A_gamma_time > block.timestamp)
+        self._A_gamma(), token_amount, i, True, False
     )[0]
 
 

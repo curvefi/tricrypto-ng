@@ -19,6 +19,7 @@ interface LiquidityGauge:
 
 
 event TricryptoPoolDeployed:
+    pool: address
     coins: address[N_COINS]
     A: uint256
     gamma: uint256
@@ -30,7 +31,6 @@ event TricryptoPoolDeployed:
     ma_exp_time: uint256
     initial_prices: uint256[N_COINS-1]
     deployer: address
-    implementation: address
 
 event LiquidityGaugeDeployed:
     pool: address
@@ -41,7 +41,7 @@ event UpdateFeeReceiver:
     _new_fee_receiver: address
 
 event UpdatePoolImplementation:
-    _implementtion_id: uint256
+    _implemention_id: uint256
     _old_pool_implementation: address
     _new_pool_implementation: address
 
@@ -63,7 +63,6 @@ event TransferOwnership:
 
 
 struct PoolArray:
-    token: address
     liquidity_gauge: address
     coins: address[N_COINS]
     decimals: uint256[N_COINS]
@@ -73,20 +72,18 @@ N_COINS: constant(uint256) = 3
 A_MULTIPLIER: constant(uint256) = 10000
 
 # Limits
-MIN_FEE: constant(uint256) = 5 * 10 ** 5  # 0.5 bps
 MAX_FEE: constant(uint256) = 10 * 10 ** 9
 
 MIN_GAMMA: constant(uint256) = 10 ** 10
-MAX_GAMMA: constant(uint256) = 2 * 10 ** 16
+MAX_GAMMA: constant(uint256) = 5 * 10**16
 
-MIN_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER / 10
-MAX_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER * 100000
+MIN_A: constant(uint256) = N_COINS ** N_COINS * A_MULTIPLIER / 100
+MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
 
 PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
-WETH: immutable(address)
-math: public(immutable(address))
+WETH: public(immutable(address))
 
 admin: public(address)
 future_admin: public(address)
@@ -97,6 +94,7 @@ fee_receiver: public(address)
 pool_implementations: public(HashMap[uint256, address])
 gauge_implementation: public(address)
 views_implementation: public(address)
+math_implementation: public(address)
 
 # mapping of coins -> pools for trading
 # a mapping key is generated for each pair of addresses via
@@ -110,14 +108,9 @@ pool_list: public(address[4294967296])   # master list of pools
 
 
 @external
-def __init__(
-    _fee_receiver: address,
-    _admin: address,
-    _weth: address,
-    _math: address,
-):
+def __init__(_fee_receiver: address, _admin: address, _weth: address):
+
     WETH = _weth
-    math = _math
 
     self.fee_receiver = _fee_receiver
     self.admin = _admin
@@ -169,22 +162,28 @@ def deploy_pool(
     # Validate parameters
     assert A > MIN_A-1
     assert A < MAX_A+1
+
     assert gamma > MIN_GAMMA-1
     assert gamma < MAX_GAMMA+1
-    assert mid_fee > MIN_FEE-1
-    assert mid_fee < MAX_FEE-1
+
+    assert mid_fee < MAX_FEE-1  # mid_fee can be zero
     assert out_fee >= mid_fee
     assert out_fee < MAX_FEE-1
-    assert allowed_extra_profit < 10**16+1
     assert fee_gamma < 10**18+1
     assert fee_gamma > 0
+
+    assert allowed_extra_profit < 10**18+1
+
     assert adjustment_step < 10**18+1
     assert adjustment_step > 0
+
     assert ma_exp_time < 872542  # 7 * 24 * 60 * 60 / ln(2)
     assert ma_exp_time > 86  # 60 / ln(2)
+
     assert min(initial_prices[0], initial_prices[1]) > 10**6
     assert max(initial_prices[0], initial_prices[1]) < 10**30
-    assert _coins[0] != _coins[1] and _coins[1] != _coins[2], "Duplicate coins"
+
+    assert _coins[0] != _coins[1] and _coins[1] != _coins[2] and _coins[0] != _coins[2], "Duplicate coins"
 
     name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
     symbol: String[32] = concat(_symbol, "-f")
@@ -228,7 +227,7 @@ def deploy_pool(
         _name,
         _symbol,
         _coins,
-        math,
+        self.math_implementation,
         WETH,
         packed_precisions,
         packed_A_gamma,
@@ -246,21 +245,12 @@ def deploy_pool(
     self.pool_data[pool].coins = _coins
 
     # add coins to market:
-    for coin_a in _coins:
-        for coin_b in _coins:
-
-            if coin_a == coin_b:
-                continue
-
-            key: uint256 = (
-                convert(coin_a, uint256) ^ convert(coin_b, uint256)
-            )
-
-            length = self.market_counts[key]
-            self.markets[key][length] = pool
-            self.market_counts[key] = length + 1
+    self._add_coins_to_market(_coins[0], _coins[1], pool)
+    self._add_coins_to_market(_coins[0], _coins[2], pool)
+    self._add_coins_to_market(_coins[1], _coins[2], pool)
 
     log TricryptoPoolDeployed(
+        pool,
         _coins,
         A,
         gamma,
@@ -272,10 +262,21 @@ def deploy_pool(
         ma_exp_time,
         initial_prices,
         msg.sender,
-        pool_implementation
     )
 
     return pool
+
+
+@internal
+def _add_coins_to_market(coin_a: address, coin_b: address, pool: address):
+
+    key: uint256 = (
+        convert(coin_a, uint256) ^ convert(coin_b, uint256)
+    )
+
+    length: uint256 = self.market_counts[key]
+    self.markets[key][length] = pool
+    self.market_counts[key] = length + 1
 
 
 @external
@@ -290,9 +291,6 @@ def deploy_gauge(_pool: address) -> address:
     assert self.gauge_implementation != empty(address), "Gauge implementation not set"
 
     gauge: address = create_from_blueprint(self.gauge_implementation, _pool, code_offset=3)
-
-    token: address = self.pool_data[_pool].token
-    LiquidityGauge(gauge).initialize(token)
     self.pool_data[_pool].liquidity_gauge = gauge
 
     log LiquidityGaugeDeployed(_pool, gauge)
@@ -359,6 +357,17 @@ def set_views_implementation(_views_implementation: address):
     log UpdateViewsImplementation(self.views_implementation, _views_implementation)
     self.views_implementation = _views_implementation
 
+
+@external
+def set_math_implementation(_math_implementation: address):
+    """
+    @notice Set math implementation
+    @param _math_implementation Address of the new math contract
+    """
+    assert msg.sender == self.admin  # dev: admin only
+
+    log UpdateMathImplementation(self.math_implementation, _math_implementation)
+    self.math_implementation = _math_implementation
 
 
 @external
@@ -494,3 +503,18 @@ def get_eth_index(_pool: address) -> uint256:
             return i
     a: uint256 = max_value(uint256)
     return a
+
+
+@view
+@external
+def get_market_counts(coin_a: address, coin_b: address) -> uint256:
+    """
+    @notice Gets the number of markets with the specified coins.
+    @return Number of pools with the input coins
+    """
+
+    key: uint256 = (
+        convert(coin_a, uint256) ^ convert(coin_b, uint256)
+    )
+
+    return self.market_counts[key]

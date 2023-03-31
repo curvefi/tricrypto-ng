@@ -13,12 +13,11 @@ ipython
 hypothesis
 pytest
 pytest-xdist
-pytest-check
 pytest-forked
-pytest-logging
+pytest-repeat
 pdbpp
-hypothesis==6.68.1
+hypothesis>=6.68.1
 
 # vyper and dev framework:
-git+https://github.com/vyperlang/titanoboa
+git+https://github.com/vyperlang/titanoboa.git@b57c5b1f27c7cd3291aeac17b70eb0f98c3f5bb2
 vyper==0.3.7

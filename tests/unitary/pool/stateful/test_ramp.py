@@ -59,12 +59,9 @@ class RampTest(ProfitableState):
         check_out_amount,
     ):
         if check_out_amount:
-            admin_balances = self.swap.balanceOf(self.fee_receiver)
-            self.swap.claim_admin_fees()
-            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
-            if _claimed > 0:
-                self.total_supply += _claimed
-                self.xcp_profit = self.swap.xcp_profit()
+            with self.upkeep_on_claim():
+                self.swap.claim_admin_fees()
+
         if exchange_i > 0:
             exchange_amount_in = (
                 exchange_amount_in
@@ -93,12 +90,8 @@ class RampTest(ProfitableState):
     ):
         if check_out_amount:
 
-            admin_balances = self.swap.balanceOf(self.fee_receiver)
-            self.swap.claim_admin_fees()
-            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balances
-            if _claimed > 0:
-                self.total_supply += _claimed
-                self.xcp_profit = self.swap.xcp_profit()
+            with self.upkeep_on_claim():
+                self.swap.claim_admin_fees()
 
             super().remove_liquidity_one_coin(
                 token_amount, exchange_i, user, ALLOWED_DIFFERENCE

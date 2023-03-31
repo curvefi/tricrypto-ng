@@ -25,7 +25,7 @@ def zap(swap_with_deposit, coins, callbacker):
 
 
 @given(
-    dx=strategy("uint256", min_value=1000 * 10**6, max_value=100 * 10**18),
+    dx=strategy("uint256", min_value=10**10, max_value=100 * 10**18),
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
 )
@@ -39,7 +39,7 @@ def test_revert_good_callback_not_enough_coins(zap, callbacker, i, j, dx):
 
 
 @given(
-    dx=strategy("uint256", min_value=1000 * 10**6, max_value=100 * 10**18),
+    dx=strategy("uint256", min_value=10**10, max_value=100 * 10**18),
     j=strategy("uint8", min_value=0, max_value=1),
 )
 @settings(deadline=None)
@@ -52,7 +52,7 @@ def test_revert_good_callback_input_eth(zap, callbacker, coins, j, dx):
 
 
 @given(
-    dx=strategy("uint256", min_value=1000 * 10**6, max_value=100 * 10**18),
+    dx=strategy("uint256", min_value=10**10, max_value=100 * 10**18),
     i=strategy("uint8", min_value=0, max_value=1),
 )
 @settings(deadline=None)
@@ -78,7 +78,7 @@ def test_success_good_callback_output_eth(
 
 
 @given(
-    dx=strategy("uint256", min_value=1000 * 10**6, max_value=100 * 10**18),
+    dx=strategy("uint256", min_value=10**10, max_value=100 * 10**18),
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
 )
@@ -101,7 +101,7 @@ def test_good_callback_erc20(
 
 
 @given(
-    dx=strategy("uint256", min_value=1000 * 10**6, max_value=100 * 10**18),
+    dx=strategy("uint256", min_value=10**10, max_value=100 * 10**18),
     i=strategy("uint8", min_value=0, max_value=1),
 )
 @settings(deadline=None)
@@ -121,9 +121,7 @@ def test_good_callback_output_eth(
 
 
 @given(
-    amount=strategy(
-        "uint256", min_value=1000 * 10**6, max_value=100 * 10**18
-    ),
+    amount=strategy("uint256", min_value=10**10, max_value=100 * 10**18),
     i=strategy("uint8", min_value=0, max_value=2),
     j=strategy("uint8", min_value=0, max_value=2),
 )

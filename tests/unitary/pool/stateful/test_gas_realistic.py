@@ -5,8 +5,8 @@ from hypothesis.stateful import rule, run_state_machine_as_test
 from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 60
-STEP_COUNT = 30
+MAX_SAMPLES = 100
+STEP_COUNT = 100
 
 
 class StatefulGas(StatefulBase):
@@ -42,27 +42,36 @@ class StatefulGas(StatefulBase):
 
     @rule(deposit_amount=deposit_amount, exchange_i=exchange_i, user=user)
     def deposit(self, deposit_amount, exchange_i, user):
+
         amounts = [0] * 3
         if exchange_i > 0:
+
             amounts[exchange_i] = (
                 deposit_amount
                 * 10**18
                 // self.swap.price_oracle(exchange_i - 1)
             )
-        else:
-            amounts[exchange_i] = deposit_amount
-        new_balances = [x + y for x, y in zip(self.balances, amounts)]
 
+        else:
+
+            amounts[exchange_i] = deposit_amount
+
+        new_balances = [x + y for x, y in zip(self.balances, amounts)]
         mint_for_testing(self.coins[exchange_i], user, deposit_amount)
 
         try:
+
             tokens = self.token.balanceOf(user)
-            with boa.env.prank(user):
+
+            with boa.env.prank(user), self.upkeep_on_claim():
                 self.swap.add_liquidity(amounts, 0)
+
             tokens = self.token.balanceOf(user) - tokens
             self.total_supply += tokens
             self.balances = new_balances
+
         except Exception:
+
             if self.check_limits(amounts):
                 raise
 
@@ -77,12 +86,8 @@ class StatefulGas(StatefulBase):
     ):
 
         if update_D:
-            admin_balance = self.swap.balanceOf(self.fee_receiver)
-            self.swap.claim_admin_fees()
-            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
-            if _claimed > 0:
-                self.total_supply += _claimed
-                self.xcp_profit = self.swap.xcp_profit()
+            with self.upkeep_on_claim():
+                self.swap.claim_admin_fees()
 
         token_amount = token_fraction * self.total_supply // 10**18
         d_token = self.token.balanceOf(user)
@@ -100,15 +105,12 @@ class StatefulGas(StatefulBase):
                 raise
             return
 
-        d_balance = self.get_coin_balance(user, self.coins[exchange_i])
         try:
-            admin_balance = self.swap.balanceOf(self.fee_receiver)
-            with boa.env.prank(user):
-                self.swap.remove_liquidity_one_coin(
+
+            with boa.env.prank(user), self.upkeep_on_claim():
+                d_balance = self.swap.remove_liquidity_one_coin(
                     token_amount, exchange_i, 0
                 )
-            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
-            self.total_supply += _claimed
 
         except Exception:
             # Small amounts may fail with rounding errors
@@ -119,10 +121,6 @@ class StatefulGas(StatefulBase):
             ):
                 raise
             return
-
-        d_balance = (
-            self.get_coin_balance(user, self.coins[exchange_i]) - d_balance
-        )
         d_token = d_token - self.token.balanceOf(user)
 
         if update_D:

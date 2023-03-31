@@ -9,6 +9,12 @@ def math_contract(deployer):
 
 
 @pytest.fixture(scope="module")
+def math_experimental_contract(deployer):
+    with boa.env.prank(deployer):
+        return boa.load("contracts/experimental/CurveCryptoMathOptimized3.vy")
+
+
+@pytest.fixture(scope="module")
 def gauge_interface():
     return boa.load_partial("contracts/LiquidityGauge.vy")
 
@@ -28,6 +34,19 @@ def amm_interface():
 def amm_implementation(deployer, amm_interface):
     with boa.env.prank(deployer):
         return amm_interface.deploy_as_blueprint()
+
+
+@pytest.fixture(scope="module")
+def hyperamm_interface():
+    return boa.load_partial(
+        "contracts/experimental/CurveTricryptoHyperOptimizedWETH.vy"
+    )
+
+
+@pytest.fixture(scope="module")
+def hyperamm_implementation(deployer, hyperamm_interface):
+    with boa.env.prank(deployer):
+        return hyperamm_interface.deploy_as_blueprint()
 
 
 @pytest.fixture(scope="module")
@@ -56,12 +75,40 @@ def tricrypto_factory(
             fee_receiver,
             owner,
             weth,
-            math_contract,
         )
 
     with boa.env.prank(owner):
         factory.set_pool_implementation(amm_implementation, 0)
         factory.set_gauge_implementation(gauge_implementation)
         factory.set_views_implementation(views_contract)
+        factory.set_math_implementation(math_contract)
+
+    return factory
+
+
+@pytest.fixture(scope="module")
+def tricrypto_factory_experimental(
+    deployer,
+    fee_receiver,
+    owner,
+    hyperamm_implementation,
+    gauge_implementation,
+    math_experimental_contract,
+    views_contract,
+    weth,
+):
+    with boa.env.prank(deployer):
+        factory = boa.load(
+            "contracts/CurveTricryptoFactory.vy",
+            fee_receiver,
+            owner,
+            weth,
+        )
+
+    with boa.env.prank(owner):
+        factory.set_pool_implementation(hyperamm_implementation, 0)
+        factory.set_gauge_implementation(gauge_implementation)
+        factory.set_views_implementation(views_contract)
+        factory.set_math_implementation(math_experimental_contract)
 
     return factory

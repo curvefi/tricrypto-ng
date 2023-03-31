@@ -147,7 +147,7 @@ def test_dxdy_similar(
     for n in range(2):
 
         assert abs(log(dxdy_vyper[n] / dxdy_numeric_nofee[n])) < 1e-5
-        dxdy_swap = yuge_swap.last_prices(n)
+        dxdy_swap = yuge_swap.last_prices(n)  # <-- we check unsafe impl here.
         assert abs(log(dxdy_vyper[n] / dxdy_swap)) < 1e-5
 
 

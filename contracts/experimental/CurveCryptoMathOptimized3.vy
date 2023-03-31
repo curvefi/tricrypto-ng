@@ -72,7 +72,6 @@ def get_y(
     D: int256 = convert(_D, int256)
     x_j: int256 = convert(x[j], int256)
     x_k: int256 = convert(x[k], int256)
-    gamma2: int256 = unsafe_mul(gamma, gamma)
 
     a: int256 = 10**36 / 27
 
@@ -85,17 +84,15 @@ def get_y(
         - unsafe_div(
             unsafe_div(
                 unsafe_div(
-                    unsafe_mul(
-                        unsafe_div(unsafe_mul(D, D), x_j),
-                        gamma2
-                    ) * ANN,
+                    unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN),
                     27**2
                 ),
                 convert(A_MULTIPLIER, int256)
             ),
             x_k,
         )
-    )  # <------- The first two expressions can be unsafe, and unsafely added.
+    )  # <--- The first two expressions can be unsafe, and unsafely added. The
+    #        D**2 in the third expression needs to be safe, and others unsafe.
 
     # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
     c: int256 = (
@@ -106,7 +103,7 @@ def get_y(
         + unsafe_div(
             unsafe_div(
                 unsafe_mul(
-                    unsafe_div(gamma2 * unsafe_sub(unsafe_add(x_j, x_k), D), D),
+                    unsafe_div(gamma**2 * (unsafe_add(x_j, x_k) - D), D),
                     ANN
                 ),
                 27
@@ -115,7 +112,8 @@ def get_y(
         )
     )  # <--------- Same as above with the first two expressions. In the third
     #   expression, x_j + x_k will not overflow since we know their range from
-    #                                              previous assert statements.
+    #    previous assert statements. We leave one safesub with D, and the rest
+    #                                                    can safely be unsafe.
 
     # (10**18 + gamma)**2/27
     d: int256 = unsafe_div(unsafe_add(10**18, gamma)**2, 27)
@@ -152,26 +150,25 @@ def get_y(
         d = unsafe_div(d * additional_prec, divider)
     else:
         additional_prec = abs(unsafe_div(b, a))
-        a = unsafe_div(a / additional_prec, divider)
-        b = unsafe_div(unsafe_div(b, additional_prec), divider)
-        c = unsafe_div(unsafe_div(c, additional_prec), divider)
-        d = unsafe_div(unsafe_div(d, additional_prec), divider)
+        a = unsafe_div(unsafe_mul(a, additional_prec), divider)
+        b = unsafe_div(b * additional_prec, divider)
+        c = unsafe_div(c * additional_prec, divider)
+        d = unsafe_div(d * additional_prec, divider)
 
     # 3*a*c/b - b
-    _3ac: int256 = unsafe_mul(3, a) * c
-    delta0: int256 = unsafe_div(_3ac, b) - b
+    delta0: int256 = unsafe_div(unsafe_mul(3, a) * c, b) - b
 
     # 9*a*c/b - 2*b - 27*a**2/b*d/b
     delta1: int256 = (
-        unsafe_div(3 * _3ac, b)
+        unsafe_div(unsafe_mul(9, a * c), b)
         - unsafe_mul(2, b)
-        - unsafe_div(unsafe_div(27 * a**2, b) * d, b)
+        - unsafe_div(unsafe_div(unsafe_mul(27, a**2), b) * d, b)
     )
 
     # delta1**2 + 4*delta0**2/b*delta0
     sqrt_arg: int256 = (
         delta1**2 +
-        unsafe_div(4 * delta0**2, b) * delta0
+        unsafe_div(unsafe_mul(4, delta0**2), b) * delta0
     )
 
     sqrt_val: int256 = 0
@@ -229,6 +226,166 @@ def get_y(
     return out
 
 
+@external
+@view
+def get_K0_prev(
+    _ANN: uint256, _gamma: uint256, x: uint256[N_COINS], _D: uint256, i: uint256
+) -> uint256:
+
+    # No safuty checks here since get_K0_prev must be called after get_y
+    # (so the safuty checks have already been executed)
+
+    j: uint256 = 0
+    k: uint256 = 0
+    if i == 0:
+        j = 1
+        k = 2
+    elif i == 1:
+        j = 0
+        k = 2
+    elif i == 2:
+        j = 0
+        k = 1
+
+    ANN: int256 = convert(_ANN, int256)
+    gamma: int256 = convert(_gamma, int256)
+    D: int256 = convert(_D, int256)
+    x_j: int256 = convert(x[j], int256)
+    x_k: int256 = convert(x[k], int256)
+
+    a: int256 = 10**36 / 27
+
+    # 10**36/9 + 2*10**18*gamma/27 - D**2/x_j*gamma**2*ANN/27**2/convert(A_MULTIPLIER, int256)/x_k
+    b: int256 = unsafe_sub(
+        unsafe_add(
+            10**36 / 9,
+            unsafe_div(unsafe_mul(2 * 10**18, gamma), 27)
+        ),
+        unsafe_div(
+            unsafe_div(
+                unsafe_div(
+                    unsafe_mul(unsafe_mul(unsafe_div(D**2, x_j), gamma**2), ANN),
+                    27**2
+                ),
+                convert(A_MULTIPLIER, int256)
+            ),
+            x_k,
+        ),
+    )
+
+    # 10**36/9 + gamma*(gamma + 4*10**18)/27 + gamma**2*(x_j+x_k-D)/D*ANN/27/convert(A_MULTIPLIER, int256)
+    c: int256 = unsafe_add(
+        unsafe_add(
+            10**36 / 9,
+            unsafe_div(unsafe_mul(gamma, unsafe_add(gamma, 4 * 10**18)), 27)
+        ),
+        unsafe_div(
+            unsafe_div(
+                unsafe_mul(
+                    unsafe_div(gamma**2 * (unsafe_sub(unsafe_add(x_j, x_k), D)), D),
+                    ANN
+                ),
+                27
+            ),
+            convert(A_MULTIPLIER, int256),
+        ),
+    )
+
+    # (10**18 + gamma)**2/27
+    d: int256 = unsafe_div(unsafe_add(10**18, gamma)**2, 27)
+
+    # abs(3*a*c/b - b)
+    d0: int256 = abs(unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b))
+
+    divider: int256 = 0
+    if d0 > 10**48:
+        divider = 10**30
+    elif d0 > 10**44:
+        divider = 10**26
+    elif d0 > 10**40:
+        divider = 10**22
+    elif d0 > 10**36:
+        divider = 10**18
+    elif d0 > 10**32:
+        divider = 10**14
+    elif d0 > 10**28:
+        divider = 10**10
+    elif d0 > 10**24:
+        divider = 10**6
+    elif d0 > 10**20:
+        divider = 10**2
+    else:
+        divider = 1
+
+    additional_prec: int256 = 0
+    if abs(a) > abs(b):
+        additional_prec = abs(a) / abs(b)
+        # a * additional_prec / divider
+        a = unsafe_div(unsafe_mul(a, additional_prec), divider)
+        b = unsafe_div(unsafe_mul(b, additional_prec), divider)
+        c = unsafe_div(unsafe_mul(c, additional_prec), divider)
+        d = unsafe_div(unsafe_mul(d, additional_prec), divider)
+    else:
+        additional_prec = abs(b) / abs(a)
+        # a * additional_prec / divider
+        a = unsafe_div(unsafe_div(a, additional_prec), divider)
+        b = unsafe_div(unsafe_div(b, additional_prec), divider)
+        c = unsafe_div(unsafe_div(c, additional_prec), divider)
+        d = unsafe_div(unsafe_div(d, additional_prec), divider)
+
+    # 3*a*c/b - b
+    delta0: int256 = unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(3, a), c), b), b)
+
+    # 9*a*c/b - 2*b - 27*a**2/b*d/b
+    delta1: int256 = unsafe_sub(
+        unsafe_sub(unsafe_div(unsafe_mul(unsafe_mul(9, a), c), b), unsafe_mul(2, b)),
+        unsafe_div(unsafe_mul(unsafe_div(unsafe_mul(27, a**2), b), d), b),
+    )
+
+    # delta1**2 + 4*delta0**2/b*delta0
+    sqrt_arg: int256 = unsafe_add(
+        delta1**2,
+        unsafe_mul(unsafe_div(unsafe_mul(4, delta0**2), b), delta0),
+    )
+    if sqrt_arg < 0:
+        return 0
+
+    sqrt_val: int256 = 0
+    sqrt_val = convert(isqrt(convert(sqrt_arg, uint256)), int256)
+
+    b_cbrt: int256 = 0
+    if b >= 0:
+        b_cbrt = convert(self._cbrt(convert(b, uint256)), int256)
+    else:
+        b_cbrt = -convert(self._cbrt(convert(-b, uint256)), int256)
+
+    second_cbrt: int256 = 0
+    if delta1 > 0:
+        # convert(self.cbrt(convert((delta1 + sqrt_val), uint256)/2), int256)
+        second_cbrt = convert(
+            self._cbrt(unsafe_div(convert((unsafe_add(delta1, sqrt_val)), uint256), 2)),
+            int256,
+        )
+    else:
+        # -convert(self.cbrt(convert(-(delta1 - sqrt_val), uint256)/2), int256)
+        second_cbrt = -convert(
+            self._cbrt(unsafe_div(convert(-unsafe_sub(delta1, sqrt_val), uint256), 2)),
+            int256,
+        )
+
+    # b_cbrt*b_cbrt/10**18*second_cbrt/10**18
+    C1: int256 = unsafe_div(unsafe_mul(unsafe_div(b_cbrt**2, 10**18), second_cbrt), 10**18)
+
+    # (b + b*delta0/C1 - C1)/3
+    root_K0: int256 = unsafe_div(
+        unsafe_sub(unsafe_add(b, unsafe_div(unsafe_mul(b, delta0), C1)), C1),
+        3
+    )
+    K0_prev: uint256 = convert(unsafe_div(10**18 * root_K0, a), uint256)  # a > 0; safu.
+
+    return K0_prev
+
+
 @internal
 @view
 def _newton_y(
@@ -239,7 +396,10 @@ def _newton_y(
     # This is the original method; get_y replaces it, but defaults to
     # this version conditionally.
 
-    # We can ignore safuty checks since they are already done in get_y
+    # Safety checks
+    assert ANN > MIN_A - 1 and ANN < MAX_A + 1, "dev: unsafe values A"
+    assert gamma > MIN_GAMMA - 1 and gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
+    assert D > 10**17 - 1 and D < 10**15 * 10**18 + 1, "dev: unsafe values D"
 
     frac: uint256 = 0
     for k in range(3):
@@ -328,6 +488,228 @@ def _newton_y(
             return y
 
     raise "Did not converge"
+
+
+@external
+@view
+def secant_D(
+    ANN: uint256, _gamma: uint256, x_unsorted: uint256[N_COINS]
+) -> uint256:
+    """
+    @notice Finding the invariant via secant method.
+    @dev ANN is higher by the factor A_MULTIPLIER
+    @dev ANN is already A * N**N
+    @param ANN the A * N**N value
+    @param _gamma the gamma value
+    @param x_unsorted the array of coin balances (not sorted)
+    """
+
+    x: uint256[N_COINS] = self._sort(x_unsorted)
+    assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
+    assert x[0] > 0, "dev: empty pool"
+
+    # ANN / N**N / A_MULTIPLIER
+    A: int256 = convert(unsafe_div(unsafe_div(ANN, 27), A_MULTIPLIER), int256)
+    gamma: int256 = convert(_gamma, int256)
+    gamma_1: int256 = 10**18 + gamma
+    gamma2: int256 = gamma**2
+
+    # x[0] + x[1] + x[2]
+    S: int256 = convert(
+        unsafe_add(unsafe_add(x[0], x[1]), x[2]),
+        int256
+    )
+
+    # x[0] * x[1] * x[2]
+    # x[0] * x[1] / 10**18 * x[2] / 10**18
+    P: int256 = convert(
+        unsafe_div(unsafe_div(x[0] * x[1], 10**18) * x[2], 10**18),
+        int256
+    )
+    P_1e18: int256 = P * 10**18
+
+    # S / 1.1
+    # S * 10**18 / (11 * 10**17)
+    D_prev_2: int256 = unsafe_div(S * 10**18, 11 * 10**17)
+
+    # ------------------------------------------------------------------ #
+    # Calculate C_D_prev_2:
+    d0: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_div(
+                unsafe_div(
+                    unsafe_div(-D_prev_2 * D_prev_2, 10**18) * D_prev_2,
+                    10**18
+                ) * gamma_1,
+                10**18
+            ) * gamma_1,
+            10**18
+        ),
+        27
+    )
+
+    # (3 * P + 4 * g * P + P * g**2 - 27 * A * g**2 * P) # D^6
+    # (3 * 10**18 + 4 * gamma + (1 - 27 * A) * gamma2 ) * P / 10**18
+    # need not calculate d1 any more since it is a constant
+    d1: int256 = unsafe_div(
+        (
+            3 * 10**18
+            + unsafe_mul(4, gamma)
+            + unsafe_div(unsafe_mul(unsafe_sub(1, 27 * A), gamma2), 10**18)
+        ) * P,
+        10**18
+    )
+
+    # 27 * A * g**2 * (P / D) * S # D^5
+    # 27 * A * gamma2 * P / 10**18 * S / D
+    _d2: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_mul(27 * A, gamma2),
+            10**18
+        ) * P,
+        10**18
+    ) * S
+    d2: int256 = unsafe_div(_d2, D_prev_2)
+
+    # (-81 - 54 * g) * (P / D)**2 / D # D^3
+    # (-81 * 10**18 - 54 * gamma) * P / D * P / D * 10**18 / D
+    _d3: int256 = unsafe_sub(-81 * 10**18, unsafe_mul(54, gamma))
+    d3: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_div(
+                unsafe_div(_d3 * P, D_prev_2),
+                10**10
+            ) * P,
+            D_prev_2
+        ) * 10**18,
+        D_prev_2
+    ) * 10**10
+
+    # 729 * (P / D / D)**3 # D^0
+    # d4 = (P * 10**18 / D * 10**18 / D)
+    # d4 = 729 * (d4 * d4 / 10**18 * d4 / 10**18)
+    d4: int256 = unsafe_div(
+        unsafe_mul(unsafe_div(P_1e18, D_prev_2), 10**18),
+        D_prev_2
+    )
+    d4 = 729 * unsafe_div(unsafe_div(d4 * d4, 10**18) * d4, 10**18)
+
+    C_D_prev_2: int256 = unsafe_add(
+        unsafe_add(unsafe_add(d0, d4), unsafe_add(d1, d3)),
+        d2
+    )  # <--- we can do unsafe add for all, since (d0, d4), (d1, d3) pairs
+    #                 are actuall of similar magnitude but opposing signs.
+    # ------------------------------------------------------------------ #
+
+    C_D_prev: int256 = 0
+    D_prev: int256 = 0
+    inv: int256 = 0
+    frac: uint256 = 0
+    D: int256 = S
+
+    for i in range(255):
+
+        D_prev = D
+
+        # ------------------------------------------------------------------ #
+        # Calculate C_D_prev (repeats previous expressions) but with more
+        # libera unsafe math, since convergence in secant method between linear
+        # and quadratic (so we expect similar values between iterations), and
+        # we did safemul (with unsafe div wherever possible) before.
+
+        d0 = unsafe_div(
+            unsafe_div(
+                unsafe_mul(
+                    unsafe_div(
+                        unsafe_mul(
+                            unsafe_div(
+                                unsafe_mul(
+                                    unsafe_div(
+                                        unsafe_mul(-D_prev, D_prev),
+                                        10**18
+                                    ),
+                                    D_prev
+                                ),
+                                10**18
+                            ),
+                            gamma_1
+                        ),
+                        10**18
+                    ),
+                    gamma_1
+                ),
+                10**18
+            ),
+            27
+        )
+
+        d2 = unsafe_div(_d2, D_prev)
+
+        d3 = unsafe_mul(
+            unsafe_div(
+                unsafe_mul(
+                    unsafe_div(
+                        unsafe_mul(
+                            unsafe_div(
+                                unsafe_div(unsafe_mul(_d3, P), D_prev),
+                                10**10
+                            ),
+                            P
+                        ),
+                        D_prev
+                    ),
+                    10**18
+                ),
+                D_prev
+            ),
+            10**10
+        )
+
+        d4 = unsafe_div(
+            unsafe_mul(unsafe_div(P_1e18, D_prev), 10**18),
+            D_prev
+        )
+        d4 = unsafe_mul(
+            729, unsafe_div(
+                unsafe_mul(unsafe_div(unsafe_mul(d4, d4), 10**18), d4),
+                10**18
+            )
+        )
+
+        C_D_prev = unsafe_add(
+            unsafe_add(unsafe_add(d0, d4), unsafe_add(d1, d3)),
+            d2
+        )
+        # ------------------------------------------------------------------ #
+
+        # C_D_prev - C_D_prev_2
+        # We can use unsafe math because these values will always be comparable
+        inv = unsafe_sub(C_D_prev, C_D_prev_2)
+
+        # D_prev - C_D_prev * (D_prev - D_prev_2) / inv
+        D = unsafe_sub(
+            D_prev,
+            unsafe_div(
+                unsafe_mul(C_D_prev, unsafe_sub(D_prev, D_prev_2)),
+                inv
+            )
+        )
+
+        if abs(unsafe_sub(D, D_prev)) < max(100, unsafe_div(D, 10**10)):
+
+            D_final: uint256 = convert(D, uint256)
+
+            # Test that we are safe with the next get_y
+            for _x in x:
+                frac = unsafe_div(unsafe_mul(_x, 10**18), D_final)
+                assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+
+            return D_final
+
+        C_D_prev_2 = C_D_prev
+        D_prev_2 = D_prev
+
+    raise "Secant method did not converge"
 
 
 @external
@@ -555,7 +937,6 @@ def get_p(
     x1: int256 = convert(_xp[0], int256)
     x2: int256 = convert(_xp[1], int256)
     x3: int256 = convert(_xp[2], int256)
-    gamma2: int256 = unsafe_mul(gamma, gamma)
 
     # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
     # this entire expression can be unsafe:
@@ -575,7 +956,7 @@ def get_p(
                                         -10**18,
                                         unsafe_div(
                                             unsafe_mul(10**18, ANN),
-                                            convert(A_MULTIPLIER, int256),
+                                            10000,
                                         ),
                                     ),
                                     gamma,
@@ -604,7 +985,7 @@ def get_p(
                             unsafe_div(
                                 unsafe_mul(10**18 * 9, ANN), 27
                             ),
-                            convert(A_MULTIPLIER, int256),
+                            10000,
                         ),
                         gamma,
                     ),
@@ -673,37 +1054,28 @@ def get_p(
                 unsafe_div(
                     unsafe_div(
                         unsafe_mul(10**18 * 27, ANN),
-                        convert(A_MULTIPLIER, int256),
+                        10000,
                     ) * x1,
                     D,
                 ) * x2,
                 D,
             ) * x3,
             D,
-        ) * gamma2,
+        ) * gamma**2,
         D,
     )
 
     # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
     # entire expression can be unsafe:
     c: int256 = unsafe_div(
-        unsafe_div(
-            unsafe_div(
-                unsafe_mul(
-                    27,
-                    unsafe_mul(
-                        ANN,
-                        unsafe_mul(
-                            gamma2,
-                            unsafe_add(10**18, gamma)
-                        )
-                    )
-                ),
-                D
+        unsafe_mul(
+            unsafe_mul(
+                unsafe_div(ANN, 10000),
+                gamma**2
             ),
-            27
+            unsafe_add(10**18, gamma),
         ),
-        convert(A_MULTIPLIER, int256)
+        D,
     )
 
     return [
@@ -756,7 +1128,10 @@ def _get_partial_derivative(
     if denominator > 0:
         sign_denom = 1
 
-    assert unsafe_div(unsafe_mul(sign_num_a, sign_num_b), sign_denom) < 0, "dev: partial derivative cannot be positive"
+    assert unsafe_div(
+        unsafe_mul(sign_num_a, sign_num_b),
+        sign_denom
+    ) < 0, "dev: partial derivative cannot be positive"
 
     return self._snekmate_mul_div(
         convert(abs(numerator_a), uint256),
@@ -899,54 +1274,35 @@ def _exp(_power: int256) -> uint256:
 
 @internal
 @pure
-def _snekmate_log_2(x: uint256, roundup: bool) -> uint256:
-    """
-    @notice An `internal` helper function that returns the log in base 2
-         of `x`, following the selected rounding direction.
-    @dev This implementation is derived from Snekmate, which is authored
-         by pcaversaccio (Snekmate), distributed under the AGPL-3.0 license.
-         https://github.com/pcaversaccio/snekmate
-    @dev Note that it returns 0 if given 0. The implementation is
-         inspired by OpenZeppelin's implementation here:
-         https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/math/Math.sol.
-    @param x The 32-byte variable.
-    @param roundup The Boolean variable that specifies whether
-           to round up or not. The default `False` is round down.
-    @return uint256 The 32-byte calculation result.
-    """
-    value: uint256 = x
-    result: uint256 = empty(uint256)
+def _log2(x: uint256) -> int256:
 
-    # The following lines cannot overflow because we have the well-known
-    # decay behaviour of `log_2(max_value(uint256)) < max_value(uint256)`.
-    if (shift(x, -128) != empty(uint256)):
-        value = shift(x, -128)
-        result = 128
-    if (shift(value, -64) != empty(uint256)):
-        value = shift(value, -64)
-        result = unsafe_add(result, 64)
-    if (shift(value, -32) != empty(uint256)):
-        value = shift(value, -32)
-        result = unsafe_add(result, 32)
-    if (shift(value, -16) != empty(uint256)):
-        value = shift(value, -16)
-        result = unsafe_add(result, 16)
-    if (shift(value, -8) != empty(uint256)):
-        value = shift(value, -8)
-        result = unsafe_add(result, 8)
-    if (shift(value, -4) != empty(uint256)):
-        value = shift(value, -4)
-        result = unsafe_add(result, 4)
-    if (shift(value, -2) != empty(uint256)):
-        value = shift(value, -2)
-        result = unsafe_add(result, 2)
-    if (shift(value, -1) != empty(uint256)):
-        result = unsafe_add(result, 1)
+    # Compute the binary logarithm of `x`
 
-    if (roundup and (shift(1, convert(result, int256)) < x)):
-        result = unsafe_add(result, 1)
+    # This was inspired from Stanford's 'Bit Twiddling Hacks' by Sean Eron Anderson:
+    # https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
+    #
+    # More inspiration was derived from:
+    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
 
-    return result
+    log2x: int256 = 0
+    if x > 340282366920938463463374607431768211455:
+        log2x = 128
+    if unsafe_div(x, shift(2, log2x)) > 18446744073709551615:
+        log2x = log2x | 64
+    if unsafe_div(x, shift(2, log2x)) > 4294967295:
+        log2x = log2x | 32
+    if unsafe_div(x, shift(2, log2x)) > 65535:
+        log2x = log2x | 16
+    if unsafe_div(x, shift(2, log2x)) > 255:
+        log2x = log2x | 8
+    if unsafe_div(x, shift(2, log2x)) > 15:
+        log2x = log2x | 4
+    if unsafe_div(x, shift(2, log2x)) > 3:
+        log2x = log2x | 2
+    if unsafe_div(x, shift(2, log2x)) > 1:
+        log2x = log2x | 1
+
+    return log2x
 
 
 @internal
@@ -961,7 +1317,7 @@ def _cbrt(x: uint256) -> uint256:
     else:
         xx = unsafe_mul(x, 10**36)
 
-    log2x: int256 = convert(self._snekmate_log_2(xx, False), int256)
+    log2x: int256 = self._log2(xx)
 
     # When we divide log2x by 3, the remainder is (log2x % 3).
     # So if we just multiply 2**(log2x/3) and discard the remainder to calculate our
