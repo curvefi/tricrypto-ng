@@ -1380,9 +1380,7 @@ def _approve(_owner: address, _spender: address, _value: uint256):
 
 @internal
 def _transfer(_from: address, _to: address, _value: uint256):
-    # assert _to not in [self, empty(address)]
-    assert _to != self
-    assert _to != empty(address)
+    assert _to not in [self, empty(address)]
 
     self.balanceOf[_from] -= _value
     self.balanceOf[_to] += _value
