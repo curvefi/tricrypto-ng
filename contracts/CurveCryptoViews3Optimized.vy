@@ -28,6 +28,7 @@ interface Curve:
     def totalSupply() -> uint256: view
     def precisions() -> uint256[N_COINS]: view
     def packed_fee_params() -> uint256: view
+    def math() -> address: view
 
 
 interface Math:
@@ -52,13 +53,6 @@ interface Math:
 
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18
-
-math: public(immutable(address))
-
-
-@external
-def __init__(_math: address):
-    math = _math
 
 
 @external
@@ -170,6 +164,8 @@ def _calc_D_ramp(
     swap: address
 ) -> uint256:
 
+    math: address = Curve(swap).math()
+
     D: uint256 = Curve(swap).D()
     if Curve(swap).future_A_gamma_time() > block.timestamp:
         _xp: uint256[N_COINS] = xp
@@ -193,6 +189,8 @@ def _get_dx_fee(
 
     assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
     assert dy > 0, "do not exchange out 0 coins"
+
+    math: address = Curve(swap).math()
 
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -230,6 +228,8 @@ def _get_dy_nofee(
     assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
     assert dx > 0, "do not exchange 0 coins"
 
+    math: address = Curve(swap).math()
+
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
     price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
@@ -261,6 +261,8 @@ def _get_dy_nofee(
 def _calc_dtoken_nofee(
     amounts: uint256[N_COINS], deposit: bool, swap: address
 ) -> (uint256, uint256[N_COINS], uint256[N_COINS]):
+
+    math: address = Curve(swap).math()
 
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -310,6 +312,8 @@ def _calc_withdraw_one_coin(
     assert token_amount <= token_supply  # dev: token amount more than supply
     assert i < N_COINS  # dev: coin out of range
 
+    math: address = Curve(swap).math()
+
     xx: uint256[N_COINS] = empty(uint256[N_COINS])
     price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
     for k in range(N_COINS):
@@ -358,6 +362,7 @@ def _calc_withdraw_one_coin(
 @internal
 @view
 def _fee(xp: uint256[N_COINS], swap: address) -> uint256:
+    math: address = Curve(swap).math()
     packed_fee_params: uint256 = Curve(swap).packed_fee_params()
     fee_params: uint256[3] = self._unpack(packed_fee_params)
     f: uint256 = Math(math).reduction_coefficient(xp, fee_params[2])

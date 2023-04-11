@@ -130,10 +130,7 @@ def _setup_pool():
         )
         amm_implementation = amm_interface.deploy_as_blueprint()
 
-        views = boa.load(
-            "contracts/CurveCryptoViews3Optimized.vy",
-            math_contract,
-        )
+        views = boa.load("contracts/CurveCryptoViews3Optimized.vy")
 
         factory_nofee = boa.load(
             "contracts/CurveTricryptoFactoryNoFee.vy",

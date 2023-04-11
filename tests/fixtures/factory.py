@@ -50,12 +50,9 @@ def hyperamm_implementation(deployer, hyperamm_interface):
 
 
 @pytest.fixture(scope="module")
-def views_contract(deployer, math_contract):
+def views_contract(deployer):
     with boa.env.prank(deployer):
-        return boa.load(
-            "contracts/CurveCryptoViews3Optimized.vy",
-            math_contract,
-        )
+        return boa.load("contracts/CurveCryptoViews3Optimized.vy")
 
 
 @pytest.fixture(scope="module")

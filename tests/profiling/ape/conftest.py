@@ -153,9 +153,7 @@ def factory(deployer, fee_receiver, owner, weth, project):
     )
 
     math_contract = project.CurveCryptoMathOptimized3.deploy(sender=deployer)
-    views_contract = project.CurveCryptoViews3Optimized.deploy(
-        math_contract, sender=deployer
-    )
+    views_contract = project.CurveCryptoViews3Optimized.deploy(sender=deployer)
 
     factory = project.CurveTricryptoFactory.deploy(
         fee_receiver, owner, weth, math_contract, sender=deployer

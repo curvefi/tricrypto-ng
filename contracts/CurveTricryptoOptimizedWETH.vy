@@ -135,6 +135,7 @@ packed_precisions: uint256
 MATH: immutable(Math)
 coins: public(address[N_COINS])
 factory: public(address)
+math: public(address)
 
 price_scale_packed: uint256  # <------------------------ Internal price scale.
 price_oracle_packed: uint256  # <------- Price target given by moving average.
@@ -239,6 +240,7 @@ def __init__(
     MATH = Math(_math)
 
     self.factory = msg.sender
+    self.math = _math
 
     name = _name
     symbol = _symbol
