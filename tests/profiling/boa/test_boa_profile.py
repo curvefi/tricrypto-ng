@@ -83,9 +83,9 @@ def _random_withdraw_one(swaps, total_supply):
 
 @pytest.mark.skip
 @pytest.mark.profile
-def test_profile_amms(swap_legacy, hyper_swap_with_deposit, coins, user):
+def test_profile_amms(swap_legacy, swap_with_deposit, coins, user):
 
-    swaps = [hyper_swap_with_deposit, swap_legacy]
+    swaps = [swap_with_deposit, swap_legacy]
 
     for coin in coins:
         mint_for_testing(coin, user, 10**50)
@@ -108,8 +108,8 @@ def test_profile_amms(swap_legacy, hyper_swap_with_deposit, coins, user):
 
             # withdraw proportionally:
             _random_proportional_withdraw(
-                swaps, hyper_swap_with_deposit.totalSupply()
+                swaps, swap_with_deposit.totalSupply()
             )
 
             # withdraw in one coin:
-            _random_withdraw_one(swaps, hyper_swap_with_deposit.totalSupply())
+            _random_withdraw_one(swaps, swap_with_deposit.totalSupply())

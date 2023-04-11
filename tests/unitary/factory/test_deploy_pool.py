@@ -3,7 +3,7 @@ import pytest
 
 
 @pytest.fixture(scope="module")
-def empty_factory(deployer, fee_receiver, owner, weth, math_contract):
+def empty_factory(deployer, fee_receiver, owner, weth):
 
     with boa.env.prank(deployer):
         factory = boa.load(
@@ -11,7 +11,6 @@ def empty_factory(deployer, fee_receiver, owner, weth, math_contract):
             fee_receiver,
             owner,
             weth,
-            math_contract,
         )
 
     return factory

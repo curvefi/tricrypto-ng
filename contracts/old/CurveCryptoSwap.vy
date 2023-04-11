@@ -1,4 +1,4 @@
-# @version 0.3.7
+# @version ^0.3.7
 
 # (c) Curve.Fi, 2021
 # Pool for USDT/BTC/ETH or similar
@@ -827,6 +827,7 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
 
         precisions: uint256[N_COINS] = PRECISIONS
         packed_prices: uint256 = self.price_scale_packed
+
         xp[0] *= PRECISIONS[0]
         xp_old[0] *= PRECISIONS[0]
         for i in range(1, N_COINS):
@@ -855,6 +856,7 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
                 self.future_A_gamma_time = 1
         else:
             old_D = self.D
+
     D: uint256 = Math(math).newton_D(A_gamma[0], A_gamma[1], xp)
 
     token_supply: uint256 = CurveToken(token).totalSupply()

@@ -1,4 +1,4 @@
-# @version 0.3.7
+# @version ^0.3.7
 
 # (c) Curve.Fi, 2021
 # Math for crypto pools
@@ -110,9 +110,8 @@ def newton_D(
     # Initial value of invariant D is that for constant-product invariant
     x: uint256[N_COINS] = self.sort(x_unsorted)
 
-    assert (
-        x[0] > 10**9 - 1 and x[0] < 10**15 * 10**18 + 1
-    )  # dev: unsafe values x[0]
+    assert x[0] > 10**9 - 1 and x[0] < 10**15 * 10**18 + 1  # dev: unsafe values x[0]
+
     for i in range(1, N_COINS):
         frac: uint256 = x[i] * 10**18 / x[0]
         assert frac > 10**11 - 1  # dev: unsafe values x[i]
