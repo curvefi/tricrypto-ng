@@ -829,9 +829,6 @@ def add_liquidity(amounts: uint256[N_COINS], min_mint_amount: uint256):
         packed_prices: uint256 = self.price_scale_packed
 
         xp[0] *= PRECISIONS[0]
-        xp[1] *= PRECISIONS[1]
-        xp[2] *= PRECISIONS[2]
-
         xp_old[0] *= PRECISIONS[0]
         for i in range(1, N_COINS):
             price_scale: uint256 = (
