@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import List
 
 import click
 from ape import Contract, project  # noqa: F401
@@ -33,11 +34,31 @@ def deploy_blueprint(contract, account):
 
 # -------------- CURVE DATA --------------
 
+MA_TIME = 866  # 600 seconds / ln(2)
+# TODO: fetch pool params from mainnet tricrypto2 contract
+
 
 @dataclass
 class CurveDAO:
     ownership_admin: Address
     fee_receiver: Address
+
+
+@dataclass
+class PoolParams:
+    name: str
+    symbol: str
+    coins: List[Address, Address, Address]
+    implementation_index: int
+    A: int
+    gamma: int
+    mid_fee: int
+    out_fee: int
+    allowed_extra_profit: int
+    fee_gamma: int
+    adjustment_step: int
+    ma_time: int
+    initial_prices: List[int]
 
 
 curve_dao_network_settings = {
@@ -75,32 +96,46 @@ def deploy(network, account):
 
     for _network, data in curve_dao_network_settings.items():
 
-        if f":{_network}:" in network:
+        if f":{_network}:" == network:
 
-            ownership_admin = data.ownership_admin  # noqa: F841
-            fee_receiver = data.fee_receiver  # noqa: F841
-            weth = data.fee_receiver  # noqa: F841
+            owner = data.ownership_admin
+            fee_receiver = data.fee_receiver
+            weth = data.fee_receiver
+
+    assert owner, f"Curve's DAO contracts may not be on {network}."
 
     # ------------ DEPLOY MAIN + AUXILIARY CONTRACTS ------------
 
     print("Deploying math contract")
-    math_contract = account.deploy(  # noqa: F841
-        project.CurveCryptoMathOptimized3
-    )
+    math_contract = account.deploy(project.CurveCryptoMathOptimized3)
 
     print("Deploying views contract")
-    view_contract = account.deploy(  # noqa: F841
-        project.CurveCryptoViews3Optimized
-    )
+    views_contract = account.deploy(project.CurveCryptoViews3Optimized)
 
     print("Deploying AMM blueprint contract")
+    amm_impl = deploy_blueprint(project.CurveTricryptoOptimizedWETH, account)
 
     print("Deploying gauge blueprint contract")
+    gauge_impl = deploy_blueprint(project.LiquidityGauge, account)
 
     # ------------ DEPLOY FACTORY ------------
 
     print("Deploy factory")
+    constructor_args = [fee_receiver, owner, weth]
+    factory = account.deploy(project.CurveTricryptoFactory, *constructor_args)
+    print(
+        "Constructor args:",
+        encode(["address", "address", "address"], constructor_args).hex(),
+    )
+
+    factory.set_pool_implementation(amm_impl, 0, sender=account)
+    factory.set_gauge_implementation(gauge_impl, sender=account)
+    factory.set_views_implementation(views_contract, sender=account)
+    factory.set_math_implementation(math_contract, sender=account)
 
     # ------------ DEPLOY POOL ------------
+
+    pool = None
+    assert pool
 
     print("Success!")
