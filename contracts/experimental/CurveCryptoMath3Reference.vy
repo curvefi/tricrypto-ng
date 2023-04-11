@@ -1,4 +1,4 @@
-# @version 0.3.8
+# @version ^0.3.7
 # (c) Curve.Fi, 2023
 # SafeMath Implementation of AMM Math for 3-coin Curve Cryptoswap Pools
 #

@@ -1,4 +1,4 @@
-# @version 0.3.8
+# @version ^0.3.7
 
 # (c) Curve.Fi, 2021
 
