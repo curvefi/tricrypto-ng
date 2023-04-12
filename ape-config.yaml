@@ -1,4 +1,5 @@
 name: curve-tricrypto-ng
+contracts_folder: contracts/main
 
 plugins:
   - name: vyper
@@ -6,6 +7,8 @@ plugins:
   - name: hardhat
   - name: ledger
   - name: etherscan
+
+default_ecosystem: ethereum
 
 ethereum:
   default_network: mainnet-fork
@@ -20,10 +23,14 @@ hardhat:
   fork:
     ethereum:
       mainnet:
-        upstream_provider: geth
-        # upstream_provider: alchemy
+        upstream_provider: alchemy
+        enable_hardhat_deployments: true
 
 geth:
   ethereum:
     mainnet:
       uri: http://localhost:9090
+
+test:
+  mnemonic: test test test test test test test test test test test junk
+  number_of_accounts: 5

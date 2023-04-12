@@ -7,7 +7,7 @@ def empty_factory(deployer, fee_receiver, owner, weth):
 
     with boa.env.prank(deployer):
         factory = boa.load(
-            "contracts/CurveTricryptoFactory.vy",
+            "contracts/main/CurveTricryptoFactory.vy",
             fee_receiver,
             owner,
             weth,

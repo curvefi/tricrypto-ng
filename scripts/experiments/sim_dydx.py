@@ -120,17 +120,17 @@ def _setup_pool():
 
         coins = [usd, btc, weth]
 
-        math_contract = boa.load("contracts/CurveCryptoMathOptimized3.vy")
+        math_contract = boa.load("contracts/main/CurveCryptoMathOptimized3.vy")
 
-        gauge_interface = boa.load_partial("contracts/LiquidityGauge.vy")
+        gauge_interface = boa.load_partial("contracts/main/LiquidityGauge.vy")
         gauge_implementation = gauge_interface.deploy_as_blueprint()
 
         amm_interface = boa.load_partial(
-            "contracts/CurveTricryptoOptimizedWETH.vy"
+            "contracts/main/CurveTricryptoOptimizedWETH.vy"
         )
         amm_implementation = amm_interface.deploy_as_blueprint()
 
-        views = boa.load("contracts/CurveCryptoViews3Optimized.vy")
+        views = boa.load("contracts/main/CurveCryptoViews3Optimized.vy")
 
         factory_nofee = boa.load(
             "contracts/CurveTricryptoFactoryNoFee.vy",

@@ -243,8 +243,8 @@ print("-------------------- CONTRACTS ---------------------------")
 print()
 
 math_impl = {
-    "REFERENCE IMPLEMENTATION": "contracts/contracts/CurveCryptoMath3Reference.vy",  # noqa
-    "OPTIMIZED IMPLEMENTATION": "contracts/contracts/CurveCryptoMathOptimized3.vy",  # noqa
+    "REFERENCE IMPLEMENTATION": "contracts/main/CurveCryptoMath3Reference.vy",  # noqa
+    "OPTIMIZED IMPLEMENTATION": "contracts/main/CurveCryptoMathOptimized3.vy",  # noqa
 }
 
 for typ, loc in math_impl.items():

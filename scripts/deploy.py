@@ -85,81 +85,81 @@ PARAMS = {
 
 curve_dao_network_settings = {
     "ethereum": CurveNetworkSettings(
-        ownership_admin="0x40907540d8a6C65c637785e8f8B742ae6b0b9968",
-        fee_receiver="0xeCb456EA5365865EbAb8a2661B0c503410e9B347",
-        usdc="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        wbtc="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-        weth="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        dao_ownership_contract="0x40907540d8a6C65c637785e8f8B742ae6b0b9968",
+        fee_receiver_address="0xeCb456EA5365865EbAb8a2661B0c503410e9B347",
+        usdc_address="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        wbtc_address="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+        weth_address="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     ),
     "arbitrum": CurveNetworkSettings(
-        ownership_admin="0xb055ebbacc8eefc166c169e9ce2886d0406ab49b",
-        fee_receiver="0xd4f94d0aaa640bbb72b5eec2d85f6d114d81a88e",
-        usdc="0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
-        wbtc="0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f",
-        weth="0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+        dao_ownership_contract="0xb055ebbacc8eefc166c169e9ce2886d0406ab49b",
+        fee_receiver_address="0xd4f94d0aaa640bbb72b5eec2d85f6d114d81a88e",
+        usdc_address="0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
+        wbtc_address="0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f",
+        weth_address="0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     ),
     "optimism": CurveNetworkSettings(
-        ownership_admin="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
-        fee_receiver="0xbF7E49483881C76487b0989CD7d9A8239B20CA41",
-        usdc="0x7f5c764cbc14f9669b88837ca1490cca17c31607",
-        wbtc="0x68f180fcce6836688e9084f035309e29bf0a2095",
-        weth="0x4200000000000000000000000000000000000006",
+        dao_ownership_contract="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
+        fee_receiver_address="0xbF7E49483881C76487b0989CD7d9A8239B20CA41",
+        usdc_address="0x7f5c764cbc14f9669b88837ca1490cca17c31607",
+        wbtc_address="0x68f180fcce6836688e9084f035309e29bf0a2095",
+        weth_address="0x4200000000000000000000000000000000000006",
     ),
     "polygon": CurveNetworkSettings(
-        ownership_admin="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
+        dao_ownership_contract="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
         fee_receiver_address="0x774D1Dba98cfBD1F2Bc3A1F59c494125e07C48F9",
-        usdc="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-        wbtc="0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6",
-        weth="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+        usdc_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+        wbtc_address="0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6",
+        weth_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
     ),
     "avalanche": CurveNetworkSettings(
-        ownership_admin="0xbabe61887f1de2713c6f97e567623453d3c79f67",
+        dao_ownership_contract="0xbabe61887f1de2713c6f97e567623453d3c79f67",
         fee_receiver_address="0x06534b0BF7Ff378F162d4F348390BDA53b15fA35",
-        usdc="0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
-        wbtc="0x50b7545627a5162F82A992c33b87aDc75187B218",
-        weth="0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB",
+        usdc_address="0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        wbtc_address="0x50b7545627a5162F82A992c33b87aDc75187B218",
+        weth_address="0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB",
     ),
     "gnosis": CurveNetworkSettings(
         dao_ownership_contract="",  # <--- need to deploy sidechain ownership contract  # noqa: E501
         fee_receiver_address="",  # <--- need to deploy sidechain pool proxy
-        usdc="0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
-        wbtc="0x8e5bBbb09Ed1ebdE8674Cda39A0c169401db4252",
-        weth="0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1",
+        usdc_address="0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+        wbtc_address="0x8e5bBbb09Ed1ebdE8674Cda39A0c169401db4252",
+        weth_address="0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1",
     ),
     "fantom": CurveNetworkSettings(
         dao_ownership_contract="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",  # <--- thin proxy  # noqa: E501
         fee_receiver_address="0x2B039565B2b7a1A9192D4847fbd33B25b836B950",
-        usdc="0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",  # <-- multichain usdc  # noqa: E501
-        wbtc="0x321162Cd933E2Be498Cd2267a90534A804051b11",  # <-- multichain wbtc  # noqa: E501
-        weth="0x74b23882a30290451A17c44f4F05243b6b58C76d",  # <-- multichain weth  # noqa: E501
+        usdc_address="0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",  # <-- multichain usdc  # noqa: E501
+        wbtc_address="0x321162Cd933E2Be498Cd2267a90534A804051b11",  # <-- multichain wbtc  # noqa: E501
+        weth_address="0x74b23882a30290451A17c44f4F05243b6b58C76d",  # <-- multichain weth  # noqa: E501
     ),
     "celo": CurveNetworkSettings(
         dao_ownership_contract="0x56bc95Ded2BEF162131905dfd600F2b9F1B380a4",  # <-- needs to accept transfer ownership for 0x5277A0226d10392295E8D383E9724D6E416d6e6C  # noqa: E501
         fee_receiver_address="0x56bc95Ded2BEF162131905dfd600F2b9F1B380a4",  # <-- Thin proxy, needs to be changed!  # noqa: E501
-        usdc="0x37f750b7cc259a2f741af45294f6a16572cf5cad",  # <-- wormhole usdc  # noqa: E501
-        wbtc="",
-        weth="0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207",  # <-- wormhole weth  # noqa: E501
+        usdc_address="0x37f750b7cc259a2f741af45294f6a16572cf5cad",  # <-- wormhole usdc  # noqa: E501
+        wbtc_address="",
+        weth_address="0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207",  # <-- wormhole weth  # noqa: E501
     ),
     "kava": CurveNetworkSettings(
         dao_ownership_contract="",
         fee_receiver_address="",
-        usdc="",
-        wbtc="",
-        weth="",
+        usdc_address="",
+        wbtc_address="",
+        weth_address="",
     ),
     "moonbeam": CurveNetworkSettings(
         dao_ownership_contract="",
         fee_receiver_address="",
-        usdc="",
-        wbtc="",
-        weth="",
+        usdc_address="",
+        wbtc_address="",
+        weth_address="",
     ),
     "aurora": CurveNetworkSettings(
         dao_ownership_contract="",
         fee_receiver_address="",
-        usdc="0xb12bfca5a55806aaf64e99521918a4bf0fc40802",
-        wbtc="",
-        weth="",
+        usdc_address="0xb12bfca5a55806aaf64e99521918a4bf0fc40802",
+        wbtc_address="",
+        weth_address="",
     ),
 }
 
@@ -174,16 +174,14 @@ def cli():
 @account_option()
 def deploy(network, account):
 
-    account.set_autosign(True)
-
     for _network, data in curve_dao_network_settings.items():
 
-        if f":{_network}:" == network:
+        if _network in network:
 
-            owner = data.ownership_admin
-            fee_receiver = data.fee_receiver
-            weth = data.fee_receiver
-            coins = [data.usdc, data.wbtc, data.weth]
+            owner = data.dao_ownership_contract
+            fee_receiver = data.fee_receiver_address
+            coins = [data.usdc_address, data.wbtc_address, data.weth_address]
+            weth = coins[2]
             PARAMS["coins"] = coins
 
     assert owner, f"Curve's DAO contracts may not be on {network}."
