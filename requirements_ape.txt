@@ -6,3 +6,6 @@ pdbpp
 # vyper and dev framework:
 git+https://github.com/vyperlang/titanoboa
 eth-ape
+
+# prices api:
+pycoingecko
