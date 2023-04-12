@@ -1,11 +1,12 @@
+import math
 from dataclasses import dataclass
-from typing import List
 
 import click
-from ape import Contract, project  # noqa: F401
+from ape import project
 from ape.api.address import Address
 from ape.cli import NetworkBoundCommand, account_option, network_option
-from eth_abi import encode  # noqa: F401
+from eth_abi import encode
+from pycoingecko import CoinGeckoAPI
 
 
 def deploy_blueprint(contract, account):
@@ -34,48 +35,122 @@ def deploy_blueprint(contract, account):
 
 # -------------- CURVE DATA --------------
 
-MA_TIME = 866  # 600 seconds / ln(2)
-# TODO: fetch pool params from mainnet tricrypto2 contract
-
 
 @dataclass
-class CurveDAO:
-    ownership_admin: Address
-    fee_receiver: Address
+class CurveNetworkSettings:
+    dao_ownership_contract: Address
+    fee_receiver_address: Address
+    usdc_address: Address
+    wbtc_address: Address
+    weth_address: Address
 
 
-@dataclass
-class PoolParams:
-    name: str
-    symbol: str
-    coins: List[Address, Address, Address]
-    implementation_index: int
-    A: int
-    gamma: int
-    mid_fee: int
-    out_fee: int
-    allowed_extra_profit: int
-    fee_gamma: int
-    adjustment_step: int
-    ma_time: int
-    initial_prices: List[int]
+# coingecko prices:
+cg = CoinGeckoAPI()
+TOKEN_PRICES = []
+for coin in ["usd-coin", "wrapped-bitcoin", "ethereum"]:
+    TOKEN_PRICES.append(
+        cg.get_price(ids=coin, vs_currencies="usd")[coin]["usd"]
+    )
+USDC_PRICE = TOKEN_PRICES[0]
+
+MA_TIME_SECONDS = 600  # seconds
+PARAMS = {
+    "name": "TricryptoUSDC",
+    "symbol": "crvUSDCWBTCWETH",
+    "coins": [],
+    "implementation_index": 0,
+    "A": 1707629,
+    "gamma": 11809167828997,
+    "mid_fee": 3000000,
+    "out_fee": 30000000,
+    "allowed_extra_profit": 2000000000000,
+    "fee_gamma": 500000000000000,
+    "adjustment_step": 490000000000000,
+    "ma_time": int(MA_TIME_SECONDS / math.log(2)),
+    "initial_prices": [
+        int(p / USDC_PRICE) * 10**18 for p in TOKEN_PRICES[1:]
+    ],
+}
 
 
 curve_dao_network_settings = {
-    "ethereum": CurveDAO(
+    "ethereum": CurveNetworkSettings(
         ownership_admin="0x40907540d8a6C65c637785e8f8B742ae6b0b9968",
         fee_receiver="0xeCb456EA5365865EbAb8a2661B0c503410e9B347",
+        usdc="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        wbtc="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
         weth="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     ),
-    "arbitrum": CurveDAO(
+    "arbitrum": CurveNetworkSettings(
         ownership_admin="0xb055ebbacc8eefc166c169e9ce2886d0406ab49b",
         fee_receiver="0xd4f94d0aaa640bbb72b5eec2d85f6d114d81a88e",
+        usdc="0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
+        wbtc="0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f",
         weth="0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     ),
-    "optimism": CurveDAO(
+    "optimism": CurveNetworkSettings(
         ownership_admin="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
         fee_receiver="0xbF7E49483881C76487b0989CD7d9A8239B20CA41",
+        usdc="0x7f5c764cbc14f9669b88837ca1490cca17c31607",
+        wbtc="0x68f180fcce6836688e9084f035309e29bf0a2095",
         weth="0x4200000000000000000000000000000000000006",
+    ),
+    "polygon": CurveNetworkSettings(
+        ownership_admin="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
+        fee_receiver_address="0x774D1Dba98cfBD1F2Bc3A1F59c494125e07C48F9",
+        usdc="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+        wbtc="0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6",
+        weth="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+    ),
+    "avalanche": CurveNetworkSettings(
+        ownership_admin="0xbabe61887f1de2713c6f97e567623453d3c79f67",
+        fee_receiver_address="0x06534b0BF7Ff378F162d4F348390BDA53b15fA35",
+        usdc="0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        wbtc="0x50b7545627a5162F82A992c33b87aDc75187B218",
+        weth="0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB",
+    ),
+    "gnosis": CurveNetworkSettings(
+        dao_ownership_contract="",  # <--- need to deploy sidechain ownership contract  # noqa: E501
+        fee_receiver_address="",  # <--- need to deploy sidechain pool proxy
+        usdc="0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+        wbtc="0x8e5bBbb09Ed1ebdE8674Cda39A0c169401db4252",
+        weth="0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1",
+    ),
+    "fantom": CurveNetworkSettings(
+        dao_ownership_contract="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",  # <--- thin proxy  # noqa: E501
+        fee_receiver_address="0x2B039565B2b7a1A9192D4847fbd33B25b836B950",
+        usdc="0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",  # <-- multichain usdc  # noqa: E501
+        wbtc="0x321162Cd933E2Be498Cd2267a90534A804051b11",  # <-- multichain wbtc  # noqa: E501
+        weth="0x74b23882a30290451A17c44f4F05243b6b58C76d",  # <-- multichain weth  # noqa: E501
+    ),
+    "celo": CurveNetworkSettings(
+        dao_ownership_contract="0x56bc95Ded2BEF162131905dfd600F2b9F1B380a4",  # <-- needs to accept transfer ownership for 0x5277A0226d10392295E8D383E9724D6E416d6e6C  # noqa: E501
+        fee_receiver_address="0x56bc95Ded2BEF162131905dfd600F2b9F1B380a4",  # <-- Thin proxy, needs to be changed!  # noqa: E501
+        usdc="0x37f750b7cc259a2f741af45294f6a16572cf5cad",  # <-- wormhole usdc  # noqa: E501
+        wbtc="",
+        weth="0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207",  # <-- wormhole weth  # noqa: E501
+    ),
+    "kava": CurveNetworkSettings(
+        dao_ownership_contract="",
+        fee_receiver_address="",
+        usdc="",
+        wbtc="",
+        weth="",
+    ),
+    "moonbeam": CurveNetworkSettings(
+        dao_ownership_contract="",
+        fee_receiver_address="",
+        usdc="",
+        wbtc="",
+        weth="",
+    ),
+    "aurora": CurveNetworkSettings(
+        dao_ownership_contract="",
+        fee_receiver_address="",
+        usdc="0xb12bfca5a55806aaf64e99521918a4bf0fc40802",
+        wbtc="",
+        weth="",
     ),
 }
 
@@ -85,9 +160,7 @@ def cli():
     pass
 
 
-@cli.command(
-    cls=NetworkBoundCommand,
-)
+@cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
 def deploy(network, account):
@@ -101,8 +174,11 @@ def deploy(network, account):
             owner = data.ownership_admin
             fee_receiver = data.fee_receiver
             weth = data.fee_receiver
+            coins = [data.usdc, data.wbtc, data.weth]
+            PARAMS["coins"] = coins
 
     assert owner, f"Curve's DAO contracts may not be on {network}."
+    assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
 
     # ------------ DEPLOY MAIN + AUXILIARY CONTRACTS ------------
 
@@ -135,7 +211,22 @@ def deploy(network, account):
 
     # ------------ DEPLOY POOL ------------
 
-    pool = None
-    assert pool
+    print("Deploying Pool")
+    pool = factory.deploy_pool(**PARAMS, sender=account)
+    print(f"Success Deployed pool at {pool}!")
 
-    print("Success!")
+    # ------------ TEST IF CONTRACT WORKS AS INTENDED IN PROD ----------------
+
+    # Approve pool to spend deployer's coins
+
+    # Add liquidity
+
+    # Exchange
+
+    # Remove Liquidity in one coin
+
+    # Claim admin fees (should borg)
+
+    # Remove liquidity proportionally
+
+    print("Successfully tested deployment!")
