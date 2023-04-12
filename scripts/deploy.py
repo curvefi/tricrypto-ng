@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 
 import click
-from ape import project
+from ape import Contract, project
 from ape.api.address import Address
 from ape.cli import NetworkBoundCommand, account_option, network_option
 from eth_abi import encode
@@ -33,6 +33,17 @@ def deploy_blueprint(contract, account):
     return receipt.contract_address
 
 
+def get_deposit_amounts(amount_per_token_usd, initial_prices, coins):
+
+    precisions = [10 ** coin.decimals() for coin in coins]
+
+    deposit_amounts = [
+        amount_per_token_usd * precision * 10**18 // price
+        for price, precision in zip(initial_prices, precisions)
+    ]
+    return deposit_amounts
+
+
 # -------------- CURVE DATA --------------
 
 
@@ -53,7 +64,7 @@ for coin in ["usd-coin", "wrapped-bitcoin", "ethereum"]:
         cg.get_price(ids=coin, vs_currencies="usd")[coin]["usd"]
     )
 USDC_PRICE = TOKEN_PRICES[0]
-
+INITIAL_PRICES = [int(p / USDC_PRICE) * 10**18 for p in TOKEN_PRICES[1:]]
 MA_TIME_SECONDS = 600  # seconds
 PARAMS = {
     "name": "TricryptoUSDC",
@@ -68,9 +79,7 @@ PARAMS = {
     "fee_gamma": 500000000000000,
     "adjustment_step": 490000000000000,
     "ma_time": int(MA_TIME_SECONDS / math.log(2)),
-    "initial_prices": [
-        int(p / USDC_PRICE) * 10**18 for p in TOKEN_PRICES[1:]
-    ],
+    "initial_prices": INITIAL_PRICES,
 }
 
 
@@ -197,7 +206,7 @@ def deploy(network, account):
     # ------------ DEPLOY FACTORY ------------
 
     print("Deploy factory")
-    constructor_args = [fee_receiver, owner, weth]
+    constructor_args = [fee_receiver, account, weth]
     factory = account.deploy(project.CurveTricryptoFactory, *constructor_args)
     print(
         "Constructor args:",
@@ -209,6 +218,10 @@ def deploy(network, account):
     factory.set_views_implementation(views_contract, sender=account)
     factory.set_math_implementation(math_contract, sender=account)
 
+    # -------- TRANSFER FACTORY OWNERSHIP TO THE APPROPRIATE ENTITY ----------
+
+    factory.commit_transfer_ownership(owner, sender=account)
+
     # ------------ DEPLOY POOL ------------
 
     print("Deploying Pool")
@@ -217,16 +230,74 @@ def deploy(network, account):
 
     # ------------ TEST IF CONTRACT WORKS AS INTENDED IN PROD ----------------
 
-    # Approve pool to spend deployer's coins
+    for coin in coins:
+        coin_contract = Contract(coin)
+        bal = coin_contract.balanceOf(account) > 0
 
-    # Add liquidity
+        assert bal > 0, "Not enough coins!"
 
-    # Exchange
+        # Approve pool to spend deployer's coins
+        coin_contract.approve(pool, bal, sender=account)
 
-    # Remove Liquidity in one coin
+    # ------------------------------ Add liquidity
 
-    # Claim admin fees (should borg)
+    # weth
+    tokens_to_add = get_deposit_amounts(10, INITIAL_PRICES, coins)
+    d_tokens = pool.add_liquidity(tokens_to_add, 0, False, sender=account)
 
-    # Remove liquidity proportionally
+    assert pool.balanceOf(account) == pool.totalSupply() == d_tokens
+
+    # eth
+    d_tokens = pool.add_liquidity(tokens_to_add, 0, True, sender=account)
+    assert d_tokens > 0
+
+    # ------------------------------ Exchange
+
+    dy_eth = pool.exchange_underlying(0, 2, 10, 0, sender=account)
+    assert dy_eth > 0
+
+    dy_usdc = pool.exchange_underlying(2, 0, dy_eth, 0, sender=account)
+    assert dy_usdc > 0
+
+    dy_wbtc = pool.exchange(0, 1, dy_usdc, 0, sender=account)
+    assert dy_wbtc > 0
+
+    # ------------------------------ Remove Liquidity in one coin
+
+    eth_balance = account.balance
+    bal = pool.balanceOf(account)
+    dy_eth = pool.remove_liquidity_one_coin(
+        int(bal / 4), 2, 0, True, sender=account
+    )
+    assert dy_eth > 0
+    assert account.balance == eth_balance + dy_eth
+
+    # ------------------------------ Claim admin fees (should borg)
+
+    fees_claimed = pool.balanceOf(fee_receiver)
+    pool.claim_admin_fees(sender=account)
+    if pool.totalSupply() < 10**18:
+        assert pool.balanceOf(fee_receiver) == fees_claimed
+    else:
+        assert pool.balanceOf(fee_receiver) > fees_claimed
+
+    # ------------------------------ Remove liquidity proportionally
+
+    eth_balance = account.balance
+    bal = pool.balanceOf(account)
+    dy_tokens = pool.remove_liquidity(int(bal / 4), [0, 0, 0], True)
+
+    for tkn_amt in dy_tokens:
+        assert tkn_amt > 0
+
+    assert eth_balance + dy_tokens[2] == account.balance
+
+    dy_tokens = pool.remove_liquidity(int(bal / 4), [0, 0, 0], False)
+
+    for tkn_amt in dy_tokens:
+        assert tkn_amt > 0
 
     print("Successfully tested deployment!")
+
+    # ------------ CREATE VOTE FOR THE DAO TO ACCEPT OWNERSHIP OF NEW CONTRACTS -----  # noqa: E501
+    # Now that the deployment is good, the DAO needs to accept ownership transfer  # noqa: E501
