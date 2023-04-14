@@ -2099,7 +2099,6 @@ def apply_new_parameters():
     @dev Only accessible by factory admin. Only callable after
          admin_actions_deadline.
     """
-    assert msg.sender == Factory(self.factory).admin()  #dev: only owner
     assert block.timestamp >= self.admin_actions_deadline  #dev: insufficient time
     assert self.admin_actions_deadline != 0  #dev: no active action
 
