@@ -2095,9 +2095,8 @@ def commit_new_parameters(
 @nonreentrant("lock")
 def apply_new_parameters():
     """
-    @notice Apply new parameters.
-    @dev Only accessible by factory admin. Only callable after
-         admin_actions_deadline.
+    @notice Apply committed parameters.
+    @dev Only callable after admin_actions_deadline.
     """
     assert block.timestamp >= self.admin_actions_deadline  #dev: insufficient time
     assert self.admin_actions_deadline != 0  #dev: no active action
