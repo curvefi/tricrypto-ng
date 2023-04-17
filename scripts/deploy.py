@@ -1,3 +1,5 @@
+# flake8: noqa
+
 import math
 from dataclasses import dataclass
 
@@ -6,6 +8,7 @@ from ape import Contract, project
 from ape.api.address import Address
 from ape.cli import NetworkBoundCommand, account_option, network_option
 from eth_abi import encode
+from eth_utils import to_checksum_address
 from pycoingecko import CoinGeckoAPI
 
 
@@ -55,6 +58,9 @@ class CurveNetworkSettings:
     wbtc_address: Address
     weth_address: Address
 
+
+GAUGE_CONTROLLER = "0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB"
+ADDRESS_PROVIDER = "0x0000000022d53366457f9d5e68ec105046fc4383"
 
 # coingecko prices:
 cg = CoinGeckoAPI()
@@ -174,59 +180,87 @@ def cli():
 @account_option()
 def deploy(network, account):
 
+    is_sim = False
+    if "mainnet-fork" in network:
+        is_sim = True
+
     for _network, data in curve_dao_network_settings.items():
 
         if _network in network:
 
             owner = data.dao_ownership_contract
             fee_receiver = data.fee_receiver_address
-            coins = [data.usdc_address, data.wbtc_address, data.weth_address]
+            coins = [
+                to_checksum_address(data.usdc_address),
+                to_checksum_address(data.wbtc_address),
+                to_checksum_address(data.weth_address),
+            ]
             weth = coins[2]
             PARAMS["coins"] = coins
 
     assert owner, f"Curve's DAO contracts may not be on {network}."
     assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
 
-    # ------------ DEPLOY MAIN + AUXILIARY CONTRACTS ------------
+    print("\n------------ DEPLOY MAIN + AUXILIARY CONTRACTS ------------")
 
-    print("Deploying math contract")
+    print("\nDeploying math contract: \n")
     math_contract = account.deploy(project.CurveCryptoMathOptimized3)
 
-    print("Deploying views contract")
+    print("\nDeploying views contract: \n")
     views_contract = account.deploy(project.CurveCryptoViews3Optimized)
 
-    print("Deploying AMM blueprint contract")
+    print("\nDeploying AMM blueprint contract: \n")
     amm_impl = deploy_blueprint(project.CurveTricryptoOptimizedWETH, account)
 
-    print("Deploying gauge blueprint contract")
+    print("\nDeploying gauge blueprint contract: \n")
     gauge_impl = deploy_blueprint(project.LiquidityGauge, account)
 
-    # ------------ DEPLOY FACTORY ------------
+    print("\n------------ DEPLOY FACTORY ------------")
 
-    print("Deploy factory")
-    constructor_args = [fee_receiver, account, weth]
+    print("\nDeploy factory: \n")
+    constructor_args = [fee_receiver, account.address, weth]
     factory = account.deploy(project.CurveTricryptoFactory, *constructor_args)
     print(
-        "Constructor args:",
-        encode(["address", "address", "address"], constructor_args).hex(),
+        f"\nConstructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"
     )
 
+    print("\nSet Pool Implementation: \n")
     factory.set_pool_implementation(amm_impl, 0, sender=account)
+
+    print("\nSet Gauge Implementation: \n")
     factory.set_gauge_implementation(gauge_impl, sender=account)
+
+    print("\nSet Views implementation: \n")
     factory.set_views_implementation(views_contract, sender=account)
+
+    print("\nSet Math implementation: \n")
     factory.set_math_implementation(math_contract, sender=account)
 
-    # -------- TRANSFER FACTORY OWNERSHIP TO THE APPROPRIATE ENTITY ----------
+    print("\n------------ DEPLOY POOL ------------")
 
-    factory.commit_transfer_ownership(owner, sender=account)
+    print("\nDeploying Pool: \n")
+    breakpoint()
+    pool = factory.deploy_pool(
+        PARAMS["name"],
+        PARAMS["symbol"],
+        PARAMS["coins"],
+        PARAMS["implementation_index"],
+        PARAMS["A"],
+        PARAMS["gamma"],
+        PARAMS["mid_fee"],
+        PARAMS["out_fee"],
+        PARAMS["fee_gamma"],
+        PARAMS["allowed_extra_profit"],
+        PARAMS["adjustment_step"],
+        PARAMS["ma_time"],
+        PARAMS["initial_prices"],
+        sender=account,
+    )
+    print(f"\nSuccess Deployed pool at {pool}!")
 
-    # ------------ DEPLOY POOL ------------
-
-    print("Deploying Pool")
-    pool = factory.deploy_pool(**PARAMS, sender=account)
-    print(f"Success Deployed pool at {pool}!")
-
-    # ------------ TEST IF CONTRACT WORKS AS INTENDED IN PROD ----------------
+    print(
+        "\n------------ TEST IF CONTRACT WORKS AS INTENDED IN PROD ----------------"
+    )
 
     for coin in coins:
         coin_contract = Contract(coin)
@@ -234,68 +268,130 @@ def deploy(network, account):
 
         assert bal > 0, "Not enough coins!"
 
-        # Approve pool to spend deployer's coins
+        coin_name = coin_contract.name()
+        print(f"\nApprove pool to spend deployer's {coin_name}: \n")
         coin_contract.approve(pool, bal, sender=account)
 
-    # ------------------------------ Add liquidity
+    print("\n------------------------------ Add liquidity")
 
-    # weth
+    print("\nDeposit WETH with other tokens:\n")
     tokens_to_add = get_deposit_amounts(10, INITIAL_PRICES, coins)
+
+    print(f"\nAdd {tokens_to_add} tokens to deployed pool: \n")
     d_tokens = pool.add_liquidity(tokens_to_add, 0, False, sender=account)
-
     assert pool.balanceOf(account) == pool.totalSupply() == d_tokens
+    print(f"\nReceived {d_tokens} number of LP Tokens.")
 
-    # eth
+    print("\nDeposit ETH with other tokens:\n")
     d_tokens = pool.add_liquidity(tokens_to_add, 0, True, sender=account)
     assert d_tokens > 0
+    print(f"\nReceived {d_tokens} number of LP Tokens.")
 
-    # ------------------------------ Exchange
+    print("\n------------------------------ Exchange")
 
-    dy_eth = pool.exchange_underlying(0, 2, 10, 0, sender=account)
+    amt_usdc_in = 10
+    print(f"\nTest exchange_underlying of {amt_usdc_in} USDC -> ETH:\n")
+    dy_eth = pool.exchange_underlying(0, 2, amt_usdc_in, 0, sender=account)
     assert dy_eth > 0
+    print(f"\nReceived {dy_eth} ETH\n")
 
+    print(f"\nTest exchange_underlying of {dy_eth} ETH -> USDC:\n")
     dy_usdc = pool.exchange_underlying(2, 0, dy_eth, 0, sender=account)
     assert dy_usdc > 0
+    print(f"\nReceived {dy_usdc} USDC\n")
 
+    print(f"\nTest exchange of {dy_usdc} USDC -> WBTC:\n")
     dy_wbtc = pool.exchange(0, 1, dy_usdc, 0, sender=account)
     assert dy_wbtc > 0
+    print(f"\nReceived {dy_wbtc} WBTC\n")
 
-    # ------------------------------ Remove Liquidity in one coin
+    print("\n------------------------------ Remove Liquidity in one coin")
 
     eth_balance = account.balance
     bal = pool.balanceOf(account)
+    print(f"\nRemove {int(bal/4)} liquidity in native token (ETH):\n")
     dy_eth = pool.remove_liquidity_one_coin(
         int(bal / 4), 2, 0, True, sender=account
     )
     assert dy_eth > 0
     assert account.balance == eth_balance + dy_eth
+    print(f"\nRemoved {dy_eth} of ETH.")
 
-    # ------------------------------ Claim admin fees (should borg)
+    for coin_id, coin in enumerate(coins):
+
+        coin_contract = Contract(coin)
+        coin_name = coin_contract.name()
+        coin_balance = coin_contract.balanceOf(account)
+
+        print(f"\nRemove {int(bal/4)} liquidity in {coin_name}:\n")
+
+        dy_coin = pool.remove_liquidity_one_coin(
+            int(bal / 4), coin_id, 0, False, sender=account
+        )
+
+        assert dy_coin > 0
+        assert coin_contract.balanceOf(account) == coin_balance + dy_coin
+        print(f"\nRemoved {dy_coin} of {coin_name}.")
+
+    print("\n------------------------------ Claim admin fees")
+    print("\n(should not claim since pool hasn't accrued enough profits)\n")
 
     fees_claimed = pool.balanceOf(fee_receiver)
     pool.claim_admin_fees(sender=account)
     if pool.totalSupply() < 10**18:
         assert pool.balanceOf(fee_receiver) == fees_claimed
+        print("\nNo fees claimed.\n")
     else:
         assert pool.balanceOf(fee_receiver) > fees_claimed
+        print(
+            f"\n{pool.balanceOf(fee_receiver) - fees_claimed} LP tokens of admin fees claimed!\n"
+        )
 
-    # ------------------------------ Remove liquidity proportionally
+    print("\n------------------------------ Remove liquidity proportionally")
 
     eth_balance = account.balance
     bal = pool.balanceOf(account)
+    print(
+        f"\nRemove {int(bal/4)} amount of liquidity proportionally (with native ETH):\n"
+    )
     dy_tokens = pool.remove_liquidity(int(bal / 4), [0, 0, 0], True)
 
     for tkn_amt in dy_tokens:
         assert tkn_amt > 0
 
+    print(f"\nRemoved {dy_tokens} of liquidity.\n")
+
     assert eth_balance + dy_tokens[2] == account.balance
 
+    print(
+        f"\nRemove {int(bal/4)} amount of liquidity proportionally (with native ETH):\n"
+    )
     dy_tokens = pool.remove_liquidity(int(bal / 4), [0, 0, 0], False)
 
     for tkn_amt in dy_tokens:
         assert tkn_amt > 0
 
-    print("Successfully tested deployment!")
+    print("\nSuccessfully tested deployment!\n")
 
-    # ------------ CREATE VOTE FOR THE DAO TO ACCEPT OWNERSHIP OF NEW CONTRACTS -----  # noqa: E501
-    # Now that the deployment is good, the DAO needs to accept ownership transfer  # noqa: E501
+    print(
+        "\n------------ DEPLOY GAUGE AND SET UP GAUGE FOR DAO VOTE -------------"
+    )
+
+    print("\nDeploying Gauge:\n")
+    gauge = factory.deploy_gauge(pool)
+    gauge_controller = Contract(GAUGE_CONTROLLER)
+
+    if is_sim:
+        admin = gauge_controller.admin()
+        print("\nAdding gauge to the gauge controller:\n")
+        gauge_controller.add_gauge(gauge.address, 5, 0, sender=admin)
+
+    print(
+        "\n-------- TRANSFER FACTORY OWNERSHIP TO THE APPROPRIATE ENTITY ----------\n"
+    )
+
+    factory.commit_transfer_ownership(owner, sender=account)
+
+    print(
+        "\n----------- CREATE VOTE FOR THE DAO TO ACCEPT OWNERSHIP OF FACTORY -----"
+    )

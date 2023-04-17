@@ -1676,7 +1676,7 @@ def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
     _xp: uint256[N_COINS] = empty(uint256[N_COINS])
     for k in range(20):
 
-        _xp = balances  # <---------------------------------------- reset xp.
+        _xp = balances  # <----------------------------------------- reset xp.
 
         # Adjust xp with output dy. dy contains fee element, which needs to be
         # iteratively sieved out:
