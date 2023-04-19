@@ -1,13 +1,19 @@
+import json
 import math
+import os
+import warnings
 from dataclasses import dataclass
 
 import click
-from ape import Contract, accounts, project
+import requests
+from ape import Contract, accounts, chain, project
 from ape.api.address import Address
 from ape.cli import NetworkBoundCommand, account_option, network_option
 from eth_abi import encode
 from eth_utils import to_checksum_address
 from pycoingecko import CoinGeckoAPI
+
+warnings.filterwarnings("ignore")
 
 
 def deploy_blueprint(contract, account):
@@ -164,6 +170,84 @@ curve_dao_network_settings = {
         weth_address="",
     ),
 }
+
+
+# --------------------------- CURVE GOVERNANCE ---------------------------
+
+CURVE_DAO_OWNERSHIP = {
+    "agent": "0x40907540d8a6c65c637785e8f8b742ae6b0b9968",
+    "voting": "0xe478de485ad2fe566d49342cbd03e49ed7db3356",
+    "token": "0x5f3b5DfEb7B28CDbD7FAba78963EE202a494e2A2",
+    "quorum": 30,
+}
+
+CURVE_DAO_PARAM = {
+    "agent": "0x4eeb3ba4f221ca16ed4a0cc7254e2e32df948c5f",
+    "voting": "0xbcff8b0b9419b9a88c44546519b1e909cf330399",
+    "token": "0x5f3b5DfEb7B28CDbD7FAba78963EE202a494e2A2",
+    "quorum": 15,
+}
+
+
+def prepare_evm_script(target, actions):
+    agent = Contract(target["agent"])
+    evm_script = "0x00000001"
+
+    for address, fn_name, *args in actions:
+
+        contract = Contract(address)
+        fn = getattr(contract, fn_name)
+        calldata = fn.encode_input(*args)
+        agent_calldata = agent.execute.encode_input(address, 0, calldata)[2:]
+        length = hex(len(agent_calldata) // 2)[2:].zfill(8)
+        evm_script = f"{evm_script}{agent.address[2:]}{length}{agent_calldata}"
+
+    return evm_script
+
+
+def make_vote(target, actions, description, account):
+    text = json.dumps({"text": description})
+    # https://docs.infura.io/infura/networks/ipfs/how-to/authenticate-requests
+
+    response = requests.post(
+        "https://ipfs.infura.io:5001/api/v0/add",
+        files={"file": text},
+        auth=(
+            os.environ["IPFS_PROJECT_ID"],
+            os.environ["IPFS_PROJECT_SECRET"],
+        ),
+    )
+    ipfs_hash = response.json()["Hash"]
+    print(f"ipfs hash: {ipfs_hash}")
+
+    aragon = Contract(target["voting"])
+    evm_script = prepare_evm_script(target, actions)
+
+    print(f"Target: {aragon.address}\nEVM script: {evm_script}")
+
+    tx = aragon.newVote(
+        evm_script, f"ipfs:{ipfs_hash}", False, False, sender=account
+    )
+
+    vote_id = tx.events["StartVote"]["voteId"]
+
+    print(f"\nSuccess! Vote ID: {vote_id}")
+    return vote_id
+
+
+def simulate(target, vote_id, account):
+    # make the new vote
+    convex = "0x989aeb4d175e16225e39e87d0d97a3360524ad80"
+
+    # vote
+    aragon = Contract(target["voting"])
+    aragon.vote(vote_id, True, False, sender=accounts[convex])
+
+    # sleep for a week so it has time to pass
+    chain.pending_timestep += 86400 * 7
+
+    # moment of truth - execute the vote!
+    aragon.executeVote(vote_id, sender=account)
 
 
 @click.group(short_help="Deploy the project")
