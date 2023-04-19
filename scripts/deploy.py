@@ -24,7 +24,9 @@ def cli():
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-def deploy(network, account):
+def deploy_ethereum(network, account):
+
+    assert "ethereum" in network, "dev: wrong network"
 
     is_sim = "mainnet-fork" in network
     PARAMS = deploy_utils.get_tricrypto_usdc_params()
@@ -259,26 +261,21 @@ def deploy(network, account):
 
     logger.info("Adding gauge to the gauge controller:")
 
-    if "ethereum" in network:  # set up a dao vote for the gauge ...
+    ACTIONS = [
+        (deploy_utils.GAUGE_CONTROLLER, "add_gauge", gauge.address, 5, 0),
+    ]
+    DESCRIPTION = "Add tricryptoUSDC [ethereum] gauge to the gauge controller"
 
-        TARGET = deploy_utils.CURVE_DAO_OWNERSHIP
-        ACTIONS = [
-            (deploy_utils.GAUGE_CONTROLLER, "add_gauge", gauge.address, 5, 0),
-        ]
-        DESCRIPTION = (
-            "Add tricryptoUSDC [ethereum] gauge to the gauge controller"
+    vote_id = make_vote(
+        deploy_utils.CURVE_DAO_OWNERSHIP, ACTIONS, DESCRIPTION, account
+    )
+
+    if is_sim:
+        simulate(vote_id, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
+        assert (
+            Contract(deploy_utils.GAUGE_CONTROLLER).gauge_types(gauge.address)
+            == 5
         )
-
-        vote_id = make_vote(TARGET, ACTIONS, DESCRIPTION, account)
-
-        if is_sim:
-            simulate(vote_id, TARGET["voting"])
-            assert (
-                Contract(deploy_utils.GAUGE_CONTROLLER).gauge_types(
-                    gauge.address
-                )
-                == 5
-            )
 
     logger.info(
         "-------- TRANSFER FACTORY OWNERSHIP TO THE APPROPRIATE ENTITY ----------"  # noqa: E501
@@ -291,18 +288,15 @@ def deploy(network, account):
         "----------- CREATE VOTE FOR THE DAO TO ACCEPT OWNERSHIP OF FACTORY -----"  # noqa: E501
     )
 
-    if "ethereum" in network:  # set up a dao vote for the gauge ...
+    ACTIONS = [
+        (factory.address, "accept_transfer_ownership"),
+    ]
+    DESCRIPTION = "Accept ownership of optimized tricrypto factory [Ethereum]"
 
-        TARGET = deploy_utils.CURVE_DAO_OWNERSHIP
-        ACTIONS = [
-            (factory.address, "accept_transfer_ownership"),
-        ]
-        DESCRIPTION = (
-            "Accept ownership of optimized tricrypto factory [Ethereum]"
-        )
+    vote_id = make_vote(
+        deploy_utils.CURVE_DAO_OWNERSHIP, ACTIONS, DESCRIPTION, account
+    )
 
-        vote_id = make_vote(TARGET, ACTIONS, DESCRIPTION, account)
-
-        if is_sim:
-            simulate(vote_id, TARGET["voting"])
-            assert factory.admin() == owner
+    if is_sim:
+        simulate(vote_id, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
+        assert factory.admin() == owner
