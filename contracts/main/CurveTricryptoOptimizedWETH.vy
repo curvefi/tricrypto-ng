@@ -741,7 +741,8 @@ def remove_liquidity_one_coin(
     self.burnFrom(msg.sender, token_amount)
     self._transfer_out(self.coins[i], dy, use_eth, receiver)
 
-    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, 0, 0)
+    packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
+    #        Safe to use D from _calc_withdraw_one_coin here ---^
 
     log RemoveLiquidityOne(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
@@ -1003,7 +1004,7 @@ def tweak_price(
     # ------------------ If new_D is set to 0, calculate it ------------------
 
     D_unadjusted: uint256 = new_D
-    if new_D == 0:  #  remove_liquidity_one_coin and _exchange set new_D to 0.
+    if new_D == 0:  #  <--------------------------- _exchange sets new_D to 0.
         D_unadjusted = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, K0_prev)
 
     # ----------------------- Calculate last_prices --------------------------
@@ -1013,7 +1014,7 @@ def tweak_price(
         last_prices[k] = unsafe_div(last_prices[k] * price_scale[k], 10**18)
     self.last_prices_packed = self._pack_prices(last_prices)
 
-    # ------- Update profit numbers without price adjustment first -----------
+    # ---------- Update profit numbers without price adjustment first --------
 
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     xp[0] = unsafe_div(D_unadjusted, N_COINS)

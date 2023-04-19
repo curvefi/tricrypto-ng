@@ -136,7 +136,7 @@ def _pack(x: uint256[3]) -> uint256:
 @external
 def deploy_pool(
     _name: String[32],
-    _symbol: String[10],
+    _symbol: String[30],
     _coins: address[N_COINS],
     implementation_id: uint256,
     A: uint256,
