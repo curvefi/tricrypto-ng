@@ -26,7 +26,7 @@ def cli():
 @account_option()
 def deploy_ethereum(network, account):
 
-    assert "ethereum" in network, "dev: wrong network"
+    assert "ethereum" in network
 
     is_sim = "mainnet-fork" in network
     PARAMS = deploy_utils.get_tricrypto_usdc_params()
@@ -68,9 +68,7 @@ def deploy_ethereum(network, account):
 
     logger.info("Deploy factory:")
     constructor_args = [fee_receiver, account.address, weth]
-    factory = account.deploy(
-        project.CurveTricryptoFactoryEthereum, *constructor_args
-    )
+    factory = account.deploy(project.CurveTricryptoFactory, *constructor_args)
     logger.info(
         f"Constructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"  # noqa: E501
     )
