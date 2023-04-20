@@ -13,8 +13,6 @@ from scripts.vote_utils import make_vote
 
 warnings.filterwarnings("ignore")
 
-DOLLAR_VALUE_OF_TOKENS_TO_DEPOSIT = 20
-
 
 @click.group(short_help="Deploy the project")
 def cli():
@@ -48,8 +46,6 @@ def deploy_ethereum(network, account):
     assert owner, f"Curve's DAO contracts may not be on {network}."
     assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
 
-    logger.info("------------ DEPLOY MAIN + AUXILIARY CONTRACTS ------------")
-
     logger.info("Deploying math contract:")
     math_contract = account.deploy(project.CurveCryptoMathOptimized3)
 
@@ -63,8 +59,6 @@ def deploy_ethereum(network, account):
 
     logger.info("Deploying gauge blueprint contract:")
     gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
-
-    logger.info("------------ DEPLOY FACTORY ------------")
 
     logger.info("Deploy factory:")
     constructor_args = [fee_receiver, account.address, weth]
@@ -85,10 +79,7 @@ def deploy_ethereum(network, account):
     logger.info("Set Math implementation:")
     factory.set_math_implementation(math_contract, sender=account)
 
-    logger.info("------------ DEPLOY POOL ------------")
-
     logger.info("Deploying Pool:")
-
     tx = factory.deploy_pool(
         PARAMS["name"],
         PARAMS["symbol"],
@@ -108,148 +99,13 @@ def deploy_ethereum(network, account):
     pool = project.CurveTricryptoOptimizedWETH.at(
         tx.events.filter(factory.TricryptoPoolDeployed)[0].pool
     )
-    logger.info(f"Success Deployed pool at {pool}!")
+    logger.info(f"Success! Deployed pool at {pool}!")
 
-    # ----------------- Swap Tests ------------------
+    # ---------------------------- SWAP TESTS --------------------------------
 
-    logger.info(
-        "------------ TEST IF CONTRACT WORKS AS INTENDED IN PROD ----------------"  # noqa: E501
-    )
+    deploy_utils.test_deployment(pool, coins, fee_receiver, account)
 
-    for coin in coins:
-        coin_contract = Contract(coin)
-        bal = coin_contract.balanceOf(account)
-        assert bal > 0, "Not enough coins!"
-
-        coin_name = coin_contract.name()
-        logger.info(f"Approve pool to spend deployer's {coin_name}:")
-
-        coin_contract.approve(pool, bal, sender=account)
-
-    logger.info("------------------------------ Add liquidity")
-
-    logger.info("Deposit WETH with other tokens:")
-    tokens_to_add = deploy_utils.get_deposit_amounts(
-        DOLLAR_VALUE_OF_TOKENS_TO_DEPOSIT, PARAMS["initial_prices"], coins
-    )
-
-    logger.info(f"Add {tokens_to_add} tokens to deployed pool: ")
-
-    tx = pool.add_liquidity(tokens_to_add, 0, False, sender=account)
-    d_tokens = tx.return_value
-    assert pool.balanceOf(account) == pool.totalSupply() == d_tokens
-    logger.info(f"Received {d_tokens} number of LP Tokens.")
-
-    logger.info("Deposit ETH with other tokens:")
-    tx = pool.add_liquidity(
-        tokens_to_add, 0, True, sender=account, value=tokens_to_add[2]
-    )
-    d_tokens = tx.return_value
-    assert d_tokens > 0
-    logger.info(f"Received {d_tokens} number of LP Tokens.")
-
-    logger.info("------------------------------ Exchange")
-
-    amt_usdc_in = 10 * 10 ** Contract(coins[0]).decimals()
-    logger.info(f"Test exchange_underlying of {amt_usdc_in} USDC -> ETH:")
-    tx = pool.exchange_underlying(0, 2, amt_usdc_in, 0, sender=account)
-    dy_eth = tx.events.filter(pool.TokenExchange)[
-        0
-    ].tokens_bought  # return_value is broken in ape somehow
-    assert dy_eth > 0
-    logger.info(f"Received {dy_eth} ETH")
-
-    logger.info(f"Test exchange_underlying of {dy_eth} ETH -> USDC:")
-    tx = pool.exchange_underlying(
-        2, 0, dy_eth, 0, sender=account, value=dy_eth
-    )
-    dy_usdc = tx.events.filter(pool.TokenExchange)[0].tokens_bought
-    assert dy_usdc > 0
-    logger.info(f"Received {dy_usdc} USDC")
-
-    logger.info(f"Test exchange of {dy_usdc} USDC -> WBTC:")
-    tx = pool.exchange(0, 1, dy_usdc * 2, 0, sender=account)
-    dy_wbtc = tx.events.filter(pool.TokenExchange)[0].tokens_bought
-    assert dy_wbtc > 0
-    logger.info(f"Received {dy_wbtc} WBTC")
-
-    logger.info("------------------------------ Remove Liquidity in one coin")
-
-    eth_balance = account.balance
-    bal = pool.balanceOf(account)
-    amt_to_remove = int(bal / 4)
-    logger.info("Remove {amt_to_remove} liquidity in native token (ETH):")
-    tx = pool.remove_liquidity_one_coin(
-        amt_to_remove, 2, 0, True, sender=account
-    )
-    dy_eth = tx.events.filter(pool.RemoveLiquidityOne)[0].coin_amount
-    assert dy_eth > 0
-    assert account.balance == eth_balance + dy_eth
-    logger.info(f"Removed {dy_eth} of ETH.")
-
-    for coin_id, coin in enumerate(coins):
-
-        bal = pool.balanceOf(account)
-        coin_contract = Contract(coin)
-        coin_name = coin_contract.name()
-        coin_balance = coin_contract.balanceOf(account)
-
-        logger.info(f"Remove {int(bal/4)} liquidity in {coin_name}:")
-        tx = pool.remove_liquidity_one_coin(
-            int(bal / 4), coin_id, 0, False, sender=account
-        )  # noqa: E501
-
-        dy_coin = tx.events.filter(pool.RemoveLiquidityOne)[0].coin_amount
-        assert dy_coin > 0
-        assert coin_contract.balanceOf(account) == coin_balance + dy_coin
-        logger.info(f"Removed {dy_coin} of {coin_name}.")
-
-    logger.info("------------------------------ Claim admin fees")
-    logger.info("(should not claim since pool hasn't accrued enough profits)")
-
-    fees_claimed = pool.balanceOf(fee_receiver)
-    pool.claim_admin_fees(sender=account)
-    if pool.totalSupply() < 10**18:
-        assert pool.balanceOf(fee_receiver) == fees_claimed
-        logger.info("No fees claimed.")
-    else:
-        assert pool.balanceOf(fee_receiver) > fees_claimed
-        logger.info(
-            f"{pool.balanceOf(fee_receiver) - fees_claimed} LP tokens of admin fees claimed!"  # noqa: E501
-        )
-
-    logger.info(
-        "------------------------------ Remove liquidity proportionally"
-    )
-
-    eth_balance = account.balance
-    bal = pool.balanceOf(account)
-    logger.info(
-        f"Remove {int(bal/4)} amount of liquidity proportionally (with native ETH):"  # noqa: E501
-    )
-    tx = pool.remove_liquidity(int(bal / 4), [0, 0, 0], True, sender=account)
-    dy_tokens = tx.events.filter(pool.RemoveLiquidity)[0].token_amounts
-    for tkn_amt in dy_tokens:
-        assert tkn_amt > 0
-
-    logger.info(f"Removed {dy_tokens} of liquidity.")
-
-    assert eth_balance + dy_tokens[2] == account.balance
-
-    logger.info(
-        f"Remove {int(bal/4)} amount of liquidity proportionally (with native ETH):"  # noqa: E501
-    )
-    tx = pool.remove_liquidity(int(bal / 4), [0, 0, 0], False, sender=account)
-    dy_tokens = tx.return_value
-
-    for tkn_amt in dy_tokens:
-        assert tkn_amt > 0
-
-    logger.info("Successfully tested deployment!")
-
-    logger.info(
-        "------------ DEPLOY GAUGE AND SET UP GAUGE FOR DAO VOTE -------------"  # noqa: E501
-    )
+    # -------------------------- GAUGE DEPLOYMENT ----------------------------
 
     logger.info("Deploying Gauge:")
     tx = factory.deploy_gauge(pool, sender=account)
@@ -260,43 +116,49 @@ def deploy_ethereum(network, account):
     # ------------------- CURVE DAO RELATED CODE -----------------------------
 
     logger.info("Adding gauge to the gauge controller:")
-
-    ACTIONS = [
-        (deploy_utils.GAUGE_CONTROLLER, "add_gauge", gauge.address, 5, 0),
-    ]
-    DESCRIPTION = "Add tricryptoUSDC [ethereum] gauge to the gauge controller"
-
     vote_id = make_vote(
-        deploy_utils.CURVE_DAO_OWNERSHIP, ACTIONS, DESCRIPTION, account
+        deploy_utils.CURVE_DAO_OWNERSHIP,
+        [
+            (deploy_utils.GAUGE_CONTROLLER, "add_gauge", gauge.address, 5, 0),
+        ],
+        "Add tricryptoUSDC [ethereum] gauge to the gauge controller",
+        account,
+    )
+
+    logger.info("Tranfer factory ownership to the DAO")
+    factory.commit_transfer_ownership(owner, sender=account)
+    assert factory.future_admin() == owner
+
+    logger.info("Create vote for the DAO to accept ownership of the factory")
+    vote_id = make_vote(
+        deploy_utils.CURVE_DAO_OWNERSHIP,
+        [
+            (factory.address, "accept_transfer_ownership"),
+        ],
+        "Accept ownership of optimized tricrypto factory [Ethereum]",
+        account,
     )
 
     if is_sim:
+        logger.info("Simulate and check DAO Vote outcomes:")
         simulate(vote_id, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
         assert (
             Contract(deploy_utils.GAUGE_CONTROLLER).gauge_types(gauge.address)
             == 5
         )
 
+        simulate(vote_id, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
+        assert factory.admin() == owner
+
+    # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
+
+    logger.info("Integrate into AddressProvider and Metaregistry ...")
     logger.info(
-        "-------- TRANSFER FACTORY OWNERSHIP TO THE APPROPRIATE ENTITY ----------"  # noqa: E501
+        "Deploying Factory handler to integrate it to the metaregistry:"
     )
-
-    factory.commit_transfer_ownership(owner, sender=account)
-    assert factory.future_admin() == owner
-
-    logger.info(
-        "----------- CREATE VOTE FOR THE DAO TO ACCEPT OWNERSHIP OF FACTORY -----"  # noqa: E501
-    )
-
-    ACTIONS = [
-        (factory.address, "accept_transfer_ownership"),
-    ]
-    DESCRIPTION = "Accept ownership of optimized tricrypto factory [Ethereum]"
-
-    vote_id = make_vote(
-        deploy_utils.CURVE_DAO_OWNERSHIP, ACTIONS, DESCRIPTION, account
+    factory_handler = account.deploy(  # noqa: F841
+        project.CurveTricryptoFactoryHandler, factory.address
     )
 
     if is_sim:
-        simulate(vote_id, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
-        assert factory.admin() == owner
+        breakpoint()
