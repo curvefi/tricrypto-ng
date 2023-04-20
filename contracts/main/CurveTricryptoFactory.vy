@@ -2,7 +2,7 @@
 # (c) Curve.Fi, 2023
 
 """
-@title Curve Factory
+@title Curve Tricrypto Factory
 @license MIT
 @author Curve.Fi
 @notice Permissionless 3-coin cryptoswap pool deployer and registry
