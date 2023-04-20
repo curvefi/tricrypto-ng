@@ -243,7 +243,7 @@ print("-------------------- CONTRACTS ---------------------------")
 print()
 
 math_impl = {
-    "REFERENCE IMPLEMENTATION": "contracts/main/CurveCryptoMath3Reference.vy",  # noqa
+    "REFERENCE IMPLEMENTATION": "contracts/main/reference/CurveCryptoMath3Reference.vy",  # noqa
     "OPTIMIZED IMPLEMENTATION": "contracts/main/CurveCryptoMathOptimized3.vy",  # noqa
 }
 

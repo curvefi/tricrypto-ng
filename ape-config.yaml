@@ -7,10 +7,28 @@ plugins:
   - name: hardhat
   - name: ledger
   - name: etherscan
+  - name: arbitrum
+  - name: optimism
 
 default_ecosystem: ethereum
 
 ethereum:
+  default_network: mainnet-fork
+  mainnet_fork:
+    default_provider: hardhat
+    transaction_acceptance_timeout: 99999999
+  mainnet:
+    transaction_acceptance_timeout: 99999999
+
+arbitrum:
+  default_network: mainnet-fork
+  mainnet_fork:
+    default_provider: hardhat
+    transaction_acceptance_timeout: 99999999
+  mainnet:
+    transaction_acceptance_timeout: 99999999
+
+optimism:
   default_network: mainnet-fork
   mainnet_fork:
     default_provider: hardhat
@@ -24,12 +42,12 @@ hardhat:
     ethereum:
       mainnet:
         upstream_provider: alchemy
-        enable_hardhat_deployments: true
-
-geth:
-  ethereum:
-    mainnet:
-      uri: http://localhost:9090
+    arbitrum:
+      mainnet:
+        upstream_provider: alchemy
+    optimism:
+      mainnet:
+        upstream_provider: alchemy
 
 test:
   mnemonic: test test test test test test test test test test test junk
