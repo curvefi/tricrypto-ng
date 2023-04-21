@@ -1625,11 +1625,12 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 @view
 def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     """
-    @notice Get amount of coin[j] tokens received for swapping in dx amount of coin[i]
+    @notice Calculate LP tokens minted or to be burned for depositing or
+            removing `amounts` of coins
     @dev Includes fee.
     @param amounts Amounts of tokens being deposited or withdrawn
-    @param deposit True if it is a deposit action, False otherwise.
-    @return uint256 Exact amount of LP tokens deposited or withdrawn.
+    @param deposit True if it is a deposit action, False if withdrawn.
+    @return uint256 Amount of LP tokens deposited or withdrawn.
     """
     view_contract: address = Factory(self.factory).views_implementation()
     return Views(view_contract).calc_token_amount(amounts, deposit, self)
@@ -1656,9 +1657,8 @@ def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
     """
     @notice Get amount of coin[i] tokens to input for swapping out dy amount
             of coin[j]
-    @dev This is an approximate method, but estimates very close to the input
-         amount. It is also very expensive to call on-chain. This is because
-         dy contains fee element, which needs to be iteratively removed.
+    @dev This is an approximate method, and returns estimates close to the input
+         amount. Expensive to call on-chain.
     @param i index of input token. Check pool.coins(i) to get coin address at
            ith index
     @param j index of output token
@@ -1683,8 +1683,7 @@ def lp_price() -> uint256:
         self.price_oracle_packed
     )
     return (
-        3 * self.virtual_price *
-        MATH.cbrt(price_oracle[0] * price_oracle[1])
+        3 * self.virtual_price * MATH.cbrt(price_oracle[0] * price_oracle[1])
     ) / 10**24
 
 
