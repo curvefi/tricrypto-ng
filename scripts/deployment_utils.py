@@ -5,6 +5,7 @@ import click
 from ape import Contract, project
 from ape.api.address import Address
 from ape.logging import logger
+from eth_abi import encode
 from pycoingecko import CoinGeckoAPI
 
 DOLLAR_VALUE_OF_TOKENS_TO_DEPOSIT = 20
@@ -246,7 +247,7 @@ def test_deployment(pool, coins, fee_receiver, account):
     eth_balance = account.balance
     bal = pool.balanceOf(account)
     amt_to_remove = int(bal / 4)
-    logger.info("Remove {amt_to_remove} liquidity in native token (ETH):")
+    logger.info(f"Remove {amt_to_remove} liquidity in native token (ETH):")
     tx = pool.remove_liquidity_one_coin(
         amt_to_remove, 2, 0, True, sender=account
     )
@@ -314,3 +315,33 @@ def test_deployment(pool, coins, fee_receiver, account):
         assert tkn_amt > 0
 
     logger.info("Successfully tested deployment!")
+
+
+def deploy_amm_factory(fee_receiver, account, weth):
+
+    logger.info("Deploying math contract:")
+    math_contract = account.deploy(project.CurveCryptoMathOptimized3)
+
+    logger.info("Deploying views contract:")
+    views_contract = account.deploy(project.CurveCryptoViews3Optimized)
+
+    logger.info("Deploying AMM blueprint contract:")
+    amm_impl = deploy_blueprint(project.CurveTricryptoOptimizedWETH, account)
+
+    logger.info("Deploy factory:")
+    constructor_args = [fee_receiver, account.address, weth]
+    factory = account.deploy(project.CurveTricryptoFactory, *constructor_args)
+    logger.info(
+        f"Constructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"  # noqa: E501
+    )
+
+    logger.info("Set Pool Implementation:")
+    factory.set_pool_implementation(amm_impl, 0, sender=account)
+
+    logger.info("Set Views implementation:")
+    factory.set_views_implementation(views_contract, sender=account)
+
+    logger.info("Set Math implementation:")
+    factory.set_math_implementation(math_contract, sender=account)
+
+    return factory

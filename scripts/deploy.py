@@ -1,10 +1,9 @@
 import warnings
 
 import click
-from ape import Contract, project
+from ape import Contract, accounts, project
 from ape.cli import NetworkBoundCommand, account_option, network_option
 from ape.logging import logger
-from eth_abi import encode
 from eth_utils import to_checksum_address
 
 import scripts.deployment_utils as deploy_utils
@@ -46,38 +45,7 @@ def deploy_ethereum(network, account):
     assert owner, f"Curve's DAO contracts may not be on {network}."
     assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
 
-    logger.info("Deploying math contract:")
-    math_contract = account.deploy(project.CurveCryptoMathOptimized3)
-
-    logger.info("Deploying views contract:")
-    views_contract = account.deploy(project.CurveCryptoViews3Optimized)
-
-    logger.info("Deploying AMM blueprint contract:")
-    amm_impl = deploy_utils.deploy_blueprint(
-        project.CurveTricryptoOptimizedWETH, account
-    )
-
-    logger.info("Deploying gauge blueprint contract:")
-    gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
-
-    logger.info("Deploy factory:")
-    constructor_args = [fee_receiver, account.address, weth]
-    factory = account.deploy(project.CurveTricryptoFactory, *constructor_args)
-    logger.info(
-        f"Constructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"  # noqa: E501
-    )
-
-    logger.info("Set Pool Implementation:")
-    factory.set_pool_implementation(amm_impl, 0, sender=account)
-
-    logger.info("Set Gauge Implementation:")
-    factory.set_gauge_implementation(gauge_impl, sender=account)
-
-    logger.info("Set Views implementation:")
-    factory.set_views_implementation(views_contract, sender=account)
-
-    logger.info("Set Math implementation:")
-    factory.set_math_implementation(math_contract, sender=account)
+    factory = deploy_utils.deploy_amm_factory(fee_receiver, account, weth)
 
     logger.info("Deploying Pool:")
     tx = factory.deploy_pool(
@@ -107,30 +75,26 @@ def deploy_ethereum(network, account):
 
     # -------------------------- GAUGE DEPLOYMENT ----------------------------
 
+    logger.info("Deploying gauge blueprint contract:")
+    gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
+
+    logger.info("Set Gauge Implementation:")
+    factory.set_gauge_implementation(gauge_impl, sender=account)
+
     logger.info("Deploying Gauge:")
     tx = factory.deploy_gauge(pool, sender=account)
-    gauge = project.LiquidityGauge.at(
+    gauge = project.LiquidityGauge.at(  # noqa: F841
         tx.events.filter(factory.LiquidityGaugeDeployed)[0].gauge
     )
 
     # ------------------- CURVE DAO RELATED CODE -----------------------------
-
-    logger.info("Adding gauge to the gauge controller:")
-    vote_id = make_vote(
-        deploy_utils.CURVE_DAO_OWNERSHIP,
-        [
-            (deploy_utils.GAUGE_CONTROLLER, "add_gauge", gauge.address, 5, 0),
-        ],
-        "Add tricryptoUSDC [ethereum] gauge to the gauge controller",
-        account,
-    )
 
     logger.info("Tranfer factory ownership to the DAO")
     factory.commit_transfer_ownership(owner, sender=account)
     assert factory.future_admin() == owner
 
     logger.info("Create vote for the DAO to accept ownership of the factory")
-    vote_id = make_vote(
+    vote_id_dao_ownership = make_vote(
         deploy_utils.CURVE_DAO_OWNERSHIP,
         [
             (factory.address, "accept_transfer_ownership"),
@@ -141,13 +105,9 @@ def deploy_ethereum(network, account):
 
     if is_sim:
         logger.info("Simulate and check DAO Vote outcomes:")
-        simulate(vote_id, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
-        assert (
-            Contract(deploy_utils.GAUGE_CONTROLLER).gauge_types(gauge.address)
-            == 5
+        simulate(
+            vote_id_dao_ownership, deploy_utils.CURVE_DAO_OWNERSHIP["voting"]
         )
-
-        simulate(vote_id, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
         assert factory.admin() == owner
 
     # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
@@ -156,9 +116,58 @@ def deploy_ethereum(network, account):
     logger.info(
         "Deploying Factory handler to integrate it to the metaregistry:"
     )
-    factory_handler = account.deploy(  # noqa: F841
+    factory_handler = account.deploy(
         project.CurveTricryptoFactoryHandler, factory.address
     )
 
     if is_sim:
-        breakpoint()
+
+        # Test metaregistry integration:
+        metaregistry = Contract("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
+        metaregistry_admin = accounts[metaregistry.owner()]
+        metaregistry.add_registry_handler(
+            factory_handler, sender=metaregistry_admin
+        )
+
+        registry_handlers = metaregistry.get_registry_handlers_from_pool(pool)
+        balances = [pool.balances(i) for i in range(3)] + [0] * 5
+
+        assert metaregistry.is_registered(pool)
+        assert factory_handler in registry_handlers
+        assert metaregistry.get_balances(pool) == balances
+
+    print("Success!")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+def set_up_ethereum_deployment(network, account):
+
+    assert "ethereum" in network
+    is_sim = "mainnet-fork" in network
+
+    gauge = ""
+    factory = ""
+    pool = ""  # noqa: F841
+    factory_handler = ""  # noqa: F841
+
+    assert factory is not None
+
+    logger.info("Adding gauge to the gauge controller:")
+    vote_id_gauge = make_vote(
+        deploy_utils.CURVE_DAO_OWNERSHIP,
+        [
+            (deploy_utils.GAUGE_CONTROLLER, "add_gauge", gauge.address, 5, 0),
+        ],
+        "Add tricryptoUSDC [ethereum] gauge to the gauge controller",
+        account,
+    )
+
+    if is_sim:
+
+        simulate(vote_id_gauge, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
+        assert (
+            Contract(deploy_utils.GAUGE_CONTROLLER).gauge_types(gauge.address)
+            == 5
+        )

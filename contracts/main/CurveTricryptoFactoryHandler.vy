@@ -54,7 +54,7 @@ interface Gauge:
 
 # ---- constants ---- #
 GAUGE_CONTROLLER: constant(address) = 0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB
-MAX_COINS: constant(uint256) = 2
+MAX_COINS: constant(uint256) = 3
 MAX_METAREGISTRY_COINS: constant(uint256) = 8
 MAX_POOLS: constant(uint256) = 65536
 N_COINS: constant(uint256) = 3
