@@ -45,6 +45,18 @@ interface WETH:
 interface Factory:
     def admin() -> address: view
     def fee_receiver() -> address: view
+    def views_implementation() -> address: view
+
+interface Views:
+    def calc_token_amount(
+        amounts: uint256[N_COINS], deposit: bool, swap: address
+    ) -> uint256: view
+    def get_dy(
+        i: uint256, j: uint256, dx: uint256, swap: address
+    ) -> uint256: view
+    def get_dx(
+        i: uint256, j: uint256, dy: uint256, swap: address
+    ) -> uint256: view
 
 
 # ------------------------------- Events -------------------------------------
@@ -1608,27 +1620,19 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 
 # ------------------------- AMM View Functions -------------------------------
 
-@internal
+
+@external
 @view
-def _calc_D_ramp(
-    balances: uint256[N_COINS],
-    price_scale: uint256[N_COINS-1],
-    A_gamma: uint256[2],
-    precisions: uint256[N_COINS]
-) -> uint256:
-
-    # get D and check if we're ramping:
-    D: uint256 = self.D
-    if self.future_A_gamma_time > block.timestamp:
-        _xp: uint256[N_COINS] = balances
-        _xp[0] *= precisions[0]
-        for k in range(N_COINS - 1):
-            _xp[k + 1] = (
-                _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
-            )
-        D = MATH.newton_D(A_gamma[0], A_gamma[1], _xp, 0)
-
-    return D
+def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
+    """
+    @notice Get amount of coin[j] tokens received for swapping in dx amount of coin[i]
+    @dev Includes fee.
+    @param amounts Amounts of tokens being deposited or withdrawn
+    @param deposit True if it is a deposit action, False otherwise.
+    @return uint256 Exact amount of LP tokens deposited or withdrawn.
+    """
+    view_contract: address = Factory(self.factory).views_implementation()
+    return Views(view_contract).calc_token_amount(amounts, deposit, self)
 
 
 @external
@@ -1642,29 +1646,8 @@ def get_dy(i: uint256, j: uint256, dx: uint256) -> uint256:
     @param dx amount of input coin[i] tokens
     @return uint256 Exact amount of output j tokens for dx amount of i input tokens.
     """
-
-    _xp: uint256[N_COINS] = self.balances
-    price_scale: uint256[N_COINS-1] = self._unpack_prices(self.price_scale_packed)
-    A_gamma: uint256[2] = self._A_gamma()
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
-    _D: uint256 = self._calc_D_ramp(_xp, price_scale, A_gamma, precisions)
-
-    # adjust xp with input dx
-    _xp[i] += dx
-    _xp[0] *= precisions[0]
-    for k in range(N_COINS - 1):
-        _xp[k + 1] = _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
-
-    y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, j)[0]
-
-    dy: uint256 = _xp[j] - y - 1
-    _xp[j] = y
-    if j > 0:
-        dy = dy * PRECISION / price_scale[j - 1]
-    dy /= precisions[j]
-    dy -= self._fee(_xp) * dy / 10**10
-
-    return dy
+    view_contract: address = Factory(self.factory).views_implementation()
+    return Views(view_contract).get_dy(i, j, dx, self)
 
 
 @external
@@ -1682,42 +1665,8 @@ def get_dx(i: uint256, j: uint256, dy: uint256) -> uint256:
     @param dy amount of input coin[j] tokens received
     @return uint256 Approximate amount of input i tokens to get dy amount of j tokens.
     """
-
-    balances: uint256[N_COINS] = self.balances
-    price_scale: uint256[N_COINS-1] = self._unpack_prices(self.price_scale_packed)
-    A_gamma: uint256[2] = self._A_gamma()
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
-    _D: uint256 = self._calc_D_ramp(balances, price_scale, A_gamma, precisions)
-
-    x: uint256 = 0
-    dx: uint256 = 0
-    _dy: uint256 = dy  # <------------ _dy will have less fee element than dy.
-    fee_dy: uint256 = 0  # <-------- the amount of fee removed from dy in each
-    #                                                               iteration.
-    _xp: uint256[N_COINS] = empty(uint256[N_COINS])
-    for k in range(20):
-
-        _xp = balances  # <----------------------------------------- reset xp.
-
-        # Adjust xp with output dy. dy contains fee element, which needs to be
-        # iteratively sieved out:
-        _xp[j] -= _dy
-        _xp[0] *= precisions[0]
-        for l in range(N_COINS - 1):
-            _xp[l + 1] = _xp[l + 1] * price_scale[l] * precisions[l + 1] / PRECISION
-
-        # calculate x for given xp
-        x = MATH.get_y(A_gamma[0], A_gamma[1], _xp, _D, i)[0]
-        dx = x - _xp[i]
-
-        if i > 0:
-            dx = dx * PRECISION / price_scale[i - 1]
-        dx /= precisions[i]
-
-        fee_dy = self._fee(_xp) * _dy / 10**10  # <----- Fee amount to remove.
-        _dy = dy + fee_dy  # <--------------------- Sieve out fee_dy from _dy.
-
-    return dx
+    view_contract: address = Factory(self.factory).views_implementation()
+    return Views(view_contract).get_dx(i, j, dy, self)
 
 
 @external
