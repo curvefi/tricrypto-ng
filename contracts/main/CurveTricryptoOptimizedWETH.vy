@@ -1011,8 +1011,10 @@ def tweak_price(
         )
 
         for k in range(N_COINS - 1):
+
             price_oracle[k] = unsafe_div(
-                last_prices[k] * (10**18 - alpha) + price_oracle[k] * alpha,
+                min(last_prices[k], 2 * price_oracle[k]) * (10**18 - alpha) +
+                price_oracle[k] * alpha,  # ^-------- Cap spot price into EMA.
                 10**18
             )
 
@@ -1729,7 +1731,8 @@ def price_oracle(k: uint256) -> uint256:
         )
 
         return (
-            last_prices * (10**18 - alpha) + price_oracle * alpha
+            min(last_prices, 2 * price_oracle) * (10**18 - alpha) +
+            price_oracle * alpha  # ^---------------- Cap spot price into EMA.
         ) / 10**18
 
     return price_oracle

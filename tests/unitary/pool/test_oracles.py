@@ -87,8 +87,11 @@ def test_ma(swap_with_deposit, coins, user, amount, i, j, t):
 
     for p1, p2, p3 in zip(prices1[1:], prices2, prices3):
 
+        # cap new price by 2x previous price oracle value:
+        new_price = min(p2, 2 * p1)
+
         alpha = exp(-1 * t / ma_time)
-        theory = p1 * alpha + p2 * (1 - alpha)
+        theory = p1 * alpha + new_price * (1 - alpha)
         assert abs(log2(theory / p3)) < 0.001
 
 
