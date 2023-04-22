@@ -531,7 +531,7 @@ def add_liquidity(
     d_token_fee: uint256 = 0
     old_D: uint256 = 0
 
-    assert amounts[0] + amounts[1] + amounts[2] > 0, "dev: no coins to add"
+    assert amounts[0] + amounts[1] + amounts[2] > 0  #dev: no coins to add
 
     self._claim_admin_fees()  # <---- Claiming fees reduces virtual_price. So,
     #       claim fees before adding liquidity; depositor is not micro-rugged.
@@ -615,7 +615,7 @@ def add_liquidity(
         d_token = self.get_xcp(D)  # <------------------------- Making initial
         #                                            virtual price equal to 1.
 
-    assert d_token > 0, "dev: nothing minted"
+    assert d_token > 0  # dev: nothing minted
 
     if old_D > 0:
 
@@ -2028,16 +2028,16 @@ def commit_new_parameters(
     current_fee_params: uint256[3] = self._unpack(self.packed_fee_params)
 
     if new_out_fee < MAX_FEE + 1:
-        assert new_out_fee > MIN_FEE - 1, "dev: fee is out of range"
+        assert new_out_fee > MIN_FEE - 1  # dev: fee is out of range
     else:
         new_out_fee = current_fee_params[1]
 
     if new_mid_fee > MAX_FEE:
         new_mid_fee = current_fee_params[0]
-    assert new_mid_fee <= new_out_fee, "dev: mid-fee is too high"
+    assert new_mid_fee <= new_out_fee  # dev: mid-fee is too high
 
     if new_fee_gamma < 10**18:
-        assert new_fee_gamma > 0, "dev: fee_gamma out of range [1 .. 10**18]"
+        assert new_fee_gamma > 0  # dev: fee_gamma out of range [1 .. 10**18]
     else:
         new_fee_gamma = current_fee_params[2]
 
@@ -2060,7 +2060,7 @@ def commit_new_parameters(
         new_adjustment_step = current_rebalancing_params[1]
 
     if new_ma_time < 872542:  # <----- Calculated as: 7 * 24 * 60 * 60 / ln(2)
-        assert new_ma_time > 86, "dev: MA time should be longer than 60/ln(2)"
+        assert new_ma_time > 86  # dev: MA time should be longer than 60/ln(2)
     else:
         new_ma_time = current_rebalancing_params[2]
 
