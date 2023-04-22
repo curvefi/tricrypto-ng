@@ -526,7 +526,7 @@ def newton_D(
             # Test that we are safe with the next get_y
             for _x in x:
                 frac = unsafe_div(unsafe_mul(_x, 10**18), D)
-                assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+                assert frac >= 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
 
             return D
     raise "Did not converge"

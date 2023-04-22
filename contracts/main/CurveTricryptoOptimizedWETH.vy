@@ -306,7 +306,7 @@ def __init__(
 @external
 def __default__():
     if msg.value > 0:
-        assert WETH20 in self.coins  # dev: ETH not in pool
+        assert WETH20 in self.coins, "dev: ETH not in pool"
 
 
 @internal
@@ -342,9 +342,9 @@ def _transfer_in(
     """
 
     if use_eth and _coin == WETH20:
-        assert mvalue == dx  # dev: incorrect eth amount
+        assert mvalue == dx, "dev: incorrect eth amount"
     else:
-        assert mvalue == 0  # dev: nonzero eth amount
+        assert mvalue == 0, "dev: nonzero eth amount"
 
         if callback_sig == empty(bytes32):
 
@@ -367,7 +367,7 @@ def _transfer_in(
                     _abi_encode(sender, receiver, _coin, dx, dy)
                 )
             )
-            assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+            assert ERC20(_coin).balanceOf(self) - b == dx, "dev: callback didn't give us coins"
             #                                          ^------ note: dx cannot
             #                   be 0, so the contract MUST receive some _coin.
 
@@ -499,7 +499,7 @@ def exchange_extended(
     @return uint256 Amount of tokens at index j received by the `receiver`
     """
 
-    assert cb != empty(bytes32)  # dev: No callback specified
+    assert cb != empty(bytes32), "dev: No callback specified"
     return self._exchange(
         sender, 0, i, j, dx, min_dy, use_eth, receiver, msg.sender, cb
     )  # callbacker should never be self ------------------^
@@ -615,7 +615,7 @@ def add_liquidity(
         d_token = self.get_xcp(D)  # <------------------------- Making initial
         #                                            virtual price equal to 1.
 
-    assert d_token > 0  # dev: nothing minted
+    assert d_token > 0, "dev: nothing minted"
 
     if old_D > 0:
 
@@ -861,8 +861,8 @@ def _exchange(
     callback_sig: bytes32
 ) -> uint256:
 
-    assert i != j  # dev: coin index out of range
-    assert dx > 0  # dev: do not exchange 0 coins
+    assert i != j, "dev: coin index out of range"
+    assert dx > 0, "dev: do not exchange 0 coins"
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
@@ -1140,11 +1140,10 @@ def tweak_price(
                 2 * old_virtual_price - 10**18 > xcp_profit
             ):
 
+                packed_price_scale = self._pack_prices(p_new)
+
                 self.D = D
                 self.virtual_price = old_virtual_price
-
-                # reuse old_virtual_price
-                packed_price_scale = self._pack_prices(p_new)
                 self.price_scale_packed = packed_price_scale
 
                 return packed_price_scale
@@ -1336,8 +1335,8 @@ def _calc_withdraw_one_coin(
 ) -> (uint256, uint256, uint256[N_COINS], uint256):
 
     token_supply: uint256 = self.totalSupply
-    assert token_amount <= token_supply  # dev: token amount more than supply
-    assert i < N_COINS  # dev: coin out of range
+    assert token_amount <= token_supply, "dev: token amount more than supply"
+    assert i < N_COINS, "dev: coin out of range"
 
     xx: uint256[N_COINS] = self.balances
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
@@ -1371,10 +1370,10 @@ def _calc_withdraw_one_coin(
     # charges.
 
     # xp is adjusted assuming xp[0] ~= xp[1] ~= x[2], which is usually not the
-    # case ---------------------------------------------------------
-    #                                                              |
-    xp_imprecise: uint256[N_COINS] = xp  #                         |
-    xp_imprecise[i] -= xp[i] * N_COINS * token_amount / D  # <------
+    # case -------------------------------------------------------------------
+    #                                                                        |
+    xp_imprecise: uint256[N_COINS] = xp  #                                   |
+    xp_imprecise[i] -= xp[i] * N_COINS * token_amount / D  # <----------------
     fee: uint256 = self._fee(xp_imprecise)
 
     dD: uint256 = token_amount * D / token_supply
@@ -1935,9 +1934,9 @@ def ramp_A_gamma(
     @param future_gamma The future gamma value.
     @param future_time The timestamp at which the ramping will end.
     """
-    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
-    assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1)  # dev: ramp undergoing
-    assert future_time > block.timestamp + MIN_RAMP_TIME - 1  # dev: insufficient time
+    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
+    assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1), "dev: ramp undergoing"
+    assert future_time > block.timestamp + MIN_RAMP_TIME - 1, "dev: insufficient time"
 
     A_gamma: uint256[2] = self._A_gamma()
     initial_A_gamma: uint256 = shift(A_gamma[0], 128)
@@ -1980,7 +1979,7 @@ def stop_ramp_A_gamma():
     @notice Stop Ramping A and gamma parameters immediately.
     @dev Only accessible by factory admin.
     """
-    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
+    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
 
     A_gamma: uint256[2] = self._A_gamma()
     current_A_gamma: uint256 = shift(A_gamma[0], 128)
@@ -2014,8 +2013,8 @@ def commit_new_parameters(
     @param _new_adjustment_step The new adjustment step.
     @param _new_ma_time The new ma time. ma_time is time_in_seconds/ln(2).
     """
-    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
-    assert self.admin_actions_deadline == 0  # dev: active action
+    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
+    assert self.admin_actions_deadline == 0, "dev: active action"
 
     _deadline: uint256 = block.timestamp + ADMIN_ACTIONS_DELAY
     self.admin_actions_deadline = _deadline
@@ -2029,16 +2028,16 @@ def commit_new_parameters(
     current_fee_params: uint256[3] = self._unpack(self.packed_fee_params)
 
     if new_out_fee < MAX_FEE + 1:
-        assert new_out_fee > MIN_FEE - 1  # dev: fee is out of range
+        assert new_out_fee > MIN_FEE - 1, "dev: fee is out of range"
     else:
         new_out_fee = current_fee_params[1]
 
     if new_mid_fee > MAX_FEE:
         new_mid_fee = current_fee_params[0]
-    assert new_mid_fee <= new_out_fee  # dev: mid-fee is too high
+    assert new_mid_fee <= new_out_fee, "dev: mid-fee is too high"
 
     if new_fee_gamma < 10**18:
-        assert new_fee_gamma > 0  # dev: fee_gamma out of range [1 .. 10**18]
+        assert new_fee_gamma > 0, "dev: fee_gamma out of range [1 .. 10**18]"
     else:
         new_fee_gamma = current_fee_params[2]
 
@@ -2061,7 +2060,7 @@ def commit_new_parameters(
         new_adjustment_step = current_rebalancing_params[1]
 
     if new_ma_time < 872542:  # <----- Calculated as: 7 * 24 * 60 * 60 / ln(2)
-        assert new_ma_time > 86  # dev: MA time should be longer than 60/ln(2)
+        assert new_ma_time > 86, "dev: MA time should be longer than 60/ln(2)"
     else:
         new_ma_time = current_rebalancing_params[2]
 
@@ -2089,8 +2088,8 @@ def apply_new_parameters():
     @notice Apply committed parameters.
     @dev Only callable after admin_actions_deadline.
     """
-    assert block.timestamp >= self.admin_actions_deadline  #dev: insufficient time
-    assert self.admin_actions_deadline != 0  #dev: no active action
+    assert block.timestamp >= self.admin_actions_deadline, "dev: insufficient time"
+    assert self.admin_actions_deadline != 0, "dev: no active action"
 
     self.admin_actions_deadline = 0
 
@@ -2120,5 +2119,5 @@ def revert_new_parameters():
     @dev Only accessible by factory admin. Setting admin_actions_deadline to 0
          ensures a revert in apply_new_parameters.
     """
-    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
+    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
     self.admin_actions_deadline = 0
