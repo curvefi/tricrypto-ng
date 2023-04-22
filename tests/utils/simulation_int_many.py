@@ -317,7 +317,7 @@ class Trader:
             alpha = self._ma_multiplier(t)
             for k in range(1, N):
 
-                last_price = min(price_vector[k], self.price_oracle[k])
+                last_price = min(price_vector[k], 2 * self.price_oracle[k])
                 self.price_oracle[k] = int(
                     last_price * (1 - alpha) + self.price_oracle[k] * alpha
                 )

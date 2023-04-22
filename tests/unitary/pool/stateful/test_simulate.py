@@ -102,8 +102,16 @@ class StatefulSimulation(StatefulBase):
                 boa.env.vm.state.timestamp, exchange_i, exchange_j
             )
 
-            # check if output value from exchange is similar
+            # check if output value from exchange is similar:
             assert abs(log(self.swap_out / dy_trader)) < 1e-3
+
+            # check if price oracles are updated as expected:
+            for k in range(1, len(self.trader.price_oracle) - 1):
+                assert approx(
+                    self.swap.price_oracle(k - 1),
+                    self.trader.price_oracle[k],
+                    1e-3,
+                )
 
             boa.env.time_travel(12)
 
