@@ -13,6 +13,33 @@ from scripts.vote_utils import make_vote
 warnings.filterwarnings("ignore")
 
 
+def _deploy_metaregistry_integration(account, factory, pool, is_sim):
+
+    logger.info("Integrate into AddressProvider and Metaregistry ...")
+    logger.info(
+        "Deploying Factory handler to integrate it to the metaregistry:"
+    )
+    factory_handler = account.deploy(
+        project.CurveTricryptoFactoryHandler, factory.address
+    )
+
+    if is_sim:
+
+        # Test metaregistry integration:
+        metaregistry = Contract("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
+        metaregistry_admin = accounts[metaregistry.owner()]
+        metaregistry.add_registry_handler(
+            factory_handler, sender=metaregistry_admin
+        )
+
+        registry_handlers = metaregistry.get_registry_handlers_from_pool(pool)
+        balances = [pool.balances(i) for i in range(3)] + [0] * 5
+
+        assert metaregistry.is_registered(pool)
+        assert factory_handler in registry_handlers
+        assert metaregistry.get_balances(pool) == balances
+
+
 @click.group(short_help="Deploy the project")
 def cli():
     pass
@@ -21,7 +48,7 @@ def cli():
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-def deploy_ethereum(network, account):
+def deploy_factory_and_test_pool(network, account):
 
     assert "ethereum" in network
 
@@ -44,6 +71,8 @@ def deploy_ethereum(network, account):
 
     assert owner, f"Curve's DAO contracts may not be on {network}."
     assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
+
+    # --------------------- DEPLOY FACTORY AND POOL ---------------------------
 
     factory = deploy_utils.deploy_amm_factory(fee_receiver, account, weth)
 
@@ -73,7 +102,7 @@ def deploy_ethereum(network, account):
 
     deploy_utils.test_deployment(pool, coins, fee_receiver, account)
 
-    # -------------------------- GAUGE DEPLOYMENT ----------------------------
+    # ------------------- GAUGE IMPLEMENTATION DEPLOYMENT --------------------
 
     logger.info("Deploying gauge blueprint contract:")
     gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
@@ -81,13 +110,29 @@ def deploy_ethereum(network, account):
     logger.info("Set Gauge Implementation:")
     factory.set_gauge_implementation(gauge_impl, sender=account)
 
-    logger.info("Deploying Gauge:")
-    tx = factory.deploy_gauge(pool, sender=account)
-    gauge = project.LiquidityGauge.at(  # noqa: F841
-        tx.events.filter(factory.LiquidityGaugeDeployed)[0].gauge
-    )
+    # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
 
-    # ------------------- CURVE DAO RELATED CODE -----------------------------
+    _deploy_metaregistry_integration(account, factory, pool, is_sim)
+
+    print("Success!")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+@cli.option("--factory", required=True, type=str)
+def transfer_factory_to_dao(network, account, factory):
+
+    assert "ethereum" in network
+    is_sim = "mainnet-fork" in network
+
+    for _network, data in deploy_utils.curve_dao_network_settings.items():
+
+        if _network in network:
+
+            owner = data.dao_ownership_contract
+
+    assert factory is not None
 
     logger.info("Tranfer factory ownership to the DAO")
     factory.commit_transfer_ownership(owner, sender=account)
@@ -110,49 +155,22 @@ def deploy_ethereum(network, account):
         )
         assert factory.admin() == owner
 
-    # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
-
-    logger.info("Integrate into AddressProvider and Metaregistry ...")
-    logger.info(
-        "Deploying Factory handler to integrate it to the metaregistry:"
-    )
-    factory_handler = account.deploy(
-        project.CurveTricryptoFactoryHandler, factory.address
-    )
-
-    if is_sim:
-
-        # Test metaregistry integration:
-        metaregistry = Contract("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
-        metaregistry_admin = accounts[metaregistry.owner()]
-        metaregistry.add_registry_handler(
-            factory_handler, sender=metaregistry_admin
-        )
-
-        registry_handlers = metaregistry.get_registry_handlers_from_pool(pool)
-        balances = [pool.balances(i) for i in range(3)] + [0] * 5
-
-        assert metaregistry.is_registered(pool)
-        assert factory_handler in registry_handlers
-        assert metaregistry.get_balances(pool) == balances
-
-    print("Success!")
-
 
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-def set_up_ethereum_deployment(network, account):
+@cli.option("--pool", required=True, type=str)
+@cli.option("--factory", required=True, type=str)
+def deploy_gauge_and_set_up_vote(network, account, pool, factory):
 
     assert "ethereum" in network
     is_sim = "mainnet-fork" in network
 
-    gauge = ""
-    factory = ""
-    pool = ""  # noqa: F841
-    factory_handler = ""  # noqa: F841
-
-    assert factory is not None
+    logger.info("Deploying Gauge:")
+    tx = factory.deploy_gauge(pool, sender=account)
+    gauge = project.LiquidityGauge.at(  # noqa: F841
+        tx.events.filter(factory.LiquidityGaugeDeployed)[0].gauge
+    )
 
     logger.info("Adding gauge to the gauge controller:")
     vote_id_gauge = make_vote(
