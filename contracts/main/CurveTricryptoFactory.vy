@@ -306,7 +306,7 @@ def set_fee_receiver(_fee_receiver: address):
     @notice Set fee receiver
     @param _fee_receiver Address that fees are sent to
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdateFeeReceiver(self.fee_receiver, _fee_receiver)
     self.fee_receiver = _fee_receiver
@@ -322,7 +322,7 @@ def set_pool_implementation(
     @param _pool_implementation Address of the new pool implementation
     @param _implementation_index Index of the pool implementation
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdatePoolImplementation(
         _implementation_index,
@@ -340,7 +340,7 @@ def set_gauge_implementation(_gauge_implementation: address):
     @dev Set to empty(address) to prevent deployment of new gauges
     @param _gauge_implementation Address of the new token implementation
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdateGaugeImplementation(self.gauge_implementation, _gauge_implementation)
     self.gauge_implementation = _gauge_implementation
@@ -352,7 +352,7 @@ def set_views_implementation(_views_implementation: address):
     @notice Set views contract implementation
     @param _views_implementation Address of the new views contract
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin,  "dev: admin only"
 
     log UpdateViewsImplementation(self.views_implementation, _views_implementation)
     self.views_implementation = _views_implementation
@@ -364,7 +364,7 @@ def set_math_implementation(_math_implementation: address):
     @notice Set math implementation
     @param _math_implementation Address of the new math contract
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdateMathImplementation(self.math_implementation, _math_implementation)
     self.math_implementation = _math_implementation
@@ -376,7 +376,7 @@ def commit_transfer_ownership(_addr: address):
     @notice Transfer ownership of this contract to `addr`
     @param _addr Address of the new owner
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     self.future_admin = _addr
 
@@ -387,7 +387,7 @@ def accept_transfer_ownership():
     @notice Accept a pending ownership transfer
     @dev Only callable by the new owner
     """
-    assert msg.sender == self.future_admin  # dev: future admin only
+    assert msg.sender == self.future_admin, "dev: future admin only"
 
     log TransferOwnership(self.admin, msg.sender)
     self.admin = msg.sender

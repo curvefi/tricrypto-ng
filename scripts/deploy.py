@@ -13,7 +13,10 @@ from scripts.vote_utils import make_vote
 warnings.filterwarnings("ignore")
 
 
-def _deploy_metaregistry_integration(account, factory, pool, is_sim):
+def _deploy_metaregistry_integration(network, account, factory, pool):
+
+    assert "ethereum" in network
+    is_sim = "mainnet-fork" in network
 
     logger.info("Integrate into AddressProvider and Metaregistry ...")
     logger.info(
@@ -48,11 +51,10 @@ def cli():
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-def deploy_factory_and_test_pool(network, account):
+def deploy_ethereum(network, account):
 
-    assert "ethereum" in network
+    assert "ethereum" in network, "Only Ethereum supported."
 
-    is_sim = "mainnet-fork" in network
     PARAMS = deploy_utils.get_tricrypto_usdc_params()
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
@@ -112,7 +114,7 @@ def deploy_factory_and_test_pool(network, account):
 
     # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
 
-    _deploy_metaregistry_integration(account, factory, pool, is_sim)
+    _deploy_metaregistry_integration(network, account, factory, pool)
 
     print("Success!")
 
@@ -120,7 +122,7 @@ def deploy_factory_and_test_pool(network, account):
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-@cli.option("--factory", required=True, type=str)
+@click.option("--factory", required=True, type=str)
 def transfer_factory_to_dao(network, account, factory):
 
     assert "ethereum" in network
@@ -159,8 +161,8 @@ def transfer_factory_to_dao(network, account, factory):
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-@cli.option("--pool", required=True, type=str)
-@cli.option("--factory", required=True, type=str)
+@click.option("--pool", required=True, type=str)
+@click.option("--factory", required=True, type=str)
 def deploy_gauge_and_set_up_vote(network, account, pool, factory):
 
     assert "ethereum" in network

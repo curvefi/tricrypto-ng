@@ -147,7 +147,7 @@ def test_exchange_into_eth(
 @pytest.mark.parametrize("modifier", [0, 1.01, 2])
 def test_incorrect_eth_amount(swap_with_deposit, user, j, modifier):
     amount = 10**18
-    with boa.reverts(dev="incorrect eth amount"), boa.env.prank(user):
+    with boa.reverts("dev: incorrect eth amount"), boa.env.prank(user):
         swap_with_deposit.exchange(
             2, j, amount, 0, True, value=int(amount * modifier)
         )
@@ -156,12 +156,12 @@ def test_incorrect_eth_amount(swap_with_deposit, user, j, modifier):
 @pytest.mark.parametrize("j", [0, 1])
 def test_send_eth_without_use_eth(swap_with_deposit, user, j):
     amount = 10**18
-    with boa.reverts(dev="nonzero eth amount"), boa.env.prank(user):
+    with boa.reverts("dev: nonzero eth amount"), boa.env.prank(user):
         swap_with_deposit.exchange(2, j, amount, 0, False, value=amount)
 
 
 @pytest.mark.parametrize("i", [0, 1])
 def test_send_eth_with_incorrect_i(swap_with_deposit, user, i):
     amount = 10**18
-    with boa.reverts(dev="nonzero eth amount"), boa.env.prank(user):
+    with boa.reverts("dev: nonzero eth amount"), boa.env.prank(user):
         swap_with_deposit.exchange(i, 2, amount, 0, True, value=amount)
