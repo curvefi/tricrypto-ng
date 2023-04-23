@@ -122,6 +122,24 @@ def deploy_ethereum(network, account):
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
+def test_pool_deployment(network, account, pool):
+
+    assert "ethereum" in network, "Only Ethereum supported."
+
+    coins = [
+        to_checksum_address(pool.coins(0)),
+        to_checksum_address(pool.coins(1)),
+        to_checksum_address(pool.coins(2)),
+    ]
+    fee_receiver = pool.fee_receiver()
+
+    # Test liquidity actions in deployed pool:
+    deploy_utils.test_deployment(pool, coins, fee_receiver, account)
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
 @click.option("--factory", required=True, type=str)
 def transfer_factory_to_dao(network, account, factory):
 

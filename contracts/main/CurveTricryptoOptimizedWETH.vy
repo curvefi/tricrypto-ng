@@ -1624,6 +1624,16 @@ def burnFrom(_to: address, _value: uint256) -> bool:
 
 @external
 @view
+def fee_receiver() -> address:
+    """
+    @notice Returns the address of the admin fee receiver.
+    @return address Fee receiver.
+    """
+    return Factory(self.factory).fee_receiver()
+
+
+@external
+@view
 def calc_token_amount(amounts: uint256[N_COINS], deposit: bool) -> uint256:
     """
     @notice Calculate LP tokens minted or to be burned for depositing or
