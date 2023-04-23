@@ -1946,7 +1946,7 @@ def ramp_A_gamma(
     """
     assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
     assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1), "dev: ramp undergoing"
-    assert future_time > block.timestamp + MIN_RAMP_TIME - 1, "dev: insufficient time"
+    assert future_time > block.timestamp + MIN_RAMP_TIME - 1  # dev: insufficient time
 
     A_gamma: uint256[2] = self._A_gamma()
     initial_A_gamma: uint256 = shift(A_gamma[0], 128)

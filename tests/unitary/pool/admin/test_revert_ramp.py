@@ -24,7 +24,7 @@ def test_revert_fast_ramps(swap, factory_admin):
 
     A_gamma = [swap.A(), swap.gamma()]
     future_time = boa.env.vm.state.timestamp + 10
-    with boa.env.prank(factory_admin), boa.reverts("dev: insufficient time"):
+    with boa.env.prank(factory_admin), boa.reverts(dev="insufficient time"):
         swap.ramp_A_gamma(A_gamma[0] + 1, A_gamma[1] + 1, future_time)
 
 
