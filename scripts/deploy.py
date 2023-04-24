@@ -13,20 +13,10 @@ from scripts.vote_utils import make_vote
 warnings.filterwarnings("ignore")
 
 
-def _deploy_metaregistry_integration(network, account, factory, pool):
+def _test_metaregistry_integration(network, factory_handler, pool):
 
     assert "ethereum" in network
     is_sim = "mainnet-fork" in network
-
-    logger.info("Integrate into AddressProvider and Metaregistry ...")
-    logger.info(
-        "Deploying Factory handler to integrate it to the metaregistry:"
-    )
-    factory_handler = account.deploy(
-        project.CurveTricryptoFactoryHandler,
-        factory.address,
-        **deploy_utils._get_tx_params(),
-    )
 
     if is_sim:
 
@@ -56,7 +46,6 @@ def cli():
 def deploy_ethereum(network, account):
 
     assert "ethereum" in network, "Only Ethereum supported."
-    PARAMS = deploy_utils.get_tricrypto_usdc_params()
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
@@ -64,26 +53,69 @@ def deploy_ethereum(network, account):
 
             owner = data.dao_ownership_contract
             fee_receiver = data.fee_receiver_address
-            coins = [
-                to_checksum_address(data.usdc_address),
-                to_checksum_address(data.wbtc_address),
-                to_checksum_address(data.weth_address),
-            ]
-            weth = coins[2]
-            PARAMS["coins"] = coins
+            weth = to_checksum_address(data.weth_address)
 
     assert owner, f"Curve's DAO contracts may not be on {network}."
     assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
-
-    # --------------------- DEPLOY FACTORY AND POOL ---------------------------
 
     deployed_contracts = {
         "math": "0x53cc3e49418380E835fC8caCD5932482c586eFEa",
     }
 
+    # --------------------- DEPLOY FACTORY AND POOL ---------------------------
+
     factory = deploy_utils.deploy_amm_factory(
         account, fee_receiver, weth, deployed_contracts
     )
+
+    # ------------------- GAUGE IMPLEMENTATION DEPLOYMENT --------------------
+
+    logger.info("Deploying gauge blueprint contract:")
+    gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
+
+    logger.info("Set Gauge Implementation:")
+    factory.set_gauge_implementation(
+        gauge_impl, sender=account, **deploy_utils._get_tx_params()
+    )
+
+    # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
+
+    logger.info("Integrate into AddressProvider and Metaregistry ...")
+    logger.info(
+        "Deploying Factory handler to integrate it to the metaregistry:"
+    )
+    account.deploy(
+        project.CurveTricryptoFactoryHandler,
+        factory.address,
+        **deploy_utils._get_tx_params(),
+    )
+
+    print("Success!")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+@click.option("--factory_handler", required=True, type=str)
+def deploy_ethereum_tricryptousdc_pool(network, account, factory_handler):
+
+    assert "ethereum" in network, "Only Ethereum supported."
+    PARAMS = deploy_utils.get_tricrypto_usdc_params()
+
+    for _network, data in deploy_utils.curve_dao_network_settings.items():
+
+        if _network in network:
+
+            fee_receiver = data.fee_receiver_address
+            coins = [
+                to_checksum_address(data.usdc_address),
+                to_checksum_address(data.wbtc_address),
+                to_checksum_address(data.weth_address),
+            ]
+            PARAMS["coins"] = coins
+
+    factory_handler = Contract(factory_handler)
+    factory = Contract(factory_handler.base_registry())
 
     logger.info("Deploying Pool:")
     tx = factory.deploy_pool(
@@ -108,38 +140,11 @@ def deploy_ethereum(network, account):
     )
     logger.info(f"Success! Deployed pool at {pool}!")
 
-    # ------------------- GAUGE IMPLEMENTATION DEPLOYMENT --------------------
-
-    logger.info("Deploying gauge blueprint contract:")
-    gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
-
-    logger.info("Set Gauge Implementation:")
-    factory.set_gauge_implementation(
-        gauge_impl, sender=account, **deploy_utils._get_tx_params()
-    )
-
-    # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
-
-    _deploy_metaregistry_integration(network, account, factory, pool)
-
-    print("Success!")
-
-
-@cli.command(cls=NetworkBoundCommand)
-@network_option()
-@account_option()
-def test_pool_deployment(network, account, pool):
-
-    assert "ethereum" in network, "Only Ethereum supported."
-    coins = [
-        to_checksum_address(pool.coins(0)),
-        to_checksum_address(pool.coins(1)),
-        to_checksum_address(pool.coins(2)),
-    ]
-    fee_receiver = pool.fee_receiver()
-
     # Test liquidity actions in deployed pool:
     deploy_utils.test_deployment(pool, coins, fee_receiver, account)
+
+    # Test metaregistry integration:
+    _test_metaregistry_integration(network, factory_handler, pool)
 
 
 @cli.command(cls=NetworkBoundCommand)
