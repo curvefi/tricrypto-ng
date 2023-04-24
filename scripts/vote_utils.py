@@ -7,6 +7,8 @@ import ape
 import requests
 from ape.logging import logger
 
+import scripts.deployment_utils as deploy_utils
+
 warnings.filterwarnings("ignore")
 
 CONVEX_VOTERPROXY = "0x989AEB4D175E16225E39E87D0D97A3360524AD80"
@@ -89,5 +91,6 @@ def make_vote(
         False,
         False,
         sender=vote_creator,
+        **deploy_utils._get_tx_params(),
     )
     return tx.events[0].voteId

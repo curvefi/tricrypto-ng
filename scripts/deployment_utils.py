@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 
 import click
-from ape import Contract, project
+from ape import Contract, networks, project
 from ape.api.address import Address
 from ape.logging import logger
 from eth_abi import encode
@@ -11,7 +11,22 @@ from pycoingecko import CoinGeckoAPI
 DOLLAR_VALUE_OF_TOKENS_TO_DEPOSIT = 20
 
 
+def _get_tx_params():
+
+    if "mainnet-fork" == networks.active_provider.network.name:
+        return {}
+
+    active_provider = networks.active_provider
+    max_fee = active_provider.base_fee * 2
+    max_priority_fee = int(0.5e9)
+
+    assert max_priority_fee < max_fee
+
+    return {"max_fee": max_fee, "max_priority_fee": max_priority_fee}
+
+
 def deploy_blueprint(contract, account):
+
     initcode = contract.contract_type.deployment_bytecode.bytecode
     if isinstance(initcode, str):
         initcode = bytes.fromhex(initcode.removeprefix("0x"))
@@ -28,6 +43,7 @@ def deploy_blueprint(contract, account):
         data=initcode,
         gas_price=project.provider.gas_price,
         nonce=account.nonce,
+        **_get_tx_params(),
     )
     receipt = account.call(tx)
     click.echo(f"blueprint deployed at: {receipt.contract_address}")
@@ -193,7 +209,7 @@ def test_deployment(pool, coins, fee_receiver, account):
         coin_name = coin_contract.name()
         logger.info(f"Approve pool to spend deployer's {coin_name}:")
 
-        coin_contract.approve(pool, bal, sender=account)
+        coin_contract.approve(pool, bal, sender=account, **_get_tx_params())
 
     logger.info("------------------------------ Add liquidity")
 
@@ -204,14 +220,21 @@ def test_deployment(pool, coins, fee_receiver, account):
 
     logger.info(f"Add {tokens_to_add} tokens to deployed pool: ")
 
-    tx = pool.add_liquidity(tokens_to_add, 0, False, sender=account)
+    tx = pool.add_liquidity(
+        tokens_to_add, 0, False, sender=account, **_get_tx_params()
+    )
     d_tokens = tx.return_value
     assert pool.balanceOf(account) == pool.totalSupply() == d_tokens
     logger.info(f"Received {d_tokens} number of LP Tokens.")
 
     logger.info("Deposit ETH with other tokens:")
     tx = pool.add_liquidity(
-        tokens_to_add, 0, True, sender=account, value=tokens_to_add[2]
+        tokens_to_add,
+        0,
+        True,
+        sender=account,
+        value=tokens_to_add[2],
+        **_get_tx_params(),
     )
     d_tokens = tx.return_value
     assert d_tokens > 0
@@ -221,7 +244,9 @@ def test_deployment(pool, coins, fee_receiver, account):
 
     amt_usdc_in = 10 * 10 ** Contract(coins[0]).decimals()
     logger.info(f"Test exchange_underlying of {amt_usdc_in} USDC -> ETH:")
-    tx = pool.exchange_underlying(0, 2, amt_usdc_in, 0, sender=account)
+    tx = pool.exchange_underlying(
+        0, 2, amt_usdc_in, 0, sender=account, **_get_tx_params()
+    )
     dy_eth = tx.events.filter(pool.TokenExchange)[
         0
     ].tokens_bought  # return_value is broken in ape somehow
@@ -230,14 +255,16 @@ def test_deployment(pool, coins, fee_receiver, account):
 
     logger.info(f"Test exchange_underlying of {dy_eth} ETH -> USDC:")
     tx = pool.exchange_underlying(
-        2, 0, dy_eth, 0, sender=account, value=dy_eth
+        2, 0, dy_eth, 0, sender=account, value=dy_eth, **_get_tx_params()
     )
     dy_usdc = tx.events.filter(pool.TokenExchange)[0].tokens_bought
     assert dy_usdc > 0
     logger.info(f"Received {dy_usdc} USDC")
 
     logger.info(f"Test exchange of {dy_usdc} USDC -> WBTC:")
-    tx = pool.exchange(0, 1, dy_usdc * 2, 0, sender=account)
+    tx = pool.exchange(
+        0, 1, dy_usdc * 2, 0, sender=account, **_get_tx_params()
+    )
     dy_wbtc = tx.events.filter(pool.TokenExchange)[0].tokens_bought
     assert dy_wbtc > 0
     logger.info(f"Received {dy_wbtc} WBTC")
@@ -249,7 +276,7 @@ def test_deployment(pool, coins, fee_receiver, account):
     amt_to_remove = int(bal / 4)
     logger.info(f"Remove {amt_to_remove} liquidity in native token (ETH):")
     tx = pool.remove_liquidity_one_coin(
-        amt_to_remove, 2, 0, True, sender=account
+        amt_to_remove, 2, 0, True, sender=account, **_get_tx_params()
     )
     dy_eth = tx.events.filter(pool.RemoveLiquidityOne)[0].coin_amount
     assert dy_eth > 0
@@ -265,7 +292,7 @@ def test_deployment(pool, coins, fee_receiver, account):
 
         logger.info(f"Remove {int(bal/4)} liquidity in {coin_name}:")
         tx = pool.remove_liquidity_one_coin(
-            int(bal / 4), coin_id, 0, False, sender=account
+            int(bal / 4), coin_id, 0, False, sender=account, **_get_tx_params()
         )  # noqa: E501
 
         dy_coin = tx.events.filter(pool.RemoveLiquidityOne)[0].coin_amount
@@ -277,7 +304,7 @@ def test_deployment(pool, coins, fee_receiver, account):
     logger.info("(should not claim since pool hasn't accrued enough profits)")
 
     fees_claimed = pool.balanceOf(fee_receiver)
-    pool.claim_admin_fees(sender=account)
+    pool.claim_admin_fees(sender=account, **_get_tx_params())
     if pool.totalSupply() < 10**18:
         assert pool.balanceOf(fee_receiver) == fees_claimed
         logger.info("No fees claimed.")
@@ -296,7 +323,9 @@ def test_deployment(pool, coins, fee_receiver, account):
     logger.info(
         f"Remove {int(bal/4)} amount of liquidity proportionally (with native ETH):"  # noqa: E501
     )
-    tx = pool.remove_liquidity(int(bal / 4), [0, 0, 0], True, sender=account)
+    tx = pool.remove_liquidity(
+        int(bal / 4), [0, 0, 0], True, sender=account, **_get_tx_params()
+    )
     dy_tokens = tx.events.filter(pool.RemoveLiquidity)[0].token_amounts
     for tkn_amt in dy_tokens:
         assert tkn_amt > 0
@@ -308,7 +337,9 @@ def test_deployment(pool, coins, fee_receiver, account):
     logger.info(
         f"Remove {int(bal/4)} amount of liquidity proportionally (with native ETH):"  # noqa: E501
     )
-    tx = pool.remove_liquidity(int(bal / 4), [0, 0, 0], False, sender=account)
+    tx = pool.remove_liquidity(
+        int(bal / 4), [0, 0, 0], False, sender=account, **_get_tx_params()
+    )
     dy_tokens = tx.return_value
 
     for tkn_amt in dy_tokens:
@@ -317,31 +348,61 @@ def test_deployment(pool, coins, fee_receiver, account):
     logger.info("Successfully tested deployment!")
 
 
-def deploy_amm_factory(fee_receiver, account, weth):
+def deploy_amm_factory(account, fee_receiver, weth, deployed_contracts={}):
 
-    logger.info("Deploying math contract:")
-    math_contract = account.deploy(project.CurveCryptoMathOptimized3)
+    if "math" not in deployed_contracts:
+        logger.info("Deploying math contract:")
+        math_contract = account.deploy(
+            project.CurveCryptoMathOptimized3, **_get_tx_params()
+        )
+    else:
+        math_contract = Contract(deployed_contracts["math"])
 
-    logger.info("Deploying views contract:")
-    views_contract = account.deploy(project.CurveCryptoViews3Optimized)
+    if "views" not in deployed_contracts:
+        logger.info("Deploying views contract:")
+        views_contract = account.deploy(
+            project.CurveCryptoViews3Optimized, **_get_tx_params()
+        )
+    else:
+        views_contract = Contract(deployed_contracts["views"])
 
-    logger.info("Deploying AMM blueprint contract:")
-    amm_impl = deploy_blueprint(project.CurveTricryptoOptimizedWETH, account)
+    if "amm_impl" not in deployed_contracts:
+        logger.info("Deploying AMM blueprint contract:")
+        amm_impl = deploy_blueprint(
+            project.CurveTricryptoOptimizedWETH, account
+        )
+    else:
+        amm_impl = Contract(deployed_contracts["amm_impl"])
 
-    logger.info("Deploy factory:")
-    constructor_args = [fee_receiver, account.address, weth]
-    factory = account.deploy(project.CurveTricryptoFactory, *constructor_args)
-    logger.info(
-        f"Constructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"  # noqa: E501
-    )
+    if "factory" not in deployed_contracts:
+        logger.info("Deploy factory:")
+        factory = project.CurveTricryptoFactory.deploy(
+            fee_receiver,
+            account.address,
+            weth,
+            sender=account,
+            **_get_tx_params(),
+        )
+        constructor_args = [fee_receiver, account.address, weth]
+        logger.info(
+            f"Constructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"  # noqa: E501
+        )
+    else:
+        factory = Contract(deployed_contracts["factory"])
 
     logger.info("Set Pool Implementation:")
-    factory.set_pool_implementation(amm_impl, 0, sender=account)
+    factory.set_pool_implementation(
+        amm_impl, 0, sender=account, **_get_tx_params()
+    )
 
     logger.info("Set Views implementation:")
-    factory.set_views_implementation(views_contract, sender=account)
+    factory.set_views_implementation(
+        views_contract, sender=account, **_get_tx_params()
+    )
 
     logger.info("Set Math implementation:")
-    factory.set_math_implementation(math_contract, sender=account)
+    factory.set_math_implementation(
+        math_contract, sender=account, **_get_tx_params()
+    )
 
     return factory
