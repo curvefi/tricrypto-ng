@@ -144,10 +144,9 @@ PRECISION: constant(uint256) = 10**18  # <------- The precision to convert to.
 A_MULTIPLIER: constant(uint256) = 10000
 packed_precisions: uint256
 
-MATH: immutable(Math)
+MATH: public(immutable(Math))
 coins: public(address[N_COINS])
 factory: public(address)
-math: public(address)
 
 price_scale_packed: uint256  # <------------------------ Internal price scale.
 price_oracle_packed: uint256  # <------- Price target given by moving average.
@@ -241,6 +240,7 @@ def __init__(
     _coins: address[N_COINS],
     _math: address,
     _weth: address,
+    _salt: bytes32,
     packed_precisions: uint256,
     packed_A_gamma: uint256,
     packed_fee_params: uint256,
@@ -252,7 +252,6 @@ def __init__(
     MATH = Math(_math)
 
     self.factory = msg.sender
-    self.math = _math
 
     name = _name
     symbol = _symbol
@@ -282,7 +281,7 @@ def __init__(
     #                   Otherwise, it will always use CACHED_DOMAIN_SEPARATOR.
     #                       see: `_domain_separator()` for its implementation.
     NAME_HASH = keccak256(name)
-    salt = block.prevhash
+    salt = _salt
     CACHED_CHAIN_ID = chain.id
     CACHED_DOMAIN_SEPARATOR = keccak256(
         _abi_encode(

@@ -13,6 +13,7 @@ from vyper.interfaces import ERC20
 
 
 interface Curve:
+    def MATH() -> Math: view
     def A() -> uint256: view
     def gamma() -> uint256: view
     def price_scale(i: uint256) -> uint256: view
@@ -28,7 +29,6 @@ interface Curve:
     def totalSupply() -> uint256: view
     def precisions() -> uint256[N_COINS]: view
     def packed_fee_params() -> uint256: view
-    def math() -> address: view
 
 
 interface Math:
@@ -164,7 +164,7 @@ def _calc_D_ramp(
     swap: address
 ) -> uint256:
 
-    math: address = Curve(swap).math()
+    math: Math = Curve(swap).MATH()
 
     D: uint256 = Curve(swap).D()
     if Curve(swap).future_A_gamma_time() > block.timestamp:
@@ -174,7 +174,7 @@ def _calc_D_ramp(
             _xp[k + 1] = (
                 _xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
             )
-        D = Math(math).newton_D(A, gamma, _xp, 0)
+        D = math.newton_D(A, gamma, _xp, 0)
 
     return D
 
@@ -190,7 +190,7 @@ def _get_dx_fee(
     assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
     assert dy > 0, "do not exchange out 0 coins"
 
-    math: address = Curve(swap).math()
+    math: Math = Curve(swap).MATH()
 
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -209,7 +209,7 @@ def _get_dx_fee(
     for k in range(N_COINS - 1):
         xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
 
-    x_out: uint256[2] = Math(math).get_y(A, gamma, xp, D, i)
+    x_out: uint256[2] = math.get_y(A, gamma, xp, D, i)
     dx: uint256 = x_out[0] - xp[i]
     xp[i] = x_out[0]
     if i > 0:
@@ -228,7 +228,7 @@ def _get_dy_nofee(
     assert i != j and i < N_COINS and j < N_COINS, "coin index out of range"
     assert dx > 0, "do not exchange 0 coins"
 
-    math: address = Curve(swap).math()
+    math: Math = Curve(swap).MATH()
 
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -246,7 +246,7 @@ def _get_dy_nofee(
     for k in range(N_COINS - 1):
         xp[k + 1] = xp[k + 1] * price_scale[k] * precisions[k + 1] / PRECISION
 
-    y_out: uint256[2] = Math(math).get_y(A, gamma, xp, D, j)
+    y_out: uint256[2] = math.get_y(A, gamma, xp, D, j)
     dy: uint256 = xp[j] - y_out[0] - 1
     xp[j] = y_out[0]
     if j > 0:
@@ -262,7 +262,7 @@ def _calc_dtoken_nofee(
     amounts: uint256[N_COINS], deposit: bool, swap: address
 ) -> (uint256, uint256[N_COINS], uint256[N_COINS]):
 
-    math: address = Curve(swap).math()
+    math: Math = Curve(swap).MATH()
 
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -289,7 +289,7 @@ def _calc_dtoken_nofee(
         xp[k + 1] = xp[k + 1] * p / PRECISION
         amountsp[k + 1] = amountsp[k + 1] * p / PRECISION
 
-    D: uint256 = Math(math).newton_D(A, gamma, xp, 0)
+    D: uint256 = math.newton_D(A, gamma, xp, 0)
     d_token: uint256 = token_supply * D / D0
 
     if deposit:
@@ -312,7 +312,7 @@ def _calc_withdraw_one_coin(
     assert token_amount <= token_supply  # dev: token amount more than supply
     assert i < N_COINS  # dev: coin out of range
 
-    math: address = Curve(swap).math()
+    math: Math = Curve(swap).MATH()
 
     xx: uint256[N_COINS] = empty(uint256[N_COINS])
     price_scale: uint256[N_COINS-1] = empty(uint256[N_COINS-1])
@@ -338,7 +338,7 @@ def _calc_withdraw_one_coin(
         xp[k] = xp[k] * xx[k] * p / PRECISION
 
     if Curve(swap).future_A_gamma_time() > block.timestamp:
-        D0 = Math(math).newton_D(A, gamma, xp, 0)
+        D0 = math.newton_D(A, gamma, xp, 0)
     else:
         D0 = Curve(swap).D()
 
@@ -352,7 +352,7 @@ def _calc_withdraw_one_coin(
 
     D -= (dD - D_fee)
 
-    y_out: uint256[2] = Math(math).get_y(A, gamma, xp, D, i)
+    y_out: uint256[2] = math.get_y(A, gamma, xp, D, i)
     dy: uint256 = (xp[i] - y_out[0]) * PRECISION / price_scale_i
     xp[i] = y_out[0]
 
@@ -362,10 +362,10 @@ def _calc_withdraw_one_coin(
 @internal
 @view
 def _fee(xp: uint256[N_COINS], swap: address) -> uint256:
-    math: address = Curve(swap).math()
+    math: Math = Curve(swap).MATH()
     packed_fee_params: uint256 = Curve(swap).packed_fee_params()
     fee_params: uint256[3] = self._unpack(packed_fee_params)
-    f: uint256 = Math(math).reduction_coefficient(xp, fee_params[2])
+    f: uint256 = math.reduction_coefficient(xp, fee_params[2])
     return (fee_params[0] * f + fee_params[1] * (10**18 - f)) / 10**18
 
 

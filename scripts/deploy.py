@@ -165,6 +165,7 @@ def test_deployed_pool(network, account, pool):
 
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
+# @account_option()
 @click.option("--tx", required=True, type=str)
 def get_encoded_constructor_args(network, tx):
 
@@ -192,12 +193,18 @@ def get_encoded_constructor_args(network, tx):
     assert unpacked(packed_precisions) == precisions
 
     # pack fees
-    packed_fee_params = packed([log.mid_fee, log.out_fee, log.fee_gamma])
+    fee_params = [log.mid_fee, log.out_fee, log.fee_gamma]
+    packed_fee_params = packed(fee_params)
+    assert unpacked(packed_fee_params) == fee_params
 
     # pack liquidity rebalancing params
-    packed_rebalancing_params = packed(
-        [log.allowed_extra_profit, log.adjustment_step, log.ma_exp_time]
-    )
+    rebalancing_params = [
+        log.allowed_extra_profit,
+        log.adjustment_step,
+        log.ma_exp_time,
+    ]
+    packed_rebalancing_params = packed(rebalancing_params)
+    assert unpacked(packed_rebalancing_params) == rebalancing_params
 
     # pack A_gamma
     packed_A_gamma = log.A << 128
@@ -217,33 +224,34 @@ def get_encoded_constructor_args(network, tx):
     weth = pool.coins(2)
     assert Contract(weth).symbol() == "WETH"
 
-    constructor_args = encode(
-        [
-            "string",
-            "string",
-            "address[3]",
-            "address",
-            "address",
-            "uint256",
-            "uint256",
-            "uint256",
-            "uint256",
-            "uint256",
-        ],
-        [
-            pool.name(),
-            pool.symbol(),
-            log.coins,
-            pool.math(),
-            weth,
-            packed_precisions,
-            packed_A_gamma,
-            packed_fee_params,
-            packed_rebalancing_params,
-            packed_prices,
-        ],
-    ).hex()
+    args = [
+        pool.name(),
+        pool.symbol(),
+        log.coins,
+        pool.MATH(),
+        weth,
+        packed_precisions,
+        packed_A_gamma,
+        packed_fee_params,
+        packed_rebalancing_params,
+        packed_prices,
+    ]
+    constructor_abi = [
+        "string",
+        "string",
+        "address[3]",
+        "address",
+        "address",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint256",
+    ]
 
+    constructor_args = encode(constructor_abi, args).hex()
+
+    logger.info(f"Constructor args: \n\n{args}\n")
     logger.info(f"Constructor code: \n\n{constructor_args}\n")
 
 

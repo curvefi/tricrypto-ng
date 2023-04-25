@@ -9,6 +9,7 @@ plugins:
   - name: etherscan
   - name: arbitrum
   - name: optimism
+  - name: polygon
 
 default_ecosystem: ethereum
 
@@ -36,6 +37,14 @@ optimism:
   mainnet:
     transaction_acceptance_timeout: 99999999
 
+polygon:
+  default_network: mainnet-fork
+  mainnet_fork:
+    default_provider: hardhat
+    transaction_acceptance_timeout: 99999999
+  mainnet:
+    transaction_acceptance_timeout: 99999999
+
 hardhat:
   port: auto
   fork:
@@ -44,10 +53,13 @@ hardhat:
         upstream_provider: geth
     arbitrum:
       mainnet:
-        upstream_provider: alchemy
+        upstream_provider: geth
     optimism:
       mainnet:
-        upstream_provider: alchemy
+        upstream_provider: geth
+    polygon:
+      mainnet:
+        upstream_provider: geth
 
 geth:
   ethereum:
@@ -56,6 +68,12 @@ geth:
   arbitrum:
     mainnet:
       uri: https://arb-mainnet.g.alchemy.com/v2/{KEY}
+  optimism:
+    mainnet:
+      uri: https://opt-mainnet.g.alchemy.com/v2/{KEY}
+  polygon:
+    mainnet:
+      uri: https://polygon-mainnet.g.alchemy.com/v2/{KEY}
 
 test:
   mnemonic: test test test test test test test test test test test junk

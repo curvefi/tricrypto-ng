@@ -31,6 +31,7 @@ event TricryptoPoolDeployed:
     ma_exp_time: uint256
     initial_prices: uint256[N_COINS-1]
     deployer: address
+    salt: bytes32
 
 event LiquidityGaugeDeployed:
     pool: address
@@ -219,6 +220,7 @@ def deploy_pool(
         packed_prices = p | packed_prices
 
     # pool is an ERC20 implementation
+    _salt: bytes32 = block.prevhash
     pool: address = create_from_blueprint(
         pool_implementation,
         _name,
@@ -226,6 +228,7 @@ def deploy_pool(
         _coins,
         self.math_implementation,
         WETH,
+        _salt,
         packed_precisions,
         packed_A_gamma,
         packed_fee_params,
@@ -259,6 +262,7 @@ def deploy_pool(
         ma_exp_time,
         initial_prices,
         msg.sender,
+        _salt,
     )
 
     return pool
