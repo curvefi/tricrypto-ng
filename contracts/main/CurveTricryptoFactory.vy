@@ -136,7 +136,7 @@ def _pack(x: uint256[3]) -> uint256:
 @external
 def deploy_pool(
     _name: String[32],
-    _symbol: String[30],
+    _symbol: String[32],
     _coins: address[N_COINS],
     implementation_id: uint256,
     A: uint256,
@@ -184,9 +184,6 @@ def deploy_pool(
     assert max(initial_prices[0], initial_prices[1]) < 10**30
 
     assert _coins[0] != _coins[1] and _coins[1] != _coins[2] and _coins[0] != _coins[2], "Duplicate coins"
-
-    name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
-    symbol: String[32] = concat(_symbol, "-f")
 
     decimals: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])

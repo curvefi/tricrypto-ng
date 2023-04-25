@@ -206,6 +206,9 @@ def test_deployment(pool, coins, fee_receiver, account):
         bal = coin_contract.balanceOf(account)
         assert bal > 0, "Not enough coins!"
 
+        if coin_contract.allowance(account, pool) > 0:
+            continue
+
         coin_name = coin_contract.name()
         logger.info(f"Approve pool to spend deployer's {coin_name}:")
 

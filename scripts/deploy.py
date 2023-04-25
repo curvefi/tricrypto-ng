@@ -1,9 +1,10 @@
 import warnings
 
 import click
-from ape import Contract, accounts, project
+from ape import Contract, accounts, networks, project
 from ape.cli import NetworkBoundCommand, account_option, network_option
 from ape.logging import logger
+from eth_abi import encode
 from eth_utils import to_checksum_address
 
 import scripts.deployment_utils as deploy_utils
@@ -60,6 +61,9 @@ def deploy_ethereum(network, account):
 
     deployed_contracts = {
         "math": "0x53cc3e49418380E835fC8caCD5932482c586eFEa",
+        "views": "0x3139Bf97B6376386b8cd1c5919554F055fa2A2AE",
+        "amm_impl": " 0x96EE7fD5023d1171a22fEDB178aeA82912a39Fbd",
+        "factory": "0x01Bb983A4Ac1790DdA8514166ba46454139ccc39",
     }
 
     # --------------------- DEPLOY FACTORY AND POOL ---------------------------
@@ -106,7 +110,6 @@ def deploy_ethereum_tricryptousdc_pool(network, account, factory_handler):
 
         if _network in network:
 
-            fee_receiver = data.fee_receiver_address
             coins = [
                 to_checksum_address(data.usdc_address),
                 to_checksum_address(data.wbtc_address),
@@ -140,11 +143,108 @@ def deploy_ethereum_tricryptousdc_pool(network, account, factory_handler):
     )
     logger.info(f"Success! Deployed pool at {pool}!")
 
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+@click.option("--pool", required=True, type=str)
+def test_deployed_pool(network, account, pool):
+
+    assert "ethereum" in network, "Only Ethereum supported."
+    pool = project.CurveTricryptoOptimizedWETH.at(pool)
+    fee_receiver = pool.fee_receiver()
+    coins = [
+        to_checksum_address(pool.coins(0)),
+        to_checksum_address(pool.coins(1)),
+        to_checksum_address(pool.coins(2)),
+    ]
+
     # Test liquidity actions in deployed pool:
     deploy_utils.test_deployment(pool, coins, fee_receiver, account)
 
-    # Test metaregistry integration:
-    _test_metaregistry_integration(network, factory_handler, pool)
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@click.option("--tx", required=True, type=str)
+def get_encoded_constructor_args(network, tx):
+
+    tx_object = networks.active_provider.get_receipt(tx)
+    logs = tx_object.decode_logs()
+    for log in logs:
+        if log.event_name == "TricryptoPoolDeployed":
+            break
+
+    packed = lambda x: (x[0] << 128) | (x[1] << 64) | x[2]  # noqa: E731
+    unpacked = lambda x: [  # noqa: E731
+        (x >> 128) & 18446744073709551615,
+        (x >> 64) & 18446744073709551615,
+        x & 18446744073709551615,
+    ]
+
+    precisions = []
+    for i in range(3):
+        d = Contract(log.coins[i]).decimals()
+        assert d < 19, "Max 18 decimals for coins"
+        precisions.append(10 ** (18 - d))
+
+    # pack precisions
+    packed_precisions = packed(precisions)
+    assert unpacked(packed_precisions) == precisions
+
+    # pack fees
+    packed_fee_params = packed([log.mid_fee, log.out_fee, log.fee_gamma])
+
+    # pack liquidity rebalancing params
+    packed_rebalancing_params = packed(
+        [log.allowed_extra_profit, log.adjustment_step, log.ma_exp_time]
+    )
+
+    # pack A_gamma
+    packed_A_gamma = log.A << 128
+    packed_A_gamma = packed_A_gamma | log.gamma
+
+    # pack initial prices
+    PRICE_SIZE = 256 // 2
+    PRICE_MASK = 2**PRICE_SIZE - 1
+    packed_prices = 0
+    for k in range(2):
+        packed_prices = packed_prices << PRICE_SIZE
+        p = log.initial_prices[1 - k]
+        assert p < PRICE_MASK
+        packed_prices = p | packed_prices
+
+    pool = project.CurveTricryptoOptimizedWETH.at(log.pool)
+    weth = pool.coins(2)
+    assert Contract(weth).symbol() == "WETH"
+
+    constructor_args = encode(
+        [
+            "string",
+            "string",
+            "address[3]",
+            "address",
+            "address",
+            "uint256",
+            "uint256",
+            "uint256",
+            "uint256",
+            "uint256",
+        ],
+        [
+            pool.name(),
+            pool.symbol(),
+            log.coins,
+            pool.math(),
+            weth,
+            packed_precisions,
+            packed_A_gamma,
+            packed_fee_params,
+            packed_rebalancing_params,
+            packed_prices,
+        ],
+    ).hex()
+
+    logger.info(f"Constructor code: \n\n{constructor_args}\n")
 
 
 @cli.command(cls=NetworkBoundCommand)

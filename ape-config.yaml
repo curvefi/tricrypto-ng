@@ -41,7 +41,7 @@ hardhat:
   fork:
     ethereum:
       mainnet:
-        upstream_provider: alchemy
+        upstream_provider: geth
     arbitrum:
       mainnet:
         upstream_provider: alchemy
@@ -50,6 +50,9 @@ hardhat:
         upstream_provider: alchemy
 
 geth:
+  ethereum:
+    mainnet:
+      uri: http://localhost:9090
   arbitrum:
     mainnet:
       uri: https://arb-mainnet.g.alchemy.com/v2/{KEY}
