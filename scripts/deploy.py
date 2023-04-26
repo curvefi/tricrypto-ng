@@ -6,6 +6,7 @@ from ape.cli import NetworkBoundCommand, account_option, network_option
 from ape.logging import logger
 from eth_abi import encode
 from eth_utils import to_checksum_address
+from hexbytes import HexBytes
 
 import scripts.deployment_utils as deploy_utils
 from scripts.simulate import simulate
@@ -102,7 +103,7 @@ def deploy_factory(network, account):
 @network_option()
 @account_option()
 @click.option("--factory", required=True, type=str)
-def deploy_pool(network, account, factory):
+def deploy_pool_via_factory(network, account, factory):
 
     PARAMS = deploy_utils.get_tricrypto_usdc_params()
 
@@ -142,6 +143,43 @@ def deploy_pool(network, account, factory):
         tx.events.filter(factory.TricryptoPoolDeployed)[0].pool
     )
     logger.info(f"Success! Deployed pool at {pool}!")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+def deploy_pool_directly(network, account):
+
+    assert "ethereum:sepolia" in network
+
+    PARAMS = [
+        "TricryptoUSDC",
+        "crvUSDCWBTCWETH",
+        [
+            "0x51fce89b9f6d4c530698f181167043e1bb4abf89",
+            "0xff82bb6db46ad45f017e2dfb478102c7671b13b3",
+            "0xf531b8f309be94191af87605cfbf600d71c2cfe0",
+        ],
+        "0x8764ADd5e7008ac9a1F44f2664930e8c8fdDc095",
+        "0xf531B8F309Be94191af87605CfBf600D71C2cFe0",
+        HexBytes(
+            "0xa5c6fa39ec823ba77119dea718f2f5a448843c0d9e6e3882ab8ef075aeb9df96"  # noqa: E501
+        ),
+        340282366920938463463559074872505306972160000000001,
+        581076037942835227425498917514114728328226821,
+        1020847100762815390943526144507091182848000000,
+        680564733841876935965653810981216714752000000000865,
+        632244637739103665114950020608225336913174000000000000000000,
+    ]
+
+    logger.info("Deploying Pool replica:")
+    project.CurveTricryptoOptimizedWETH.deploy(
+        *PARAMS,
+        sender=account,
+        **deploy_utils._get_tx_params(),
+    )
+
+    logger.info("Success!")
 
 
 @cli.command(cls=NetworkBoundCommand)
@@ -283,6 +321,8 @@ def get_encoded_constructor_args(network, tx):
 
     logger.info(f"Constructor args: \n\n{args}\n")
     logger.info(f"Constructor code: \n\n{constructor_args}\n")
+
+    return args
 
 
 @cli.command(cls=NetworkBoundCommand)
