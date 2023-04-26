@@ -64,14 +64,12 @@ def tricrypto_factory(
     gauge_implementation,
     math_contract,
     views_contract,
-    weth,
 ):
     with boa.env.prank(deployer):
         factory = boa.load(
             "contracts/main/CurveTricryptoFactory.vy",
             fee_receiver,
             owner,
-            weth,
         )
 
     with boa.env.prank(owner):

@@ -44,9 +44,7 @@ def cli():
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-def deploy_ethereum(network, account):
-
-    assert "ethereum" in network, "Only Ethereum supported."
+def deploy_factory(network, account):
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
@@ -59,12 +57,14 @@ def deploy_ethereum(network, account):
     assert owner, f"Curve's DAO contracts may not be on {network}."
     assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
 
-    deployed_contracts = {
-        "math": "0x53cc3e49418380E835fC8caCD5932482c586eFEa",
-        "views": "0x3139Bf97B6376386b8cd1c5919554F055fa2A2AE",
-        "amm_impl": " 0x96EE7fD5023d1171a22fEDB178aeA82912a39Fbd",
-        "factory": "0x01Bb983A4Ac1790DdA8514166ba46454139ccc39",
-    }
+    deployed_contracts = {}
+    if "ethereum:mainnet" in network:
+        deployed_contracts = {
+            "math": "0x53cc3e49418380E835fC8caCD5932482c586eFEa",
+            "views": "0x3139Bf97B6376386b8cd1c5919554F055fa2A2AE",
+            "amm_impl": "0x96EE7fD5023d1171a22fEDB178aeA82912a39Fbd",
+            "factory": "0x01Bb983A4Ac1790DdA8514166ba46454139ccc39",
+        }
 
     # --------------------- DEPLOY FACTORY AND POOL ---------------------------
 
@@ -84,15 +84,16 @@ def deploy_ethereum(network, account):
 
     # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
 
-    logger.info("Integrate into AddressProvider and Metaregistry ...")
-    logger.info(
-        "Deploying Factory handler to integrate it to the metaregistry:"
-    )
-    account.deploy(
-        project.CurveTricryptoFactoryHandler,
-        factory.address,
-        **deploy_utils._get_tx_params(),
-    )
+    if "ethereum:mainnet" in network:  # only supported in ethereum so far ...
+        logger.info("Integrate into AddressProvider and Metaregistry ...")
+        logger.info(
+            "Deploying Factory handler to integrate it to the metaregistry:"
+        )
+        account.deploy(
+            project.CurveTricryptoFactoryHandler,
+            factory.address,
+            **deploy_utils._get_tx_params(),
+        )
 
     print("Success!")
 
@@ -100,31 +101,30 @@ def deploy_ethereum(network, account):
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-@click.option("--factory_handler", required=True, type=str)
-def deploy_ethereum_tricryptousdc_pool(network, account, factory_handler):
+@click.option("--factory", required=True, type=str)
+def deploy_pool(network, account, factory):
 
-    assert "ethereum" in network, "Only Ethereum supported."
     PARAMS = deploy_utils.get_tricrypto_usdc_params()
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
-        if _network in network:
+        if f"{_network}:" in network:
 
             coins = [
                 to_checksum_address(data.usdc_address),
                 to_checksum_address(data.wbtc_address),
                 to_checksum_address(data.weth_address),
             ]
+            weth = to_checksum_address(data.weth_address)
             PARAMS["coins"] = coins
 
-    factory_handler = Contract(factory_handler)
-    factory = Contract(factory_handler.base_registry())
-
     logger.info("Deploying Pool:")
+    factory = project.CurveTricryptoFactory.at(factory)
     tx = factory.deploy_pool(
         PARAMS["name"],
         PARAMS["symbol"],
         PARAMS["coins"],
+        weth,
         PARAMS["implementation_index"],
         PARAMS["A"],
         PARAMS["gamma"],
@@ -148,9 +148,37 @@ def deploy_ethereum_tricryptousdc_pool(network, account, factory_handler):
 @network_option()
 @account_option()
 @click.option("--pool", required=True, type=str)
+def withdraw_all_from_pool(network, account, pool):
+
+    pool = project.CurveTricryptoOptimizedWETH.at(pool)
+    token_balance = pool.balanceOf(account)
+    total_supply = pool.totalSupply()
+
+    deposit_ratio = token_balance / total_supply
+
+    min_amt_received = [
+        int(0.99 * pool.balances(0) * deposit_ratio),
+        int(0.99 * pool.balances(1) * deposit_ratio),
+        int(0.99 * pool.balances(2) * deposit_ratio),
+    ]
+
+    logger.info(
+        f"Removing {token_balance} liquidity to receive at least "
+        f"{min_amt_received} underlying tokens."
+    )
+    tx = pool.remove_liquidity(
+        token_balance, min_amt_received, True, sender=account
+    )
+    tokens_received = tx.events.filter(pool.RemoveLiquidity)[0].token_amounts
+    logger.info(f"Removed! Received {tokens_received} amount of coins.")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+@click.option("--pool", required=True, type=str)
 def test_deployed_pool(network, account, pool):
 
-    assert "ethereum" in network, "Only Ethereum supported."
     pool = project.CurveTricryptoOptimizedWETH.at(pool)
     fee_receiver = pool.fee_receiver()
     coins = [
@@ -184,7 +212,7 @@ def get_encoded_constructor_args(network, tx):
 
     precisions = []
     for i in range(3):
-        d = Contract(log.coins[i]).decimals()
+        d = project.ERC20Mock.at(log.coins[i]).decimals()
         assert d < 19, "Max 18 decimals for coins"
         precisions.append(10 ** (18 - d))
 
@@ -222,7 +250,7 @@ def get_encoded_constructor_args(network, tx):
 
     pool = project.CurveTricryptoOptimizedWETH.at(log.pool)
     weth = pool.coins(2)
-    assert Contract(weth).symbol() == "WETH"
+    assert project.ERC20Mock.at(weth).symbol() == "WETH"
 
     args = [
         pool.name(),
@@ -263,7 +291,7 @@ def get_encoded_constructor_args(network, tx):
 @click.option("--factory", required=True, type=str)
 def transfer_factory_to_dao(network, account, factory):
 
-    assert "ethereum" in network
+    assert "ethereum:mainnet" in network
     is_sim = "mainnet-fork" in network
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
@@ -305,7 +333,7 @@ def transfer_factory_to_dao(network, account, factory):
 @click.option("--factory", required=True, type=str)
 def deploy_gauge_and_set_up_vote(network, account, pool, factory):
 
-    assert "ethereum" in network
+    assert "ethereum:mainnet" in network
     is_sim = "mainnet-fork" in network
 
     logger.info("Deploying Gauge:")

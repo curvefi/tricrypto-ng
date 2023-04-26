@@ -10,7 +10,6 @@ def empty_factory(deployer, fee_receiver, owner, weth):
             "contracts/main/CurveTricryptoFactory.vy",
             fee_receiver,
             owner,
-            weth,
         )
 
     return factory
@@ -82,14 +81,13 @@ def test_check_pool_data_on_deployment(swap, tricrypto_factory, coins):
     pool_decimals = list(tricrypto_factory.get_decimals(swap.address))
     assert pool_decimals == [coin.decimals() for coin in coins]
 
-    assert tricrypto_factory.get_eth_index(swap.address) == 2
-
 
 def test_revert_deploy_without_implementations(
     empty_factory,
     coins,
     params,
     deployer,
+    weth,
 ):
     with boa.env.prank(deployer):
         with boa.reverts("Pool implementation not set"):
@@ -97,6 +95,7 @@ def test_revert_deploy_without_implementations(
                 "Curve.fi USDC-BTC-ETH",
                 "USDCBTCETH",
                 [coin.address for coin in coins],
+                weth,
                 0,
                 params["A"],
                 params["gamma"],

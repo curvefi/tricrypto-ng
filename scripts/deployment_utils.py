@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 
 import click
-from ape import Contract, networks, project
+from ape import networks, project
 from ape.api.address import Address
 from ape.logging import logger
 from eth_abi import encode
@@ -16,11 +16,12 @@ def _get_tx_params():
     if "mainnet-fork" == networks.active_provider.network.name:
         return {}
 
+    if "sepolia" == networks.active_provider.network.name:
+        return {}
+
     active_provider = networks.active_provider
     max_fee = active_provider.base_fee * 2
     max_priority_fee = int(0.5e9)
-
-    assert max_priority_fee < max_fee
 
     return {"max_fee": max_fee, "max_priority_fee": max_priority_fee}
 
@@ -52,7 +53,9 @@ def deploy_blueprint(contract, account):
 
 def get_deposit_amounts(amount_per_token_usd, initial_prices, coins):
     initial_prices = [10**18] + initial_prices
-    precisions = [10 ** Contract(coin).decimals() for coin in coins]
+    precisions = [
+        10 ** project.ERC20Mock.at(coin).decimals() for coin in coins
+    ]
     deposit_amounts = [
         amount_per_token_usd * precision * 10**18 // price
         for price, precision in zip(initial_prices, precisions)
@@ -77,63 +80,70 @@ ADDRESS_PROVIDER = "0x0000000022d53366457f9d5e68ec105046fc4383"
 
 
 curve_dao_network_settings = {
-    "ethereum": CurveNetworkSettings(
+    "ethereum:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0x40907540d8a6C65c637785e8f8B742ae6b0b9968",
         fee_receiver_address="0xeCb456EA5365865EbAb8a2661B0c503410e9B347",
         usdc_address="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         wbtc_address="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
         weth_address="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     ),
-    "arbitrum": CurveNetworkSettings(
+    "ethereum:sepolia": CurveNetworkSettings(
+        dao_ownership_contract="0xE6DA683076b7eD6ce7eC972f21Eb8F91e9137a17",
+        fee_receiver_address="0xE6DA683076b7eD6ce7eC972f21Eb8F91e9137a17",
+        usdc_address="0x51fCe89b9f6D4c530698f181167043e1bB4abf89",
+        wbtc_address="0xFF82bB6DB46Ad45F017e2Dfb478102C7671B13b3",
+        weth_address="0xf531B8F309Be94191af87605CfBf600D71C2cFe0",
+    ),
+    "arbitrum:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0xb055ebbacc8eefc166c169e9ce2886d0406ab49b",
         fee_receiver_address="0xd4f94d0aaa640bbb72b5eec2d85f6d114d81a88e",
         usdc_address="0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
         wbtc_address="0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f",
         weth_address="0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     ),
-    "optimism": CurveNetworkSettings(
+    "optimism:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
         fee_receiver_address="0xbF7E49483881C76487b0989CD7d9A8239B20CA41",
         usdc_address="0x7f5c764cbc14f9669b88837ca1490cca17c31607",
         wbtc_address="0x68f180fcce6836688e9084f035309e29bf0a2095",
         weth_address="0x4200000000000000000000000000000000000006",
     ),
-    "polygon": CurveNetworkSettings(
+    "polygon:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",
         fee_receiver_address="0x774D1Dba98cfBD1F2Bc3A1F59c494125e07C48F9",
         usdc_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
         wbtc_address="0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6",
         weth_address="0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
     ),
-    "avalanche": CurveNetworkSettings(
+    "avalanche:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0xbabe61887f1de2713c6f97e567623453d3c79f67",
         fee_receiver_address="0x06534b0BF7Ff378F162d4F348390BDA53b15fA35",
         usdc_address="0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
         wbtc_address="0x50b7545627a5162F82A992c33b87aDc75187B218",
         weth_address="0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB",
     ),
-    "gnosis": CurveNetworkSettings(
+    "gnosis:mainnet": CurveNetworkSettings(
         dao_ownership_contract="",  # <--- need to deploy sidechain ownership contract  # noqa: E501
         fee_receiver_address="",  # <--- need to deploy sidechain pool proxy
         usdc_address="0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
         wbtc_address="0x8e5bBbb09Ed1ebdE8674Cda39A0c169401db4252",
         weth_address="0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1",
     ),
-    "fantom": CurveNetworkSettings(
+    "fantom:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0xB055EbbAcc8Eefc166c169e9Ce2886D0406aB49b",  # <--- thin proxy  # noqa: E501
         fee_receiver_address="0x2B039565B2b7a1A9192D4847fbd33B25b836B950",
         usdc_address="0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",  # <-- multichain usdc  # noqa: E501
         wbtc_address="0x321162Cd933E2Be498Cd2267a90534A804051b11",  # <-- multichain wbtc  # noqa: E501
         weth_address="0x74b23882a30290451A17c44f4F05243b6b58C76d",  # <-- multichain weth  # noqa: E501
     ),
-    "celo": CurveNetworkSettings(
+    "celo:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0x56bc95Ded2BEF162131905dfd600F2b9F1B380a4",  # <-- needs to accept transfer ownership for 0x5277A0226d10392295E8D383E9724D6E416d6e6C  # noqa: E501
         fee_receiver_address="0x56bc95Ded2BEF162131905dfd600F2b9F1B380a4",  # <-- Thin proxy, needs to be changed!  # noqa: E501
         usdc_address="0x37f750b7cc259a2f741af45294f6a16572cf5cad",  # <-- wormhole usdc  # noqa: E501
         wbtc_address="",
         weth_address="0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207",  # <-- wormhole weth  # noqa: E501
     ),
-    "kava": CurveNetworkSettings(
+    "kava:mainnet": CurveNetworkSettings(
         dao_ownership_contract="",
         fee_receiver_address="",
         usdc_address="",
@@ -202,7 +212,7 @@ def test_deployment(pool, coins, fee_receiver, account):
     )
 
     for coin in coins:
-        coin_contract = Contract(coin)
+        coin_contract = project.ERC20Mock.at(coin)
         bal = coin_contract.balanceOf(account)
         assert bal > 0, "Not enough coins!"
 
@@ -245,7 +255,7 @@ def test_deployment(pool, coins, fee_receiver, account):
 
     logger.info("------------------------------ Exchange")
 
-    amt_usdc_in = 10 * 10 ** Contract(coins[0]).decimals()
+    amt_usdc_in = 10 * 10 ** project.ERC20Mock.at(coins[0]).decimals()
     logger.info(f"Test exchange_underlying of {amt_usdc_in} USDC -> ETH:")
     tx = pool.exchange_underlying(
         0, 2, amt_usdc_in, 0, sender=account, **_get_tx_params()
@@ -289,7 +299,7 @@ def test_deployment(pool, coins, fee_receiver, account):
     for coin_id, coin in enumerate(coins):
 
         bal = pool.balanceOf(account)
-        coin_contract = Contract(coin)
+        coin_contract = project.ERC20Mock.at(coin)
         coin_name = coin_contract.name()
         coin_balance = coin_contract.balanceOf(account)
 
@@ -359,7 +369,9 @@ def deploy_amm_factory(account, fee_receiver, weth, deployed_contracts={}):
             project.CurveCryptoMathOptimized3, **_get_tx_params()
         )
     else:
-        math_contract = Contract(deployed_contracts["math"])
+        math_contract = project.CurveCryptoMathOptimized3.at(
+            deployed_contracts["math"]
+        )
 
     if "views" not in deployed_contracts:
         logger.info("Deploying views contract:")
@@ -367,7 +379,9 @@ def deploy_amm_factory(account, fee_receiver, weth, deployed_contracts={}):
             project.CurveCryptoViews3Optimized, **_get_tx_params()
         )
     else:
-        views_contract = Contract(deployed_contracts["views"])
+        views_contract = project.CurveCryptoViews3Optimized.at(
+            deployed_contracts["views"]
+        )
 
     if "amm_impl" not in deployed_contracts:
         logger.info("Deploying AMM blueprint contract:")
@@ -375,14 +389,15 @@ def deploy_amm_factory(account, fee_receiver, weth, deployed_contracts={}):
             project.CurveTricryptoOptimizedWETH, account
         )
     else:
-        amm_impl = Contract(deployed_contracts["amm_impl"])
+        amm_impl = project.CurveTricryptoOptimizedWETH.at(
+            deployed_contracts["amm_impl"]
+        )
 
     if "factory" not in deployed_contracts:
         logger.info("Deploy factory:")
         factory = project.CurveTricryptoFactory.deploy(
             fee_receiver,
             account.address,
-            weth,
             sender=account,
             **_get_tx_params(),
         )
@@ -391,7 +406,9 @@ def deploy_amm_factory(account, fee_receiver, weth, deployed_contracts={}):
             f"Constructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"  # noqa: E501
         )
     else:
-        factory = Contract(deployed_contracts["factory"])
+        factory = project.CurveTricryptoFactory.at(
+            deployed_contracts["factory"]
+        )
 
     logger.info("Set Pool Implementation:")
     factory.set_pool_implementation(
