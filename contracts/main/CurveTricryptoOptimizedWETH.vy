@@ -1372,17 +1372,23 @@ def _calc_withdraw_one_coin(
     # charges.
 
     # xp is adjusted assuming xp[0] ~= xp[1] ~= x[2], which is usually not the
-    # case -------------------------------------------------------------------
-    #                                                                        |
-    xp_imprecise: uint256[N_COINS] = xp  #                                   |
-    xp_imprecise[i] -= xp[i] * token_amount / self.totalSupply  # <-----------
-    fee: uint256 = self._fee(xp_imprecise)
+    #  case. We charge self._fee(xp), where xp is an imprecise adjustment post
+    #  withdrawal in one coin. If the withdraw is too large: charge max fee by
+    #   default. This is because the fee calculation will otherwise underflow.
+
+    xp_imprecise: uint256[N_COINS] = xp
+    xp_correction: uint256 = xp[i] * N_COINS * token_amount / self.totalSupply
+    fee: uint256 = self._unpack(self.packed_fee_params)[1]  # <- self.out_fee.
+
+    if xp_correction < xp_imprecise[i]:
+        xp_imprecise[i] -= xp_correction
+        fee = self._fee(xp_imprecise)
 
     dD: uint256 = token_amount * D / token_supply
-    D_fee: uint256 = fee * dD / (2 * 10**10) + 1  # <-------- Actual fee on D.
+    D_fee: uint256 = fee * dD / (2 * 10**10) + 1  # <------- Actual fee on D.
 
-    # ---------- Calculate `approx_fee` (assuming balanced state) in ith token.
-    # --------------------------------- We only need this for fee in the event.
+    # --------- Calculate `approx_fee` (assuming balanced state) in ith token.
+    # -------------------------------- We only need this for fee in the event.
     approx_fee: uint256 = N_COINS * D_fee * xx[i] / D
 
     # ------------------------------------------------------------------------
