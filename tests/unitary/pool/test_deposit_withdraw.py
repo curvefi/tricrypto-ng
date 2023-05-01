@@ -66,6 +66,10 @@ def test_first_deposit_full_withdraw_second_deposit(
     with boa.env.prank(user):
         swap.add_liquidity(quantities, 0)
 
+    assert swap.xcp_profit == 10**18
+    assert swap.xcp_profit_a == 10**18
+    assert swap.virtual_price == 10**18
+
     # test if eth was deposited:
     assert boa.env.get_balance(swap.address) == quantities[2] + 0
     for i in range(len(coins)):
