@@ -1374,7 +1374,7 @@ def _calc_withdraw_one_coin(
     # case -------------------------------------------------------------------
     #                                                                        |
     xp_imprecise: uint256[N_COINS] = xp  #                                   |
-    xp_imprecise[i] -= xp[i] * N_COINS * token_amount / self.totalSupply  # <-
+    xp_imprecise[i] -= xp[i] * token_amount / self.totalSupply  # <-----------
     fee: uint256 = self._fee(xp_imprecise)
 
     dD: uint256 = token_amount * D / token_supply
