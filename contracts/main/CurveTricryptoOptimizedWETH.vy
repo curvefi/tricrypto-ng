@@ -742,6 +742,9 @@ def remove_liquidity_one_coin(
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     approx_fee: uint256 = 0
 
+    # ---------------------------- Claim admin fees before removing liquidity.
+    self._claim_admin_fees()
+
     # ------------------------------------------------------------------------
 
     dy, D, xp, approx_fee = self._calc_withdraw_one_coin(
@@ -765,8 +768,6 @@ def remove_liquidity_one_coin(
     log RemoveLiquidityOne(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
     )
-
-    self._claim_admin_fees()
 
     return dy
 
