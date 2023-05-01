@@ -633,6 +633,7 @@ def add_liquidity(
         self.D = D
         self.virtual_price = 10**18
         self.xcp_profit = 10**18
+        self.xcp_profit_a = 10**18
         self.mint(receiver, d_token)
 
     assert d_token >= min_mint_amount, "Slippage"
