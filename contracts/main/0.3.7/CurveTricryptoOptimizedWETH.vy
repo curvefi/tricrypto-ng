@@ -1372,18 +1372,18 @@ def _calc_withdraw_one_coin(
     # case -------------------------------------------------------------------
     #                                                                        |
     xp_imprecise: uint256[N_COINS] = xp  #                                   |
-    xp_imprecise[i] -= xp[i] * N_COINS * token_amount / D  # <----------------
+    xp_imprecise[i] -= xp[i] * N_COINS * token_amount / self.totalSupply  # <-
     fee: uint256 = self._fee(xp_imprecise)
 
     dD: uint256 = token_amount * D / token_supply
     D_fee: uint256 = fee * dD / (2 * 10**10) + 1  # <-------- Actual fee on D.
-    approx_fee: uint256 = N_COINS * D_fee * xx[i] / D  # <---------- Calculate
-    #                     `approx_fee` (assuming balanced state) in ith token.
 
-    D -= (dD - D_fee)  # <----------------------------------- Charge fee on D.
+    # ---------- Calculate `approx_fee` (assuming balanced state) in ith token.
+    # --------------------------------- We only need this for fee in the event.
+    approx_fee: uint256 = N_COINS * D_fee * xx[i] / D
 
     # ------------------------------------------------------------------------
-
+    D -= (dD - D_fee)  # <----------------------------------- Charge fee on D.
     # --------------------------------- Calculate `y_out`` with `(D - D_fee)`.
     y: uint256 = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, i)[0]
     dy: uint256 = (xp[i] - y) * PRECISION / price_scale_i
