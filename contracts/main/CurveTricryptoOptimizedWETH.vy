@@ -137,7 +137,7 @@ event ClaimAdminFee:
 
 # ----------------------- Storage/State Variables ----------------------------
 
-WETH20: immutable(address)  # <- Address of wrapper contract for native asset.
+WETH20: public(immutable(address))
 
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # <------- The precision to convert to.
@@ -185,7 +185,7 @@ future_packed_rebalancing_params: uint256
 packed_fee_params: public(uint256)  # <---- Packs mid_fee, out_fee, fee_gamma.
 future_packed_fee_params: uint256
 
-ADMIN_FEE: constant(uint256) = 5 * 10**9  # <------------- 50% of earned fees.
+ADMIN_FEE: public(constant(uint256)) = 5 * 10**9  # <----- 50% of earned fees.
 MIN_FEE: constant(uint256) = 5 * 10**5  # <-------------------------- 0.5 BPS.
 MAX_FEE: constant(uint256) = 10 * 10**9
 NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.

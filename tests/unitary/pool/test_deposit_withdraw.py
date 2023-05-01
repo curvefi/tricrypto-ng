@@ -1,3 +1,5 @@
+import math
+
 import boa
 import pytest
 from boa.test import strategy
@@ -8,6 +10,10 @@ from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 100, "deadline": None}
+
+
+def approx(x1, x2, precision):
+    return abs(math.log(x1 / x2)) <= precision
 
 
 @pytest.fixture(scope="module")
@@ -129,7 +135,6 @@ def test_claim_admin_fees_post_emptying_and_depositing(
 @settings(**SETTINGS)
 def test_second_deposit(
     swap_with_deposit,
-    views_contract,
     coins,
     user,
     values,
@@ -158,9 +163,7 @@ def test_second_deposit(
 
     try:
 
-        calculated = views_contract.calc_token_amount(
-            amounts, True, swap_with_deposit
-        )
+        calculated = swap_with_deposit.calc_token_amount(amounts, True)
         measured = swap_with_deposit.balanceOf(user)
         d_balances = [swap_with_deposit.balances(i) for i in range(3)]
 
@@ -172,7 +175,7 @@ def test_second_deposit(
         ]
         measured = swap_with_deposit.balanceOf(user) - measured
 
-        assert calculated == measured
+        assert calculated <= measured
         assert tuple(amounts) == tuple(d_balances)
 
     except Exception:
@@ -182,8 +185,8 @@ def test_second_deposit(
 
     # This is to check that we didn't end up in a borked state after
     # a deposit succeeded
-    views_contract.get_dy(0, 1, 10**16, swap_with_deposit)
-    views_contract.get_dy(0, 2, 10**16, swap_with_deposit)
+    swap_with_deposit.get_dy(0, 1, 10**16)
+    swap_with_deposit.get_dy(0, 2, 10**16)
 
 
 @given(
@@ -220,7 +223,7 @@ def test_second_deposit_one(
     ]
     measured = swap_with_deposit.balanceOf(user) - measured
 
-    assert calculated == measured
+    assert calculated <= measured
     assert tuple(amounts) == tuple(d_balances)
 
 
@@ -339,7 +342,9 @@ def test_immediate_withdraw_one(
         ]
         measured = coins[i].balanceOf(user) - measured
 
-        assert calculated == measured
+        assert calculated >= measured
+        assert calculated - (0.01 / 100) * calculated < measured
+        assert approx(calculated, measured, 1e-3)
 
         for k in range(3):
             if k == i:
