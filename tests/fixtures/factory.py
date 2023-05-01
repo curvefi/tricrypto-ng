@@ -11,7 +11,9 @@ def math_contract(deployer):
 @pytest.fixture(scope="module")
 def math_experimental_contract(deployer):
     with boa.env.prank(deployer):
-        return boa.load("contracts/experimental/CurveCryptoMathOptimized3.vy")
+        return boa.load(
+            "contracts/experimental/secant_method/CurveCryptoMathOptimized3.vy"
+        )
 
 
 @pytest.fixture(scope="module")
@@ -39,7 +41,7 @@ def amm_implementation(deployer, amm_interface):
 @pytest.fixture(scope="module")
 def hyperamm_interface():
     return boa.load_partial(
-        "contracts/experimental/CurveTricryptoHyperOptimizedWETH.vy"
+        "contracts/experimental/secant_method/CurveTricryptoHyperOptimizedWETH.vy"  # noqa: E501
     )
 
 
