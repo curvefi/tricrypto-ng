@@ -1,10 +1,9 @@
-# @version ^0.3.7
-# (c) Curve.Fi, 2023
+# @version 0.3.8
 
 """
 @title CurveCryptoViews3Optimized
-@license MIT
 @author Curve.Fi
+@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice This contract contains view-only external methods which can be
         gas-inefficient when called from smart contracts.
 """

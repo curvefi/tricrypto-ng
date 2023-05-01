@@ -1,5 +1,5 @@
 name: curve-tricrypto-ng
-contracts_folder: contracts/main/0.3.7
+contracts_folder: contracts/main/
 
 plugins:
   - name: vyper

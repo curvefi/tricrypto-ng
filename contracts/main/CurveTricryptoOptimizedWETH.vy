@@ -1,10 +1,9 @@
-# @version ^0.3.7
-# (c) Curve.Fi, 2023
+# @version 0.3.8
 
 """
 @title CurveTricryptoOptimizedWETH
-@license MIT
 @author Curve.Fi
+@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
 @dev All prices in the AMM are with respect to the first token in the pool.
 """
@@ -1013,8 +1012,10 @@ def tweak_price(
 
         for k in range(N_COINS - 1):
 
+            # ----------------- We cap state price that goes into the EMA with
+            #                                                 2 x price_scale.
             price_oracle[k] = unsafe_div(
-                min(last_prices[k], 2 * price_oracle[k]) * (10**18 - alpha) +
+                min(last_prices[k], 2 * price_scale[k]) * (10**18 - alpha) +
                 price_oracle[k] * alpha,  # ^-------- Cap spot price into EMA.
                 10**18
             )
@@ -1726,6 +1727,7 @@ def price_oracle(k: uint256) -> uint256:
     @return uint256 Price oracle value of kth coin.
     """
     price_oracle: uint256 = self._unpack_prices(self.price_oracle_packed)[k]
+    price_scale: uint256 = self._unpack_prices(self.price_scale_packed)[k]
     last_prices_timestamp: uint256 = self.last_prices_timestamp
 
     if last_prices_timestamp < block.timestamp:  # <------------ Update moving
@@ -1740,9 +1742,10 @@ def price_oracle(k: uint256) -> uint256:
             )
         )
 
+        # ---- We cap state price that goes into the EMA with 2 x price_scale.
         return (
-            min(last_prices, 2 * price_oracle) * (10**18 - alpha) +
-            price_oracle * alpha  # ^---------------- Cap spot price into EMA.
+            min(last_prices, 2 * price_scale) * (10**18 - alpha) +
+            price_oracle * alpha
         ) / 10**18
 
     return price_oracle
