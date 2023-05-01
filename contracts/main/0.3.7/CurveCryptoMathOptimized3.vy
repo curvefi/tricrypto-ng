@@ -1,6 +1,6 @@
 # @version 0.3.8
 
-# (c) Curve.Fi, 2023
+# (c) Curve.Fi, 2020-2023
 # AMM Math for 3-coin Curve Cryptoswap Pools
 #
 # Unless otherwise agreed on, only contracts owned by Curve DAO or
@@ -8,8 +8,8 @@
 
 """
 @title CurveTricryptoMathOptimized
-@license MIT
 @author Curve.Fi
+@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice Curve AMM Math for 3 unpegged assets (e.g. ETH, BTC, USD).
 """
 

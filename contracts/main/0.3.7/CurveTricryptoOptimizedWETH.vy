@@ -1,10 +1,9 @@
 # @version 0.3.8
-# (c) Curve.Fi, 2023
 
 """
 @title CurveTricryptoOptimizedWETH
-@license MIT
 @author Curve.Fi
+@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
 @dev All prices in the AMM are with respect to the first token in the pool.
 """

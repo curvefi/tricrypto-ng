@@ -1,8 +1,9 @@
-# @version 0.3.7
+# @version 0.3.8
+
 """
 @title Liquidity Gauge
-@author Curve Finance
-@license MIT
+@author Curve.Fi
+@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice Implementation contract for use with Curve Factory
 """
 from vyper.interfaces import ERC20

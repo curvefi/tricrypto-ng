@@ -1,10 +1,9 @@
 # @version 0.3.8
-# (c) Curve.Fi, 2023
 
 """
 @title Curve Tricrypto Factory
-@license MIT
 @author Curve.Fi
+@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice Permissionless 3-coin cryptoswap pool deployer and registry
 """
 
