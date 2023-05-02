@@ -650,7 +650,8 @@ def remove_liquidity(
     _amount: uint256,
     min_amounts: uint256[N_COINS],
     use_eth: bool = False,
-    receiver: address = msg.sender
+    receiver: address = msg.sender,
+    claim_admin_fees: bool = True,
 ) -> uint256[N_COINS]:
     """
     @notice This withdrawal method is very safe, does no complex math since
@@ -659,11 +660,16 @@ def remove_liquidity(
     @param min_amounts Minimum amounts of tokens to withdraw
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
+    @param claim_fees If True, call self._claim_admin_fees(). Default is True.
     @return uint256[3] Amount of pool tokens received by the `receiver`
     """
     amount: uint256 = _amount
     balances: uint256[N_COINS] = self.balances
     d_balances: uint256[N_COINS] = empty(uint256[N_COINS])
+
+    if claim_admin_fees:
+        self._claim_admin_fees()  # <------ We claim fees so that the DAO gets
+        #         paid before withdrawal. In emergency cases, set it to False.
 
     # -------------------------------------------------------- Burn LP tokens.
 
