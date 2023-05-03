@@ -29,12 +29,14 @@ def swap(
     pool_coins,
     params,
     deployer,
+    weth,
 ):
     with boa.env.prank(deployer):
         swap = tricrypto_factory.deploy_pool(
             "Curve.fi USDC-BTC-ETH",
             "USDCBTCETH",
             [coin.address for coin in pool_coins],
+            weth,
             0,  # <-------- 0th implementation index
             params["A"],
             params["gamma"],

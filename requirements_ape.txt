@@ -5,4 +5,11 @@ pdbpp
 
 # vyper and dev framework:
 git+https://github.com/vyperlang/titanoboa
-eth-ape
+eth-ape>=0.6.8
+vyper
+
+# prices api:
+pycoingecko
+
+# linting:
+pre-commit

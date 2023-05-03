@@ -65,6 +65,7 @@ def swap(
     tricrypto_factory,
     amm_interface,
     coins,
+    weth,
     params,
     deployer,
 ):
@@ -73,6 +74,7 @@ def swap(
             "Curve.fi USDC-BTC-ETH",
             "USDCBTCETH",
             [coin.address for coin in coins],
+            weth,
             0,  # <-------- 0th implementation index
             params["A"],
             params["gamma"],
@@ -94,6 +96,7 @@ def swap_multiprecision(
     amm_interface,
     tricrypto_coins,
     deployer,
+    weth,
 ):
 
     _params = {
@@ -113,6 +116,7 @@ def swap_multiprecision(
             "Curve.fi USDT<>WBTC<>ETH",
             "tricrypto3",
             [coin.address for coin in tricrypto_coins],
+            weth,
             0,
             _params["A"],
             _params["gamma"],

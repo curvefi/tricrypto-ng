@@ -153,9 +153,7 @@ def factory(deployer, fee_receiver, owner, weth, project):
     )
 
     math_contract = project.CurveCryptoMathOptimized3.deploy(sender=deployer)
-    views_contract = project.CurveCryptoViews3Optimized.deploy(
-        math_contract, sender=deployer
-    )
+    views_contract = project.CurveCryptoViews3Optimized.deploy(sender=deployer)
 
     factory = project.CurveTricryptoFactory.deploy(
         fee_receiver, owner, weth, math_contract, sender=deployer
@@ -191,12 +189,13 @@ def params(swap_legacy):
 
 
 @pytest.fixture(scope="module")
-def swap_optimised(deployer, factory, coins, params, user, project):
+def swap_optimised(deployer, factory, coins, params, user, project, weth):
 
     tx = factory.deploy_pool(
         "Curve.fi USDC-BTC-ETH",
         "USDCBTCETH",
         [coin.address for coin in coins],
+        weth,
         0,  # <-------- 0th implementation index
         params["A"],
         params["gamma"],
@@ -212,44 +211,6 @@ def swap_optimised(deployer, factory, coins, params, user, project):
 
     pool_address = tx.events[1].pool
     pool = project.CurveTricryptoOptimizedWETH.at(pool_address)
-
-    for coin in coins:
-        coin.approve(pool, 2**256 - 1, sender=user)
-
-    amounts = _get_deposit_amounts(
-        10**6, [10**18] + params["initial_prices"], coins
-    )
-    pool.add_liquidity(amounts, 0, False, sender=user)
-
-    return pool
-
-
-@pytest.fixture(scope="module")
-def swap_hyperoptimised(deployer, factory, coins, params, user, project):
-
-    tx = factory.deploy_pool(
-        "Curve.fi USDC-BTC-ETH",
-        "USDCBTCETH",
-        [coin.address for coin in coins],
-        1,  # <-------- 1st implementation index
-        params["A"],
-        params["gamma"],
-        params["mid_fee"],
-        params["out_fee"],
-        params["fee_gamma"],
-        params["allowed_extra_profit"],
-        params["adjustment_step"],
-        params["ma_time"],
-        params["initial_prices"],
-        sender=deployer,
-    )
-
-    try:
-        pool_address = tx.events[0].pool
-    except AttributeError:  # <--- janky way to handle blueprints in ape.
-        pool_address = tx.events[1].pool
-
-    pool = project.CurveTricryptoHyperOptimizedWETH.at(pool_address)
 
     for coin in coins:
         coin.approve(pool, 2**256 - 1, sender=user)

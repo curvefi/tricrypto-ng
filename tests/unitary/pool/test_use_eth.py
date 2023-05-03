@@ -124,7 +124,7 @@ def test_add_liquidity_eth(swap, coins, user, amount_usd, use_eth):
 
     if use_eth:
         with boa.env.prank(user):
-            with boa.reverts(dev="incorrect eth amount"):
+            with boa.reverts("dev: incorrect eth amount"):
                 swap.add_liquidity(amounts, 0, True)
 
             swap.add_liquidity(amounts, 0, True, value=amounts[2])
@@ -134,7 +134,7 @@ def test_add_liquidity_eth(swap, coins, user, amount_usd, use_eth):
 
     else:
         with boa.env.prank(user):
-            with boa.reverts(dev="nonzero eth amount"):
+            with boa.reverts("dev: nonzero eth amount"):
                 swap.add_liquidity(amounts, 0, False, value=amounts[2])
 
             swap.add_liquidity(amounts, 0, False)

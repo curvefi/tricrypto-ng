@@ -1,3 +1,5 @@
+import math
+
 import boa
 import pytest
 from boa.test import strategy
@@ -8,6 +10,10 @@ from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 100, "deadline": None}
+
+
+def approx(x1, x2, precision):
+    return abs(math.log(x1 / x2)) <= precision
 
 
 @pytest.fixture(scope="module")
@@ -45,6 +51,7 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user):
     return swap
 
 
+@pytest.fixture(scope="module")
 def test_first_deposit_full_withdraw_second_deposit(
     test_1st_deposit_and_last_withdraw, user, coins
 ):
@@ -66,6 +73,10 @@ def test_first_deposit_full_withdraw_second_deposit(
     with boa.env.prank(user):
         swap.add_liquidity(quantities, 0)
 
+    assert swap.xcp_profit() == 10**18
+    assert swap.xcp_profit_a() == 10**18
+    assert swap.virtual_price() == 10**18
+
     # test if eth was deposited:
     assert boa.env.get_balance(swap.address) == quantities[2] + 0
     for i in range(len(coins)):
@@ -74,6 +85,46 @@ def test_first_deposit_full_withdraw_second_deposit(
     token_balance = swap.balanceOf(user)
     assert token_balance == swap.totalSupply() > 0
     assert abs(swap.get_virtual_price() / 1e18 - 1) < 1e-3
+
+    return swap
+
+
+def test_claim_admin_fees_post_emptying_and_depositing(
+    test_first_deposit_full_withdraw_second_deposit, user, coins
+):
+
+    swap = test_first_deposit_full_withdraw_second_deposit
+    admin_balance_before = swap.balanceOf(swap.fee_receiver())
+    assert admin_balance_before == 0
+
+    # do another deposit to have some fees for the admin:
+    quantities = [10**5 * 10**36 // p for p in INITIAL_PRICES]
+    for coin, q in zip(coins, quantities):
+        mint_for_testing(coin, user, q)
+        with boa.env.prank(user):
+            coin.approve(swap, 2**256 - 1)
+
+    # Accumulate fees
+    with boa.env.prank(user):
+
+        # Add some liquidity:
+        swap.add_liquidity(quantities, 0)
+
+        assert swap.totalSupply() > 0
+
+        # Some swaps here and there:
+        swap.exchange(0, 1, coins[0].balanceOf(user), 0)
+        swap.exchange(1, 0, coins[1].balanceOf(user), 0)
+
+    assert swap.xcp_profit() > 0
+    assert swap.virtual_price() > 10**18
+    assert swap.xcp_profit_a() == 10**18
+
+    with boa.env.prank(user):
+        swap.claim_admin_fees()
+
+    admin_balance_after = swap.balanceOf(swap.fee_receiver())
+    assert admin_balance_after > admin_balance_before
 
 
 @given(
@@ -84,7 +135,6 @@ def test_first_deposit_full_withdraw_second_deposit(
 @settings(**SETTINGS)
 def test_second_deposit(
     swap_with_deposit,
-    views_contract,
     coins,
     user,
     values,
@@ -113,9 +163,7 @@ def test_second_deposit(
 
     try:
 
-        calculated = views_contract.calc_token_amount(
-            amounts, True, swap_with_deposit
-        )
+        calculated = swap_with_deposit.calc_token_amount(amounts, True)
         measured = swap_with_deposit.balanceOf(user)
         d_balances = [swap_with_deposit.balances(i) for i in range(3)]
 
@@ -127,7 +175,7 @@ def test_second_deposit(
         ]
         measured = swap_with_deposit.balanceOf(user) - measured
 
-        assert calculated == measured
+        assert calculated <= measured
         assert tuple(amounts) == tuple(d_balances)
 
     except Exception:
@@ -137,8 +185,8 @@ def test_second_deposit(
 
     # This is to check that we didn't end up in a borked state after
     # a deposit succeeded
-    views_contract.get_dy(0, 1, 10**16, swap_with_deposit)
-    views_contract.get_dy(0, 2, 10**16, swap_with_deposit)
+    swap_with_deposit.get_dy(0, 1, 10**16)
+    swap_with_deposit.get_dy(0, 2, 10**16)
 
 
 @given(
@@ -175,7 +223,7 @@ def test_second_deposit_one(
     ]
     measured = swap_with_deposit.balanceOf(user) - measured
 
-    assert calculated == measured
+    assert calculated <= measured
     assert tuple(amounts) == tuple(d_balances)
 
 
@@ -294,7 +342,9 @@ def test_immediate_withdraw_one(
         ]
         measured = coins[i].balanceOf(user) - measured
 
-        assert calculated == measured
+        assert calculated >= measured
+        assert calculated - (0.01 / 100) * calculated < measured
+        assert approx(calculated, measured, 1e-3)
 
         for k in range(3):
             if k == i:

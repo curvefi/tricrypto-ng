@@ -1,10 +1,9 @@
-# @version ^0.3.7
-# (c) Curve.Fi, 2023
+# @version 0.3.8
 
 """
-@title Curve Factory
-@license MIT
+@title Curve Tricrypto Factory
 @author Curve.Fi
+@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice Permissionless 3-coin cryptoswap pool deployer and registry
 """
 
@@ -20,17 +19,19 @@ interface LiquidityGauge:
 
 event TricryptoPoolDeployed:
     pool: address
+    name: String[64]
+    symbol: String[32]
+    weth: address
     coins: address[N_COINS]
-    A: uint256
-    gamma: uint256
-    mid_fee: uint256
-    out_fee: uint256
-    allowed_extra_profit: uint256
-    fee_gamma: uint256
-    adjustment_step: uint256
-    ma_exp_time: uint256
-    initial_prices: uint256[N_COINS-1]
+    math: address
+    salt: bytes32
+    packed_precisions: uint256
+    packed_A_gamma: uint256
+    packed_fee_params: uint256
+    packed_rebalancing_params: uint256
+    packed_prices: uint256
     deployer: address
+
 
 event LiquidityGaugeDeployed:
     pool: address
@@ -83,8 +84,6 @@ MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
 PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
-WETH: public(immutable(address))
-
 admin: public(address)
 future_admin: public(address)
 
@@ -108,9 +107,7 @@ pool_list: public(address[4294967296])   # master list of pools
 
 
 @external
-def __init__(_fee_receiver: address, _admin: address, _weth: address):
-
-    WETH = _weth
+def __init__(_fee_receiver: address, _admin: address):
 
     self.fee_receiver = _fee_receiver
     self.admin = _admin
@@ -135,9 +132,10 @@ def _pack(x: uint256[3]) -> uint256:
 
 @external
 def deploy_pool(
-    _name: String[32],
-    _symbol: String[10],
+    _name: String[64],
+    _symbol: String[32],
     _coins: address[N_COINS],
+    _weth: address,
     implementation_id: uint256,
     A: uint256,
     gamma: uint256,
@@ -185,9 +183,6 @@ def deploy_pool(
 
     assert _coins[0] != _coins[1] and _coins[1] != _coins[2] and _coins[0] != _coins[2], "Duplicate coins"
 
-    name: String[64] = concat("Curve.fi Factory 3crypto Pool: ", _name)
-    symbol: String[32] = concat(_symbol, "-f")
-
     decimals: uint256[N_COINS] = empty(uint256[N_COINS])
     precisions: uint256[N_COINS] = empty(uint256[N_COINS])
     for i in range(N_COINS):
@@ -222,13 +217,16 @@ def deploy_pool(
         packed_prices = p | packed_prices
 
     # pool is an ERC20 implementation
+    _salt: bytes32 = block.prevhash
+    _math_implementation: address = self.math_implementation
     pool: address = create_from_blueprint(
         pool_implementation,
         _name,
         _symbol,
         _coins,
-        self.math_implementation,
-        WETH,
+        _math_implementation,
+        _weth,
+        _salt,
         packed_precisions,
         packed_A_gamma,
         packed_fee_params,
@@ -251,16 +249,17 @@ def deploy_pool(
 
     log TricryptoPoolDeployed(
         pool,
+        _name,
+        _symbol,
+        _weth,
         _coins,
-        A,
-        gamma,
-        mid_fee,
-        out_fee,
-        allowed_extra_profit,
-        fee_gamma,
-        adjustment_step,
-        ma_exp_time,
-        initial_prices,
+        _math_implementation,
+        _salt,
+        packed_precisions,
+        packed_A_gamma,
+        packed_fee_params,
+        packed_rebalancing_params,
+        packed_prices,
         msg.sender,
     )
 
@@ -306,7 +305,7 @@ def set_fee_receiver(_fee_receiver: address):
     @notice Set fee receiver
     @param _fee_receiver Address that fees are sent to
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdateFeeReceiver(self.fee_receiver, _fee_receiver)
     self.fee_receiver = _fee_receiver
@@ -322,7 +321,7 @@ def set_pool_implementation(
     @param _pool_implementation Address of the new pool implementation
     @param _implementation_index Index of the pool implementation
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdatePoolImplementation(
         _implementation_index,
@@ -340,7 +339,7 @@ def set_gauge_implementation(_gauge_implementation: address):
     @dev Set to empty(address) to prevent deployment of new gauges
     @param _gauge_implementation Address of the new token implementation
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdateGaugeImplementation(self.gauge_implementation, _gauge_implementation)
     self.gauge_implementation = _gauge_implementation
@@ -352,7 +351,7 @@ def set_views_implementation(_views_implementation: address):
     @notice Set views contract implementation
     @param _views_implementation Address of the new views contract
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin,  "dev: admin only"
 
     log UpdateViewsImplementation(self.views_implementation, _views_implementation)
     self.views_implementation = _views_implementation
@@ -364,7 +363,7 @@ def set_math_implementation(_math_implementation: address):
     @notice Set math implementation
     @param _math_implementation Address of the new math contract
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     log UpdateMathImplementation(self.math_implementation, _math_implementation)
     self.math_implementation = _math_implementation
@@ -376,7 +375,7 @@ def commit_transfer_ownership(_addr: address):
     @notice Transfer ownership of this contract to `addr`
     @param _addr Address of the new owner
     """
-    assert msg.sender == self.admin  # dev: admin only
+    assert msg.sender == self.admin, "dev: admin only"
 
     self.future_admin = _addr
 
@@ -387,7 +386,7 @@ def accept_transfer_ownership():
     @notice Accept a pending ownership transfer
     @dev Only callable by the new owner
     """
-    assert msg.sender == self.future_admin  # dev: future admin only
+    assert msg.sender == self.future_admin, "dev: future admin only"
 
     log TransferOwnership(self.admin, msg.sender)
     self.admin = msg.sender
@@ -489,20 +488,6 @@ def get_gauge(_pool: address) -> address:
     @return Implementation contract address
     """
     return self.pool_data[_pool].liquidity_gauge
-
-
-@view
-@external
-def get_eth_index(_pool: address) -> uint256:
-    """
-    @notice Get the index of WETH for a pool
-    @dev Returns max_value(uint256) if WETH is not a coin in the pool
-    """
-    for i in range(N_COINS):
-        if self.pool_data[_pool].coins[i] == WETH:
-            return i
-    a: uint256 = max_value(uint256)
-    return a
 
 
 @view

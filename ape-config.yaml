@@ -1,4 +1,5 @@
 name: curve-tricrypto-ng
+contracts_folder: contracts/main/
 
 plugins:
   - name: vyper
@@ -6,13 +7,20 @@ plugins:
   - name: hardhat
   - name: ledger
   - name: etherscan
+  - name: arbitrum
+  - name: optimism
+  - name: polygon
+
+default_ecosystem: ethereum
 
 ethereum:
   default_network: mainnet-fork
   mainnet_fork:
-    default_provider: hardhat
     transaction_acceptance_timeout: 99999999
+    default_provider: hardhat
   mainnet:
+    transaction_acceptance_timeout: 99999999
+  sepolia:
     transaction_acceptance_timeout: 99999999
 
 hardhat:
@@ -21,9 +29,14 @@ hardhat:
     ethereum:
       mainnet:
         upstream_provider: geth
-        # upstream_provider: alchemy
+      sepolia:
+        upstream_provider: alchemy
 
 geth:
   ethereum:
     mainnet:
       uri: http://localhost:9090
+
+test:
+  mnemonic: test test test test test test test test test test test junk
+  number_of_accounts: 5

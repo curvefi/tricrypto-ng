@@ -316,13 +316,15 @@ class Trader:
         if t > self.t:
             alpha = self._ma_multiplier(t)
             for k in range(1, N):
+
+                last_price = min(price_vector[k], 2 * self.curve.p[k])
                 self.price_oracle[k] = int(
-                    price_vector[k] * (1 - alpha)
-                    + self.price_oracle[k] * alpha
+                    last_price * (1 - alpha) + self.price_oracle[k] * alpha
                 )
+
             self.t = t
 
-    def tweak_price(self, t, a, b):
+    def tweak_price(self, t):
 
         self.ma_recorder(t, self.last_price)
 
