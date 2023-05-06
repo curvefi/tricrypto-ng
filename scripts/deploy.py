@@ -37,6 +37,98 @@ def _test_metaregistry_integration(network, factory_handler, pool):
         assert metaregistry.get_balances(pool) == balances
 
 
+def _get_encoded_constructor_args(tx):
+
+    tx_object = networks.active_provider.get_receipt(tx)
+    logs = tx_object.decode_logs()
+    for log in logs:
+        if log.event_name == "TricryptoPoolDeployed":
+            break
+
+    packed = lambda x: (x[0] << 128) | (x[1] << 64) | x[2]  # noqa: E731
+    unpacked = lambda x: [  # noqa: E731
+        (x >> 128) & 18446744073709551615,
+        (x >> 64) & 18446744073709551615,
+        x & 18446744073709551615,
+    ]
+
+    precisions = []
+    for i in range(3):
+        d = project.ERC20Mock.at(log.coins[i]).decimals()
+        assert d < 19, "Max 18 decimals for coins"
+        precisions.append(10 ** (18 - d))
+
+    # pack precisions
+    packed_precisions = packed(precisions)
+    assert unpacked(packed_precisions) == precisions
+
+    # pack fees
+    fee_params = [log.mid_fee, log.out_fee, log.fee_gamma]
+    packed_fee_params = packed(fee_params)
+    assert unpacked(packed_fee_params) == fee_params
+
+    # pack liquidity rebalancing params
+    rebalancing_params = [
+        log.allowed_extra_profit,
+        log.adjustment_step,
+        log.ma_exp_time,
+    ]
+    packed_rebalancing_params = packed(rebalancing_params)
+    assert unpacked(packed_rebalancing_params) == rebalancing_params
+
+    # pack A_gamma
+    packed_A_gamma = log.A << 128
+    packed_A_gamma = packed_A_gamma | log.gamma
+
+    # pack initial prices
+    PRICE_SIZE = 256 // 2
+    PRICE_MASK = 2**PRICE_SIZE - 1
+    packed_prices = 0
+    for k in range(2):
+        packed_prices = packed_prices << PRICE_SIZE
+        p = log.initial_prices[1 - k]
+        assert p < PRICE_MASK
+        packed_prices = p | packed_prices
+
+    pool = project.CurveTricryptoOptimizedWETH.at(log.pool)
+    weth = pool.coins(2)
+    assert project.ERC20Mock.at(weth).symbol() == "WETH"
+
+    args = [
+        pool.name(),
+        pool.symbol(),
+        log.coins,
+        pool.MATH(),
+        weth,
+        log.salt,
+        packed_precisions,
+        packed_A_gamma,
+        packed_fee_params,
+        packed_rebalancing_params,
+        packed_prices,
+    ]
+    constructor_abi = [
+        "string",
+        "string",
+        "address[3]",
+        "address",
+        "address",
+        "bytes32",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint256",
+    ]
+
+    constructor_args = encode(constructor_abi, args).hex()
+
+    logger.info(f"Constructor args: \n\n{args}\n")
+    logger.info(f"Constructor code: \n\n{constructor_args}\n")
+
+    return args
+
+
 @click.group(short_help="Deploy the project")
 def cli():
     pass
@@ -143,6 +235,7 @@ def deploy_pool_via_factory(network, account, factory):
         tx.events.filter(factory.TricryptoPoolDeployed)[0].pool
     )
     logger.info(f"Success! Deployed pool at {pool}!")
+    _get_encoded_constructor_args(tx)
 
 
 @cli.command(cls=NetworkBoundCommand)
@@ -227,102 +320,6 @@ def test_deployed_pool(network, account, pool):
 
     # Test liquidity actions in deployed pool:
     deploy_utils.test_deployment(pool, coins, fee_receiver, account)
-
-
-@cli.command(cls=NetworkBoundCommand)
-@network_option()
-# @account_option()
-@click.option("--tx", required=True, type=str)
-def get_encoded_constructor_args(network, tx):
-
-    tx_object = networks.active_provider.get_receipt(tx)
-    logs = tx_object.decode_logs()
-    for log in logs:
-        if log.event_name == "TricryptoPoolDeployed":
-            break
-
-    packed = lambda x: (x[0] << 128) | (x[1] << 64) | x[2]  # noqa: E731
-    unpacked = lambda x: [  # noqa: E731
-        (x >> 128) & 18446744073709551615,
-        (x >> 64) & 18446744073709551615,
-        x & 18446744073709551615,
-    ]
-
-    precisions = []
-    for i in range(3):
-        d = project.ERC20Mock.at(log.coins[i]).decimals()
-        assert d < 19, "Max 18 decimals for coins"
-        precisions.append(10 ** (18 - d))
-
-    # pack precisions
-    packed_precisions = packed(precisions)
-    assert unpacked(packed_precisions) == precisions
-
-    # pack fees
-    fee_params = [log.mid_fee, log.out_fee, log.fee_gamma]
-    packed_fee_params = packed(fee_params)
-    assert unpacked(packed_fee_params) == fee_params
-
-    # pack liquidity rebalancing params
-    rebalancing_params = [
-        log.allowed_extra_profit,
-        log.adjustment_step,
-        log.ma_exp_time,
-    ]
-    packed_rebalancing_params = packed(rebalancing_params)
-    assert unpacked(packed_rebalancing_params) == rebalancing_params
-
-    # pack A_gamma
-    packed_A_gamma = log.A << 128
-    packed_A_gamma = packed_A_gamma | log.gamma
-
-    # pack initial prices
-    PRICE_SIZE = 256 // 2
-    PRICE_MASK = 2**PRICE_SIZE - 1
-    packed_prices = 0
-    for k in range(2):
-        packed_prices = packed_prices << PRICE_SIZE
-        p = log.initial_prices[1 - k]
-        assert p < PRICE_MASK
-        packed_prices = p | packed_prices
-
-    pool = project.CurveTricryptoOptimizedWETH.at(log.pool)
-    weth = pool.coins(2)
-    assert project.ERC20Mock.at(weth).symbol() == "WETH"
-
-    args = [
-        pool.name(),
-        pool.symbol(),
-        log.coins,
-        pool.MATH(),
-        weth,
-        log.salt,
-        packed_precisions,
-        packed_A_gamma,
-        packed_fee_params,
-        packed_rebalancing_params,
-        packed_prices,
-    ]
-    constructor_abi = [
-        "string",
-        "string",
-        "address[3]",
-        "address",
-        "address",
-        "bytes32",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint256",
-    ]
-
-    constructor_args = encode(constructor_abi, args).hex()
-
-    logger.info(f"Constructor args: \n\n{args}\n")
-    logger.info(f"Constructor code: \n\n{constructor_args}\n")
-
-    return args
 
 
 @cli.command(cls=NetworkBoundCommand)
