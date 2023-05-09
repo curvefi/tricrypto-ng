@@ -149,5 +149,5 @@ node_modules
 /audits
 
 # temp
-docs/derivatives.pdf
-docs/math.pdf
+docs/
+scripts/experiments/get_p.py

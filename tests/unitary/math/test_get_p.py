@@ -50,6 +50,49 @@ def get_p(
     return boa.loads(get_price_impl)
 
 
+# flake8: noqa: E501
+@pytest.fixture(scope="module")
+def dydx_optimised_math():
+
+    get_price_impl = """
+N_COINS: constant(uint256) = 3
+A_MULTIPLIER: constant(uint256) = 100
+
+@external
+@view
+def get_p(
+    x1: uint256, x2: uint256, x3: uint256, D: uint256, ANN: uint256, gamma: uint256,
+) -> uint256:
+
+    S: uint256 = x1 + x2 + x3
+
+    # we need K0, which is P * N**N / D**N:
+    K: uint256 = 27 * x1 * x2 / D * x3 / D * 10**18 / D
+
+    print("K:", K)
+
+    # G = 3 * K**2 - 2 * K * (2 * gamma + 3) + N_COINS**N_COINS * A * gamma**2 * (S - D) / D + (gamma + 1) * (gamma + 3)
+    G: uint256 = (
+        3 * K**2 / 10**18
+        - 2 * K * (2 * gamma + 3) / 10**18
+        + 27 * ANN * gamma**2 * (S - D) / D / 27 / A_MULTIPLIER / 10**18
+        + (gamma + 10**18) * (gamma + 3*10**18) / 10**18
+    )
+    print("G:", G)
+
+    # G3 = G * D / (N_COINS**N_COINS * A * gamma**2)
+    G3: uint256 = 27 * A_MULTIPLIER * G * D / (N_COINS**N_COINS * ANN * gamma**2 / 10**18) / 10**18
+    print("G3", G3)
+
+    # p_y = (x / y) * ((G3 + y) / (G3 + x))
+    p_y: uint256 = x1 * (G3 + x2) * 10**18 / (x2 * (G3 + x1))
+    print("p_y:", p_y)
+
+    return p_y
+"""
+    return boa.loads(get_price_impl, name="Optimised")
+
+
 def _get_dydx_vyper(swap, i, j, price_calc):
 
     # ANN = swap.A()
@@ -69,7 +112,9 @@ def _get_dydx_vyper(swap, i, j, price_calc):
 
     D = swap.D()
 
-    return price_calc.get_p(x1, x2, x3, D, A, gamma)
+    dxdy = price_calc.get_p(x1, x2, x3, D, A, gamma)
+    print(f"dx/dy {price_calc.compiler_data.contract_name} =", dxdy)
+    return dxdy
 
 
 def _get_prices_vyper(swap, price_calc):
@@ -81,6 +126,8 @@ def _get_prices_vyper(swap, price_calc):
         price_token_1_wrt_0 * swap.price_scale(0) // 10**18,
         price_token_2_wrt_0 * swap.price_scale(1) // 10**18,
     ]
+
+    print(f"prices {price_calc.compiler_data.contract_name} =", prices, "\n")
 
     return prices
 
@@ -122,6 +169,7 @@ def _get_prices_numeric_nofee(swap, views, sell_usd):
 def test_dxdy_similar(
     yuge_swap,
     dydx_safemath,
+    dydx_optimised_math,
     views_contract,
     user,
     dollar_amount,
@@ -143,10 +191,18 @@ def test_dxdy_similar(
     dxdy_numeric_nofee = _get_prices_numeric_nofee(
         yuge_swap, views_contract, sell_usd=(i == 0)
     )
+    dxdy_optimised_math_vyper = _get_prices_vyper(
+        yuge_swap, dydx_optimised_math
+    )
 
     for n in range(2):
 
         assert abs(log(dxdy_vyper[n] / dxdy_numeric_nofee[n])) < 1e-5
+        assert (
+            abs(log(dxdy_optimised_math_vyper[n] / dxdy_numeric_nofee[n]))
+            < 1e-5
+        )
+
         dxdy_swap = yuge_swap.last_prices(n)  # <-- we check unsafe impl here.
         assert abs(log(dxdy_vyper[n] / dxdy_swap)) < 1e-5
 
