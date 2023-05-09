@@ -69,24 +69,26 @@ def get_p(
     # we need K0, which is P * N**N / D**N:
     K: uint256 = 27 * x1 * x2 / D * x3 / D * 10**18 / D
 
-    print("K:", K)
-
     # G = 3 * K**2 - 2 * K * (2 * gamma + 3) + N_COINS**N_COINS * A * gamma**2 * (S - D) / D + (gamma + 1) * (gamma + 3)
     G: uint256 = (
-        3 * K**2 / 10**18
-        - 2 * K * (2 * gamma + 3) / 10**18
+          3 * K**2 / 10**18
         + 27 * ANN * gamma**2 * (S - D) / D / 27 / A_MULTIPLIER / 10**18
         + (gamma + 10**18) * (gamma + 3*10**18) / 10**18
+        - 2 * K * (2 * gamma + 3*10**18) / 10**18
     )
-    print("G:", G)
 
     # G3 = G * D / (N_COINS**N_COINS * A * gamma**2)
-    G3: uint256 = 27 * A_MULTIPLIER * G * D / (N_COINS**N_COINS * ANN * gamma**2 / 10**18) / 10**18
-    print("G3", G3)
+    G3: uint256 = 27 * A_MULTIPLIER * G * D / gamma**2 / (27 * ANN)
 
     # p_y = (x / y) * ((G3 + y) / (G3 + x))
-    p_y: uint256 = x1 * (G3 + x2) * 10**18 / (x2 * (G3 + x1))
-    print("p_y:", p_y)
+    # p_y: uint256 = x1 * (G3 * 10**18 + x2) * 10**18 / x2 / (G3 * 10**18 + x1)
+    p_y: uint256 = x2 * (G3 * 10**18 + x1) * 10**18 / x1 / (G3 * 10**18 + x2)
+
+    # print:
+    # print("K           :", K)
+    # print("G           :", G)
+    # print("G3          :", G3)
+    # print("p_y         :", p_y)
 
     return p_y
 """
@@ -114,6 +116,7 @@ def _get_dydx_vyper(swap, i, j, price_calc):
 
     dxdy = price_calc.get_p(x1, x2, x3, D, A, gamma)
     print(f"dx/dy {price_calc.compiler_data.contract_name} =", dxdy)
+    print("Gas used:", price_calc._computation.get_gas_used())
     return dxdy
 
 
@@ -152,6 +155,8 @@ def _get_prices_numeric_nofee(swap, views, sell_usd):
             dolla_out = views.internal._get_dy_nofee(i, 0, dx, swap)[0]
             prices.append(dolla_out * 10**18 // dx)
 
+    print("Prices Numeric:", prices, "\n")
+
     return prices
 
 
@@ -160,7 +165,7 @@ def _get_prices_numeric_nofee(swap, views, sell_usd):
 
 @given(
     dollar_amount=strategy(
-        "uint256", min_value=5 * 10**4, max_value=5 * 10**5
+        "uint256", min_value=5 * 10**4, max_value=5 * 10**8
     ),
 )
 @settings(**SETTINGS)
