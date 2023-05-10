@@ -1,3 +1,4 @@
+import math
 from decimal import Decimal
 
 import boa
@@ -10,7 +11,7 @@ def dydx_optimised_math():
 
     get_price_impl = """
 N_COINS: constant(uint256) = 3
-A_MULTIPLIER: constant(uint256) = 10000
+A_MULTIPLIER: constant(int256) = 10000
 
 @external
 @view
@@ -19,7 +20,7 @@ def get_p(
 ) -> (int256, int256, int256, int256[N_COINS-1]):
 
     D: int256 = convert(_D, int256)
-    A: int256 = convert(_A_gamma[0] / 27 / A_MULTIPLIER, int256)
+    ANN: int256 = convert(_A_gamma[0], int256)
     gamma: int256 = convert(_A_gamma[1], int256)
     x1: int256 = convert(_xp[0], int256)
     x2: int256 = convert(_xp[1], int256)
@@ -38,20 +39,18 @@ def get_p(
     G: int256 = (
         3 * K**2 / 10**36
         - 2 * K * (2 * gamma * 10**18 + 3*10**36) / 10**36
-        + (gamma2 / D) * (S - D) * A * 27
+        + (27 * ANN * gamma**2 * (S - D) / D / 27 / A_MULTIPLIER)
         + (gamma + 10**18) * (gamma + 3*10**18)
     )
 
     # G3 = G * D / (N_COINS**N_COINS * A * gamma**2)
     # G3 is also dimensionless and in 10**36 space
-    G3: int256 = G * D * 10**18 / (gamma2 * A * 27)
+    G3: int256 = G * D / (27 * ANN * gamma**2) * 10**18 * 27 * 10000 / 10**18
 
     # p = (x / y) * ((G3 + y) / (G3 + x))
-    P_x1x2: int256 = P / x3
-    P_x1x3: int256 = P / x2
     p: int256[N_COINS-1] = [
-        (x1 * G3 + P_x1x2) / (x2 * G3 + P_x1x2),
-        (x1 * G3 + P_x1x3) / (x3 * G3 + P_x1x3),
+        x1 * (G3 + x2) / x2 * 10**18 / (G3 + x1),
+        x1 * (G3 + x3) / x3 * 10**18 / (G3 + x1),
     ]
 
     return K, G, G3, p
@@ -79,7 +78,7 @@ def get_p_decimal(X, D, ANN, gamma):
         + (N**N * ANN * gamma**2 * (S - D) / D / 27 / 10000)
         + (gamma + 10**18) * (gamma + 3 * 10**18)
     )
-    G3 = 10**18 * 27 * 10000 * G * D / (N**N * ANN * gamma**2) / 10**18
+    G3 = G * D / (N**N * ANN * gamma**2) * 10**18 * 27 * 10000 / 10**18
     p = [
         x * (G3 + y) / y * 10**18 / (G3 + x),
         x * (G3 + z) / z * 10**18 / (G3 + x),
@@ -89,9 +88,17 @@ def get_p_decimal(X, D, ANN, gamma):
 
 def _check_p(a, b):
 
-    if a != b:
-        assert a - b <= 1
-        return
+    assert a > 0
+    assert b > 0
+
+    if a - b <= 1:
+        return True
+
+    return approx(a, b, 1e-5)
+
+
+def approx(x1, x2, precision):
+    return abs(math.log(x1 / x2)) <= precision
 
 
 def test_against_expt(dydx_optimised_math):
@@ -104,18 +111,15 @@ def test_against_expt(dydx_optimised_math):
         479703029155498241214,
     ]
     D = 798348646635793903194
-    K0 = 760485295403175182482900094928488925
-    G = 203347417738054708080273133352508728
-    G3 = 279693542256645859139
     dydx = 950539494815349606
     dzdx = 589388920722357662
 
-    output_vyper = dydx_optimised_math.get_p(xp, D, [ANN, gamma])
-    output_python = get_p_decimal(xp, D, ANN, gamma)
-
     # test python implementation:
-    _check_p(output_python[3][0], dydx)
-    _check_p(output_python[3][1], dzdx)
+    output_python = get_p_decimal(xp, D, ANN, gamma)
+    assert _check_p(output_python[3][0], dydx)
+    assert _check_p(output_python[3][1], dzdx)
 
     # test vyper implementation
-    pass
+    output_vyper = dydx_optimised_math.get_p(xp, D, [ANN, gamma])
+    assert _check_p(output_vyper[3][0], dydx)
+    assert _check_p(output_vyper[3][1], dzdx)
