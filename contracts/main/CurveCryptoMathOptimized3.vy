@@ -583,19 +583,22 @@ def get_p(
         + unsafe_mul(unsafe_add(gamma, 10**18), unsafe_add(gamma, 3*10**18))
     )
 
+    # Safety check: ensure G is positive:
+    assert G > 0, "dev: G must be greater than 0"
+
     # G3 = G * D / (N**N * ANN * gamma**2)
     # G3 is in 10**36 precision and is dimensionless.
-    G3: int256 = unsafe_div(
-        unsafe_div(G * D, NN_A_gamma2) * 10**18 * 27 * 10000,
-        10**18
+    G3: uint256 = convert(
+        unsafe_div(unsafe_div(G * D, NN_A_gamma2) * 10**18 * 27 * 10000, 10**18),
+        uint256
     )
 
     # p_xy = x * (G3 + y) / y * 10**18 / (G3 + x)
     # p_xz = x * (G3 + z) / z * 10**18 / (G3 + x)
     # p is in 10**18 precision.
     return [
-        convert(unsafe_div(unsafe_div(x * (G3 + y), y) * 10**18, G3 + x), uint256),
-        convert(unsafe_div(unsafe_div(x * (G3 + z), z) * 10**18, unsafe_add(G3, x)), uint256),
+        unsafe_div(unsafe_div(_xp[0] * (G3 + _xp[1]), _xp[1]) * 10**18, G3 + _xp[0]),
+        unsafe_div(unsafe_div(_xp[0] * (G3 + _xp[2]), _xp[2]) * 10**18, unsafe_add(G3, _xp[0])),
     ]
 
 
