@@ -554,8 +554,10 @@ def get_p(
     y: int256 = convert(_xp[1], int256)
     z: int256 = convert(_xp[2], int256)
 
-    NN_A_gamma2: int256 = unsafe_mul(27 * ANN, unsafe_mul(gamma, gamma))
     S: int256 = unsafe_add(unsafe_add(x, y), z)
+
+    # constant which is in 10**36 precision:
+    NN_A_gamma2: int256 = unsafe_mul(27 * ANN, unsafe_mul(gamma, gamma))
 
     # K = P * N**N / D**N.
     # K is dimensionless and has 10**36 precision:
@@ -567,8 +569,13 @@ def get_p(
         D
     )
 
-    # G = 3 * K**2 + N_COINS**N_COINS * A * gamma**2 * (S - D) / D + (gamma + 1) * (gamma + 3) - 2 * K * (2 * gamma + 3)
-    # G is in 10**36 space and is also dimensionless.
+    # G = (
+    #     3 * K**2
+    #     - 2 * K * (2 * gamma + 3)
+    #     + N_COINS**N_COINS * A * gamma**2 * (S - D) / D
+    #     + (gamma + 1) * (gamma + 3)
+    # )
+    # G is in 10**36 precision and is dimensionless.
     G: int256 = (
         unsafe_div(3 * K**2, 10**36)
         - unsafe_div(K * (unsafe_add(unsafe_mul(4 * gamma, 10**18), 6*10**36)), 10**36)
@@ -576,11 +583,16 @@ def get_p(
         + unsafe_mul(unsafe_add(gamma, 10**18), unsafe_add(gamma, 3*10**18))
     )
 
+    # G3 = G * D / (N**N * ANN * gamma**2)
+    # G3 is in 10**36 precision and is dimensionless.
     G3: int256 = unsafe_div(
         unsafe_div(G * D, NN_A_gamma2) * 10**18 * 27 * 10000,
         10**18
     )
 
+    # p_xy = x * (G3 + y) / y * 10**18 / (G3 + x)
+    # p_xz = x * (G3 + z) / z * 10**18 / (G3 + x)
+    # p is in 10**18 precision.
     return [
         convert(unsafe_div(unsafe_div(x * (G3 + y), y) * 10**18, G3 + x), uint256),
         convert(unsafe_div(unsafe_div(x * (G3 + z), z) * 10**18, unsafe_add(G3, x)), uint256),
