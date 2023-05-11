@@ -8,8 +8,8 @@ from tests.unitary.pool.stateful.stateful_base import StatefulBase
 from tests.utils import simulation_int_many as sim
 from tests.utils.tokens import mint_for_testing
 
-MAX_SAMPLES = 20
-STEP_COUNT = 10
+MAX_SAMPLES = 200
+STEP_COUNT = 100
 
 
 def approx(x1, x2, precision):

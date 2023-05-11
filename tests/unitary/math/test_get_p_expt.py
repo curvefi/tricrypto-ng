@@ -3,6 +3,13 @@ from decimal import Decimal
 
 import boa
 import pytest
+from boa.test import strategy
+from hypothesis import given, settings
+
+from tests.fixtures.pool import INITIAL_PRICES
+from tests.utils.tokens import mint_for_testing
+
+SETTINGS = {"max_examples": 1000, "deadline": None}
 
 
 # flake8: noqa: E501
@@ -17,43 +24,47 @@ A_MULTIPLIER: constant(int256) = 10000
 @view
 def get_p(
     _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[N_COINS-1]
-) -> (int256, int256, int256, int256[N_COINS-1]):
+) -> int256[N_COINS-1]:
 
     D: int256 = convert(_D, int256)
     ANN: int256 = convert(_A_gamma[0], int256)
     gamma: int256 = convert(_A_gamma[1], int256)
-    x1: int256 = convert(_xp[0], int256)
-    x2: int256 = convert(_xp[1], int256)
-    x3: int256 = convert(_xp[2], int256)
-    gamma2: int256 = unsafe_mul(gamma, gamma)
+    x: int256 = convert(_xp[0], int256)
+    y: int256 = convert(_xp[1], int256)
+    z: int256 = convert(_xp[2], int256)
 
-    S: int256 = x1 + x2 + x3
+    NN_A_gamma2: int256 = unsafe_mul(27 * ANN, unsafe_mul(gamma, gamma))
+    S: int256 = unsafe_add(unsafe_add(x, y), z)
 
     # K = P * N**N / D**N.
     # K is dimensionless and has 10**36 precision:
-    P: int256 = x1 * x2 * x3
-    K: int256 = 27 * P / D * 10**18 / D * 10**18 / D
+    K: int256 = unsafe_div(
+        unsafe_div(
+            unsafe_div(27 * x * y, D) * z,
+            D
+        ) * 10**36,
+        D
+    )
 
     # G = 3 * K**2 + N_COINS**N_COINS * A * gamma**2 * (S - D) / D + (gamma + 1) * (gamma + 3) - 2 * K * (2 * gamma + 3)
     # G is in 10**36 space and is also dimensionless.
     G: int256 = (
-        3 * K**2 / 10**36
-        - 2 * K * (2 * gamma * 10**18 + 3*10**36) / 10**36
-        + (27 * ANN * gamma**2 * (S - D) / D / 27 / A_MULTIPLIER)
-        + (gamma + 10**18) * (gamma + 3*10**18)
+        unsafe_div(3 * K**2, 10**36)
+        - unsafe_div(2 * K * (unsafe_add(unsafe_mul(2 * gamma, 10**18), 3*10**36)), 10**36)
+        + unsafe_div(unsafe_div(unsafe_div(NN_A_gamma2 * (S - D), D), 27), A_MULTIPLIER)
+        + unsafe_mul(unsafe_add(gamma, 10**18), unsafe_add(gamma, 3*10**18))
     )
 
-    # G3 = G * D / (N_COINS**N_COINS * A * gamma**2)
-    # G3 is also dimensionless and in 10**36 space
-    G3: int256 = G * D / (27 * ANN * gamma**2) * 10**18 * 27 * 10000 / 10**18
-
-    # p = (x / y) * ((G3 + y) / (G3 + x))
+    G3: int256 = unsafe_div(
+        unsafe_div(G * D, NN_A_gamma2) * 10**18 * 27 * 10000,
+        10**18
+    )
     p: int256[N_COINS-1] = [
-        x1 * (G3 + x2) / x2 * 10**18 / (G3 + x1),
-        x1 * (G3 + x3) / x3 * 10**18 / (G3 + x1),
+        unsafe_div(unsafe_div(x * (G3 + y), y) * 10**18, G3 + x),
+        unsafe_div(unsafe_div(x * (G3 + z), z) * 10**18, unsafe_add(G3, x)),
     ]
 
-    return K, G, G3, p
+    return p
 """
     return boa.loads(get_price_impl, name="Optimised")
 
@@ -83,7 +94,11 @@ def get_p_decimal(X, D, ANN, gamma):
         x * (G3 + y) / y * 10**18 / (G3 + x),
         x * (G3 + z) / z * 10**18 / (G3 + x),
     ]
-    return K0, G, G3, p
+    return p
+
+
+def approx(x1, x2, precision=1e-5):
+    return abs(math.log(x1 / x2)) <= precision
 
 
 def _check_p(a, b):
@@ -91,14 +106,59 @@ def _check_p(a, b):
     assert a > 0
     assert b > 0
 
-    if a - b <= 1:
+    if abs(a - b) <= 1:
         return True
 
     return approx(a, b, 1e-5)
 
 
-def approx(x1, x2, precision):
-    return abs(math.log(x1 / x2)) <= precision
+def _get_prices_vyper(swap, price_calc):
+
+    A = swap.A()
+    gamma = swap.gamma()
+    xp = swap.internal.xp()
+    D = swap.D()
+
+    try:
+        p = price_calc.get_p(xp, D, [A, gamma])
+    except:
+        breakpoint()
+
+    price_token_1_wrt_0 = p[0]
+    price_token_2_wrt_0 = p[1]
+
+    prices = [
+        price_token_1_wrt_0 * swap.price_scale(0) // 10**18,
+        price_token_2_wrt_0 * swap.price_scale(1) // 10**18,
+    ]
+
+    return prices
+
+
+def _get_prices_numeric_nofee(swap, views, sell_usd):
+
+    if sell_usd:
+
+        dx = 10**16  # 0.01 USD
+        dy = [
+            views.internal._get_dy_nofee(0, 1, dx, swap)[0],
+            views.internal._get_dy_nofee(0, 2, dx, swap)[0],
+        ]
+        prices = [dx * 10**18 // dy[0], dx * 10**18 // dy[1]]
+
+    else:
+
+        prices = []
+        for i in range(1, 3):
+
+            dx = int(0.01 * 10**36 // INITIAL_PRICES[i])
+            dolla_out = views.internal._get_dy_nofee(i, 0, dx, swap)[0]
+            prices.append(dolla_out * 10**18 // dx)
+
+    return prices
+
+
+# ----- Tests -----
 
 
 def test_against_expt(dydx_optimised_math):
@@ -111,15 +171,112 @@ def test_against_expt(dydx_optimised_math):
         479703029155498241214,
     ]
     D = 798348646635793903194
-    dydx = 950539494815349606
-    dzdx = 589388920722357662
+    p = [950539494815349606, 589388920722357662]
 
     # test python implementation:
     output_python = get_p_decimal(xp, D, ANN, gamma)
-    assert _check_p(output_python[3][0], dydx)
-    assert _check_p(output_python[3][1], dzdx)
+    assert _check_p(output_python[0], p[0])
+    assert _check_p(output_python[1], p[1])
 
     # test vyper implementation
     output_vyper = dydx_optimised_math.get_p(xp, D, [ANN, gamma])
-    assert _check_p(output_vyper[3][0], dydx)
-    assert _check_p(output_vyper[3][1], dzdx)
+    assert _check_p(output_vyper[0], p[0])
+    assert _check_p(output_vyper[1], p[1])
+
+
+@given(
+    dollar_amount=strategy(
+        "uint256", min_value=5 * 10**4, max_value=5 * 10**8
+    ),
+)
+@settings(**SETTINGS)
+@pytest.mark.parametrize("i", [0, 1, 2])
+@pytest.mark.parametrize("j", [0, 1, 2])
+def test_dxdy_similar(
+    yuge_swap,
+    dydx_optimised_math,
+    views_contract,
+    user,
+    dollar_amount,
+    coins,
+    i,
+    j,
+):
+
+    if i == j:
+        return
+
+    dx = dollar_amount * 10**36 // INITIAL_PRICES[i]
+    mint_for_testing(coins[i], user, dx)
+
+    with boa.env.prank(user):
+        yuge_swap.exchange(i, j, dx, 0)
+
+    dxdy_vyper = _get_prices_vyper(yuge_swap, dydx_optimised_math)
+    dxdy_numeric_nofee = _get_prices_numeric_nofee(
+        yuge_swap, views_contract, sell_usd=(i == 0)
+    )
+
+    for n in range(2):
+
+        assert abs(math.log(dxdy_vyper[n] / dxdy_numeric_nofee[n])) < 1e-5
+        assert approx(dxdy_vyper[n], dxdy_numeric_nofee[n])
+
+        dxdy_swap = yuge_swap.last_prices(n)  # <-- we check unsafe impl here.
+        assert abs(math.log(dxdy_vyper[n] / dxdy_swap)) < 1e-5
+
+
+@given(
+    dollar_amount=strategy(
+        "uint256", min_value=10**4, max_value=4 * 10**5
+    ),
+)
+@settings(**SETTINGS)
+@pytest.mark.parametrize("j", [1, 2])
+def test_dxdy_pump(
+    yuge_swap, dydx_optimised_math, user, dollar_amount, coins, j
+):
+
+    dxdy_math_0 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
+    dxdy_swap_0 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+
+    dx = dollar_amount * 10**18
+    mint_for_testing(coins[0], user, dx)
+
+    with boa.env.prank(user):
+        yuge_swap.exchange(0, j, dx, 0)
+
+    dxdy_math_1 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
+    dxdy_swap_1 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+
+    for n in range(2):
+        assert dxdy_math_1[n] > dxdy_math_0[n]
+        assert dxdy_swap_1[n] > dxdy_swap_0[n]
+
+
+@given(
+    dollar_amount=strategy(
+        "uint256", min_value=10**4, max_value=4 * 10**5
+    ),
+)
+@settings(**SETTINGS)
+@pytest.mark.parametrize("j", [1, 2])
+def test_dxdy_dump(
+    yuge_swap, dydx_optimised_math, user, dollar_amount, coins, j
+):
+
+    dxdy_math_0 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
+    dxdy_swap_0 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+
+    dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
+    mint_for_testing(coins[j], user, dx)
+
+    with boa.env.prank(user):
+        yuge_swap.exchange(j, 0, dx, 0)
+
+    dxdy_math_1 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
+    dxdy_swap_1 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+
+    for n in range(2):
+        assert dxdy_math_1[n] < dxdy_math_0[n]
+        assert dxdy_swap_1[n] < dxdy_swap_0[n]

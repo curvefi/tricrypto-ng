@@ -535,10 +535,8 @@ def newton_D(
 @external
 @view
 def get_p(
-    _xp: uint256[N_COINS],
-    _D: uint256,
-    _A_gamma: uint256[2],
-) -> uint256[N_COINS - 1]:
+    _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[N_COINS-1]
+) -> uint256[N_COINS-1]:
     """
     @notice Calculates dx/dy.
     @dev Output needs to be multiplied with price_scale to get the actual value.
@@ -552,218 +550,41 @@ def get_p(
     D: int256 = convert(_D, int256)
     ANN: int256 = convert(_A_gamma[0], int256)
     gamma: int256 = convert(_A_gamma[1], int256)
-    x1: int256 = convert(_xp[0], int256)
-    x2: int256 = convert(_xp[1], int256)
-    x3: int256 = convert(_xp[2], int256)
-    gamma2: int256 = unsafe_mul(gamma, gamma)
+    x: int256 = convert(_xp[0], int256)
+    y: int256 = convert(_xp[1], int256)
+    z: int256 = convert(_xp[2], int256)
 
-    # (10**18 + gamma)*(-10**18 + gamma*(-2*10**18 + (-10**18 + 10**18*A/10000)*gamma/10**18)/10**18)/10**18
-    # this entire expression can be unsafe:
-    s1: int256 = unsafe_div(
-        unsafe_mul(
-            unsafe_add(10**18, gamma),
-            unsafe_add(
-                -10**18,
-                unsafe_div(
-                    unsafe_mul(
-                        gamma,
-                        unsafe_add(
-                            -2 * 10**18,
-                            unsafe_div(
-                                unsafe_mul(
-                                    unsafe_add(
-                                        -10**18,
-                                        unsafe_div(
-                                            unsafe_mul(10**18, ANN),
-                                            convert(A_MULTIPLIER, int256),
-                                        ),
-                                    ),
-                                    gamma,
-                                ),
-                                10**18,
-                            ),
-                        ),
-                    ),
-                    10**18,
-                ),
-            ),
-        ),
-        10**18,
-    )
+    NN_A_gamma2: int256 = unsafe_mul(27 * ANN, unsafe_mul(gamma, gamma))
+    S: int256 = unsafe_add(unsafe_add(x, y), z)
 
-    # 81*(10**18 + gamma*(2*10**18 + gamma + 10**18*9*A/27/10000*gamma/10**18)/10**18)*x1/D*x2/D*x3/D
-    # Multiplication by x1, x2 and x3 needs to be safe:
-    s2: int256 = unsafe_div(
-        unsafe_mul(
-            gamma,
-            unsafe_add(
-                unsafe_add(2 * 10**18, gamma),
-                unsafe_div(
-                    unsafe_mul(
-                        unsafe_div(
-                            unsafe_div(
-                                unsafe_mul(10**18 * 9, ANN), 27
-                            ),
-                            convert(A_MULTIPLIER, int256),
-                        ),
-                        gamma,
-                    ),
-                    10**18,
-                ),
-            )
-        ),
-        10**18,
-    )
-    s2 = unsafe_div(
+    # K = P * N**N / D**N.
+    # K is dimensionless and has 10**36 precision:
+    K: int256 = unsafe_div(
         unsafe_div(
-            unsafe_div(
-                unsafe_mul(81, (10**18 + s2)) * x1, D
-            ) * x2,
-            D,
-        ) * x3,
-        D
-    )
-
-    # 2187*(10**18 + gamma)*x1/D*x1/D*x2/D*x2/D*x3/D*x3/D
-    # Same as before: multiplication by x1, x2 or x3 should be safe
-    s3: int256 = unsafe_mul(2187, unsafe_add(10**18, gamma))
-    s3 = unsafe_div(
-        unsafe_div(
-            unsafe_div(s3 * x1, D) * x2, D
-        ) * x3,
-        D
-    )
-    s3 = unsafe_div(
-        unsafe_div(
-            unsafe_div(s3 * x1, D) * x2, D
-        ) * x3,
-        D
-    )
-
-    # 10**18*19683*x1/D*x1/D*x1/D*x2/D*x2/D*x2/D*x3/D*x3/D*x3/D
-    # Same as before.
-    s4: int256 = 10**18 * 19683 * x1
-    s4 = unsafe_div(unsafe_div(s4, D) * x2, D) * x3
-    s4 = unsafe_div(
-        unsafe_div(
-            unsafe_div(
-                unsafe_div(
-                    unsafe_div(
-                        unsafe_div(
-                            unsafe_div(s4, D) * x1,
-                            D
-                        ) * x2,
-                        D
-                    ) * x3,
-                    D,
-                ) * x1,
-                D
-            ) * x2,
+            unsafe_div(27 * x * y, D) * z,
             D
-        ) * x3,
+        ) * 10**36,
         D
     )
 
-    a: int256 = s1 + s2 + s4 - s3
-
-    # 10**18*729*A*x1/D*x2/D*x3/D*gamma**2/D/27/10000
-    b: int256 = unsafe_div(
-        unsafe_div(
-            unsafe_div(
-                unsafe_div(
-                    unsafe_div(
-                        unsafe_mul(10**18 * 27, ANN),
-                        convert(A_MULTIPLIER, int256),
-                    ) * x1,
-                    D,
-                ) * x2,
-                D,
-            ) * x3,
-            D,
-        ) * gamma2,
-        D,
+    # G = 3 * K**2 + N_COINS**N_COINS * A * gamma**2 * (S - D) / D + (gamma + 1) * (gamma + 3) - 2 * K * (2 * gamma + 3)
+    # G is in 10**36 space and is also dimensionless.
+    G: int256 = (
+        unsafe_div(3 * K**2, 10**36)
+        - unsafe_div(2 * K * (unsafe_add(unsafe_mul(2 * gamma, 10**18), 3*10**36)), 10**36)
+        + unsafe_div(unsafe_div(unsafe_div(NN_A_gamma2 * (S - D), D), 27), 10000)
+        + unsafe_mul(unsafe_add(gamma, 10**18), unsafe_add(gamma, 3*10**18))
     )
 
-    # 27*A*gamma**2*(10**18 + gamma)/D/27/10000
-    # entire expression can be unsafe:
-    c: int256 = unsafe_div(
-        unsafe_div(
-            unsafe_div(
-                unsafe_mul(
-                    27,
-                    unsafe_mul(
-                        ANN,
-                        unsafe_mul(
-                            gamma2,
-                            unsafe_add(10**18, gamma)
-                        )
-                    )
-                ),
-                D
-            ),
-            27
-        ),
-        convert(A_MULTIPLIER, int256)
+    G3: int256 = unsafe_div(
+        unsafe_div(G * D, NN_A_gamma2) * 10**18 * 27 * 10000,
+        10**18
     )
 
     return [
-        self._get_partial_derivative(x2, x1, x3, a, b, c),
-        self._get_partial_derivative(x3, x1, x2, a, b, c),
+        convert(unsafe_div(unsafe_div(x * (G3 + y), y) * 10**18, G3 + x), uint256),
+        convert(unsafe_div(unsafe_div(x * (G3 + z), z) * 10**18, unsafe_add(G3, x)), uint256),
     ]
-
-
-@internal
-@view
-def _get_partial_derivative(
-    x1: int256,
-    x2: int256,
-    x3: int256,
-    a: int256,
-    b: int256,
-    c: int256,
-) -> uint256:
-
-    # (
-    #    (10**18*x2*( 10**18*a - b*(x2 + x3)/10**18 - c*(2*x1 + x2 + x3)/10**18))
-    #    /
-    #    (x1*(-10**18*a + b*(x1 + x3)/10**18 + c*(x1 + 2*x2 + x3)/10**18))
-    # )
-
-    numerator_a: int256 = 10**18 * x2
-    numerator_b: int256 = (
-            10**18 * a
-            - unsafe_div(b * (x2 + x3), 10**18)
-            - unsafe_div(c * (unsafe_mul(2, x1) + unsafe_add(x2, x3)), 10**18)
-        )
-
-    denominator: int256 = (
-        x1
-        * (
-            unsafe_mul(-10**18, a)  # <--- since we did safemul before
-            + unsafe_div(b * (x1 + x3), 10**18)
-            + unsafe_div(c * (unsafe_mul(2, x2) + unsafe_add(x1, x3)), 10**18)
-        )
-    )
-
-    # check sign to ensure it is negative:
-    sign_num_a: int256 = -1
-    sign_num_b: int256 = -1
-    sign_denom: int256 = -1
-    if numerator_a > 0:
-        sign_num_a = 1
-    if numerator_b > 0:
-        sign_num_b = 1
-    if denominator > 0:
-        sign_denom = 1
-
-    assert unsafe_div(unsafe_mul(sign_num_a, sign_num_b), sign_denom) < 0, "dev: partial derivative cannot be positive"
-
-    return self._snekmate_mul_div(
-        convert(abs(numerator_a), uint256),
-        convert(abs(numerator_b), uint256),
-        convert(abs(denominator), uint256),
-        False
-    )
 
 
 # --------------------------- Math Utils -------------------------------------
