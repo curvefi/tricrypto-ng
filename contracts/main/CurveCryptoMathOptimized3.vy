@@ -571,7 +571,7 @@ def get_p(
     # G is in 10**36 space and is also dimensionless.
     G: int256 = (
         unsafe_div(3 * K**2, 10**36)
-        - unsafe_div(2 * K * (unsafe_add(unsafe_mul(2 * gamma, 10**18), 3*10**36)), 10**36)
+        - unsafe_div(K * (unsafe_add(unsafe_mul(4 * gamma, 10**18), 6*10**36)), 10**36)
         + unsafe_div(unsafe_div(unsafe_div(NN_A_gamma2 * (S - D), D), 27), 10000)
         + unsafe_mul(unsafe_add(gamma, 10**18), unsafe_add(gamma, 3*10**18))
     )
