@@ -33,38 +33,21 @@ def get_p(
     y: int256 = convert(_xp[1], int256)
     z: int256 = convert(_xp[2], int256)
 
-    NN_A_gamma2: int256 = unsafe_mul(27 * ANN, unsafe_mul(gamma, gamma))
-    S: int256 = unsafe_add(unsafe_add(x, y), z)
-
-    # K = P * N**N / D**N.
-    # K is dimensionless and has 10**36 precision:
-    K: int256 = unsafe_div(
-        unsafe_div(
-            unsafe_div(27 * x * y, D) * z,
-            D
-        ) * 10**36,
-        D
-    )
-
-    # G = 3 * K**2 + N_COINS**N_COINS * A * gamma**2 * (S - D) / D + (gamma + 1) * (gamma + 3) - 2 * K * (2 * gamma + 3)
-    # G is in 10**36 space and is also dimensionless.
+    NN_A_gamma2: int256 = 27 * ANN * gamma**2
+    S: int256 = x + y + z
+    K: int256 = 27 * x * y / D * z / D * 10**36 / D
     G: int256 = (
-        unsafe_div(3 * K**2, 10**36)
-        - unsafe_div(K * (unsafe_add(unsafe_mul(4 * gamma, 10**18), 6*10**36)), 10**36)
-        + unsafe_div(unsafe_div(unsafe_div(NN_A_gamma2 * (S - D), D), 27), A_MULTIPLIER)
-        + unsafe_mul(unsafe_add(gamma, 10**18), unsafe_add(gamma, 3*10**18))
+        3 * K**2 / 10**36
+        - K * (4 * gamma * 10**18 + 6 * 10**36) / 10**36
+        + NN_A_gamma2 * (S - D) / D / 27 / A_MULTIPLIER
+        + (gamma + 10**18) * (gamma +  3 * 10**18)
     )
 
-    G3: int256 = unsafe_div(
-        unsafe_div(G * D, NN_A_gamma2) * 10**18 * 27 * 10000,
-        10**18
-    )
-    p: int256[N_COINS-1] = [
-        unsafe_div(unsafe_div(x * (G3 + y), y) * 10**18, G3 + x),
-        unsafe_div(unsafe_div(x * (G3 + z), z) * 10**18, unsafe_add(G3, x)),
+    G3: int256 = G * D / NN_A_gamma2 * 10**18 * 27 * 10000 / 10**18
+    return [
+        x * (G3 + y) / y * 10**18 / (G3 + x),
+        x * (G3 + z) / z * 10**18 / (G3 + x),
     ]
-
-    return p
 """
     return boa.loads(get_price_impl, name="Optimised")
 
