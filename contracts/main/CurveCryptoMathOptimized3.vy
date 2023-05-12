@@ -587,11 +587,8 @@ def get_p(
     assert G > 0, "dev: G must be greater than 0"
 
     # G3 = G * D / (N**N * ANN * gamma**2)
-    # G3 is in 10**36 precision and is dimensionless.
-    G3: uint256 = convert(
-        unsafe_div(unsafe_div(G * D, NN_A_gamma2) * 10**18 * 27 * 10000, 10**18),
-        uint256
-    )
+    # G3 is dimensionless. It is not in 10**36 precision (lower, about 10**20):
+    G3: uint256 = convert(unsafe_div(G * D * 27 * 10000, NN_A_gamma2), uint256)
 
     # p_xy = x * (G3 + y) / y * 10**18 / (G3 + x)
     # p_xz = x * (G3 + z) / z * 10**18 / (G3 + x)

@@ -10,6 +10,15 @@ from tests.fixtures.pool import INITIAL_PRICES
 from tests.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 1000, "deadline": None}
+PRECISION_THRESHOLD = 1e-5
+
+
+def approx(x1, x2, precision=PRECISION_THRESHOLD):
+    return abs(math.log(x1 / x2)) <= precision
+
+
+def assert_string_contains(string, substrings):
+    assert any(substring in string for substring in substrings)
 
 
 # flake8: noqa: E501
@@ -43,7 +52,7 @@ def get_p(
         + (gamma + 10**18) * (gamma +  3 * 10**18)
     )
 
-    G3: int256 = G * D / NN_A_gamma2 * 10**18 * 27 * 10000 / 10**18
+    G3: int256 = G * D * 27 * 10000 / NN_A_gamma2
     return [
         x * (G3 + y) / y * 10**18 / (G3 + x),
         x * (G3 + z) / z * 10**18 / (G3 + x),
@@ -59,6 +68,7 @@ def get_p_decimal(X, D, ANN, gamma):
     N = len(X)
     D = Decimal(D)
     K0 = P / (Decimal(D) / N) ** N
+    A = ANN / N**N / 10000
 
     S = sum(X)
 
@@ -72,16 +82,26 @@ def get_p_decimal(X, D, ANN, gamma):
         + (N**N * ANN * gamma**2 * (S - D) / D / 27 / 10000)
         + (gamma + 10**18) * (gamma + 3 * 10**18)
     )
-    G3 = G * D / (N**N * ANN * gamma**2) * 10**18 * 27 * 10000 / 10**18
+
+    # G3 approach:
+    G3 = G * D / (N**N * ANN * gamma**2) * 27 * 10000
     p = [
         x * (G3 + y) / y * 10**18 / (G3 + x),
         x * (G3 + z) / z * 10**18 / (G3 + x),
     ]
+
+    # G approach:
+    NNAG2 = Decimal(N**N * A * gamma**2)
+    GD = G * D
+    p1 = [
+        x * (GD + NNAG2 * y) / y * 10**18 / (GD + NNAG2 * x),
+        x * (GD + NNAG2 * z) / z * 10**18 / (GD + NNAG2 * x),
+    ]
+
+    for i in range(2):
+        assert approx(p[i], p1[i])
+
     return p
-
-
-def approx(x1, x2, precision=1e-5):
-    return abs(math.log(x1 / x2)) <= precision
 
 
 def _check_p(a, b):
@@ -92,7 +112,7 @@ def _check_p(a, b):
     if abs(a - b) <= 1:
         return True
 
-    return approx(a, b, 1e-5)
+    return approx(a, b)
 
 
 def _get_prices_vyper(swap, price_calc):
@@ -102,10 +122,7 @@ def _get_prices_vyper(swap, price_calc):
     xp = swap.internal.xp()
     D = swap.D()
 
-    try:
-        p = price_calc.get_p(xp, D, [A, gamma])
-    except:
-        breakpoint()
+    p = price_calc.get_p(xp, D, [A, gamma])
 
     price_token_1_wrt_0 = p[0]
     price_token_2_wrt_0 = p[1]
@@ -167,20 +184,44 @@ def test_against_expt(dydx_optimised_math):
     assert _check_p(output_vyper[1], p[1])
 
 
+def _imbalance_swap(swap, coins, imbalance_frac, user, dollar_amount, i, j):
+
+    # make swap imbalanced:
+    mint_for_testing(coins[0], user, int(swap.balances(0) * imbalance_frac))
+    with boa.env.prank(user):
+        swap.exchange(0, 1, coins[0].balanceOf(user), 0)
+
+    dx = dollar_amount * 10**36 // INITIAL_PRICES[i]
+    mint_for_testing(coins[i], user, dx)
+
+    try:
+        with boa.env.prank(user):
+            swap.exchange(i, j, dx, 0)
+        return swap
+    except boa.BoaError as b_error:
+        assert_string_contains(
+            b_error.stack_trace.last_frame.pretty_vm_reason,
+            ["dev: unsafe value for y", "dev: unsafe values x[i]"],
+        )
+        return
+
+
 @given(
     dollar_amount=strategy(
         "uint256", min_value=5 * 10**4, max_value=5 * 10**8
     ),
+    imbalance_frac=strategy("decimal", min_value=0.1, max_value=0.7),
 )
 @settings(**SETTINGS)
 @pytest.mark.parametrize("i", [0, 1, 2])
 @pytest.mark.parametrize("j", [0, 1, 2])
 def test_dxdy_similar(
-    yuge_swap,
+    swap_with_deposit,
     dydx_optimised_math,
     views_contract,
     user,
     dollar_amount,
+    imbalance_frac,
     coins,
     i,
     j,
@@ -189,48 +230,59 @@ def test_dxdy_similar(
     if i == j:
         return
 
-    dx = dollar_amount * 10**36 // INITIAL_PRICES[i]
-    mint_for_testing(coins[i], user, dx)
+    # make swap imbalanced:
+    _imbalance_swap(
+        swap_with_deposit, coins, imbalance_frac, user, dollar_amount, i, j
+    )
 
-    with boa.env.prank(user):
-        yuge_swap.exchange(i, j, dx, 0)
-
-    dxdy_vyper = _get_prices_vyper(yuge_swap, dydx_optimised_math)
+    dxdy_vyper = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
     dxdy_numeric_nofee = _get_prices_numeric_nofee(
-        yuge_swap, views_contract, sell_usd=(i == 0)
+        swap_with_deposit, views_contract, sell_usd=(i == 0)
     )
 
     for n in range(2):
 
-        assert abs(math.log(dxdy_vyper[n] / dxdy_numeric_nofee[n])) < 1e-5
         assert approx(dxdy_vyper[n], dxdy_numeric_nofee[n])
 
-        dxdy_swap = yuge_swap.last_prices(n)  # <-- we check unsafe impl here.
-        assert abs(math.log(dxdy_vyper[n] / dxdy_swap)) < 1e-5
+        dxdy_swap = swap_with_deposit.last_prices(
+            n
+        )  # <-- we check unsafe impl here.
+        assert approx(dxdy_vyper[n], dxdy_swap)
 
 
 @given(
     dollar_amount=strategy(
         "uint256", min_value=10**4, max_value=4 * 10**5
     ),
+    imbalance_frac=strategy("decimal", min_value=0.1, max_value=0.7),
 )
 @settings(**SETTINGS)
 @pytest.mark.parametrize("j", [1, 2])
 def test_dxdy_pump(
-    yuge_swap, dydx_optimised_math, user, dollar_amount, coins, j
+    swap_with_deposit,
+    dydx_optimised_math,
+    user,
+    dollar_amount,
+    imbalance_frac,
+    coins,
+    j,
 ):
 
-    dxdy_math_0 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
-    dxdy_swap_0 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+    dxdy_math_0 = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
+    dxdy_swap_0 = [
+        swap_with_deposit.last_prices(0),
+        swap_with_deposit.last_prices(1),
+    ]
 
-    dx = dollar_amount * 10**18
-    mint_for_testing(coins[0], user, dx)
+    _imbalance_swap(
+        swap_with_deposit, coins, imbalance_frac, user, dollar_amount, 0, j
+    )
 
-    with boa.env.prank(user):
-        yuge_swap.exchange(0, j, dx, 0)
-
-    dxdy_math_1 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
-    dxdy_swap_1 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+    dxdy_math_1 = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
+    dxdy_swap_1 = [
+        swap_with_deposit.last_prices(0),
+        swap_with_deposit.last_prices(1),
+    ]
 
     for n in range(2):
         assert dxdy_math_1[n] > dxdy_math_0[n]
@@ -241,24 +293,35 @@ def test_dxdy_pump(
     dollar_amount=strategy(
         "uint256", min_value=10**4, max_value=4 * 10**5
     ),
+    imbalance_frac=strategy("decimal", min_value=0.1, max_value=0.7),
 )
 @settings(**SETTINGS)
 @pytest.mark.parametrize("j", [1, 2])
 def test_dxdy_dump(
-    yuge_swap, dydx_optimised_math, user, dollar_amount, coins, j
+    swap_with_deposit,
+    dydx_optimised_math,
+    user,
+    dollar_amount,
+    imbalance_frac,
+    coins,
+    j,
 ):
 
-    dxdy_math_0 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
-    dxdy_swap_0 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+    dxdy_math_0 = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
+    dxdy_swap_0 = [
+        swap_with_deposit.last_prices(0),
+        swap_with_deposit.last_prices(1),
+    ]
 
-    dx = dollar_amount * 10**36 // INITIAL_PRICES[j]
-    mint_for_testing(coins[j], user, dx)
+    _imbalance_swap(
+        swap_with_deposit, coins, imbalance_frac, user, dollar_amount, j, 0
+    )
 
-    with boa.env.prank(user):
-        yuge_swap.exchange(j, 0, dx, 0)
-
-    dxdy_math_1 = _get_prices_vyper(yuge_swap, dydx_optimised_math)
-    dxdy_swap_1 = [yuge_swap.last_prices(0), yuge_swap.last_prices(1)]
+    dxdy_math_1 = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
+    dxdy_swap_1 = [
+        swap_with_deposit.last_prices(0),
+        swap_with_deposit.last_prices(1),
+    ]
 
     for n in range(2):
         assert dxdy_math_1[n] < dxdy_math_0[n]
