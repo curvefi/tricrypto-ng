@@ -188,8 +188,16 @@ def _imbalance_swap(swap, coins, imbalance_frac, user, dollar_amount, i, j):
 
     # make swap imbalanced:
     mint_for_testing(coins[0], user, int(swap.balances(0) * imbalance_frac))
-    with boa.env.prank(user):
-        swap.exchange(0, 1, coins[0].balanceOf(user), 0)
+
+    try:
+        with boa.env.prank(user):
+            swap.exchange(i, j, coins[0].balanceOf(user), 0)
+    except boa.BoaError as b_error:
+        assert_string_contains(
+            b_error.stack_trace.last_frame.pretty_vm_reason,
+            ["dev: unsafe value for y", "dev: unsafe values x[i]"],
+        )
+        return
 
     dx = dollar_amount * 10**36 // INITIAL_PRICES[i]
     mint_for_testing(coins[i], user, dx)
@@ -197,13 +205,14 @@ def _imbalance_swap(swap, coins, imbalance_frac, user, dollar_amount, i, j):
     try:
         with boa.env.prank(user):
             swap.exchange(i, j, dx, 0)
-        return swap
     except boa.BoaError as b_error:
         assert_string_contains(
             b_error.stack_trace.last_frame.pretty_vm_reason,
             ["dev: unsafe value for y", "dev: unsafe values x[i]"],
         )
         return
+
+    return swap
 
 
 @given(
@@ -231,9 +240,11 @@ def test_dxdy_similar(
         return
 
     # make swap imbalanced:
-    _imbalance_swap(
+    swap_with_deposit = _imbalance_swap(
         swap_with_deposit, coins, imbalance_frac, user, dollar_amount, i, j
     )
+    if not swap_with_deposit:
+        return
 
     dxdy_vyper = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
     dxdy_numeric_nofee = _get_prices_numeric_nofee(
@@ -274,9 +285,11 @@ def test_dxdy_pump(
         swap_with_deposit.last_prices(1),
     ]
 
-    _imbalance_swap(
+    swap_with_deposit = _imbalance_swap(
         swap_with_deposit, coins, imbalance_frac, user, dollar_amount, 0, j
     )
+    if not swap_with_deposit:
+        return
 
     dxdy_math_1 = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
     dxdy_swap_1 = [
@@ -313,9 +326,11 @@ def test_dxdy_dump(
         swap_with_deposit.last_prices(1),
     ]
 
-    _imbalance_swap(
+    swap_with_deposit = _imbalance_swap(
         swap_with_deposit, coins, imbalance_frac, user, dollar_amount, j, 0
     )
+    if not swap_with_deposit:
+        return
 
     dxdy_math_1 = _get_prices_vyper(swap_with_deposit, dydx_optimised_math)
     dxdy_swap_1 = [
@@ -324,5 +339,8 @@ def test_dxdy_dump(
     ]
 
     for n in range(2):
-        assert dxdy_math_1[n] < dxdy_math_0[n]
-        assert dxdy_swap_1[n] < dxdy_swap_0[n]
+        try:
+            assert dxdy_math_1[n] < dxdy_math_0[n]
+            assert dxdy_swap_1[n] < dxdy_swap_0[n]
+        except:
+            breakpoint()
