@@ -23,7 +23,7 @@ def assert_string_contains(string, substrings):
 
 # flake8: noqa: E501
 @pytest.fixture(scope="module")
-def dydx_optimised_math():
+def _dydx_optimised_math():
 
     get_price_impl = """
 N_COINS: constant(uint256) = 3
@@ -61,47 +61,83 @@ def get_p(
     return boa.loads(get_price_impl, name="Optimised")
 
 
+# flake8: noqa: E501
+@pytest.fixture(scope="module")
+def dydx_optimised_math():
+
+    get_price_impl = """
+N_COINS: constant(uint256) = 3
+A_MULTIPLIER: constant(uint256) = 10000
+
+@external
+@view
+def get_p(
+    _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[N_COINS-1]
+) -> uint256[N_COINS-1]:
+
+    K0: uint256 = unsafe_div(
+        unsafe_div(unsafe_div(27 * _xp[0] * _xp[1], _D) * _xp[2], _D) * 10**36,
+        _D
+    )
+    GK0: uint256 = (
+        unsafe_div(unsafe_div(2 * K0 * K0, 10**36) * K0, 10**36)
+        + pow_mod256(unsafe_add(_A_gamma[1], 10**18), 2)
+        - unsafe_div(
+            unsafe_div(pow_mod256(K0, 2), 10**36) * unsafe_add(unsafe_mul(2, _A_gamma[1]), 3 * 10**18),
+            10**18
+        )
+    )
+    NNAG2: uint256 = unsafe_div(unsafe_mul(_A_gamma[0], pow_mod256(_A_gamma[1], 2)), A_MULTIPLIER)
+    denominator: uint256 = (GK0 + unsafe_div(unsafe_div(NNAG2 * _xp[0], _D) * K0, 10**36) )
+
+    p: uint256[N_COINS-1] = [
+        unsafe_div(_xp[0] * (GK0 + unsafe_div(unsafe_div(NNAG2 * _xp[1], _D) * K0, 10**36) ) / _xp[1] * 10**18, denominator),
+        unsafe_div(_xp[0] * (GK0 + unsafe_div(unsafe_div(NNAG2 * _xp[2], _D) * K0, 10**36) ) / _xp[2] * 10**18, denominator),
+    ]
+    return p
+"""
+    return boa.loads(get_price_impl, name="Optimised")
+
+
 def get_p_decimal(X, D, ANN, gamma):
 
     X = [Decimal(_) for _ in X]
     P = 10**18 * X[0] * X[1] * X[2]
     N = len(X)
     D = Decimal(D)
-    K0 = P / (Decimal(D) / N) ** N
-    A = ANN / N**N / 10000
 
-    S = sum(X)
+    A = ANN / N**N / 10000
 
     x = X[0]
     y = X[1]
     z = X[2]
 
-    G = (
-        3 * K0**2
-        - (2 * K0 * (2 * gamma + 3 * 10**18))
-        + (N**N * ANN * gamma**2 * (S - D) / D / 27 / 10000)
-        + (gamma + 10**18) * (gamma + 3 * 10**18)
+    _K0 = 27 * x * y / D * z / D * 10**36 / D
+    _GK0 = (
+        2 * _K0 * _K0 / 10**36 * _K0 / 10**36
+        + (gamma + 10**18) ** 2
+        - (_K0 * _K0 / 10**36 * (2 * gamma + 3 * 10**18) / 10**18)
     )
-
-    # G3 approach:
-    G3 = G * D / (N**N * ANN * gamma**2) * 27 * 10000
-    p = [
-        x * (G3 + y) / y * 10**18 / (G3 + x),
-        x * (G3 + z) / z * 10**18 / (G3 + x),
+    _NNAG2 = Decimal(N**N * A * gamma**2)
+    _denominator = _GK0 + _NNAG2 * x / D * _K0 / 10**36
+    _p = [
+        int(
+            x
+            * (_GK0 + _NNAG2 * y / D * _K0 / 10**36)
+            / y
+            * 10**18
+            / _denominator
+        ),
+        int(
+            x
+            * (_GK0 + _NNAG2 * z / D * _K0 / 10**36)
+            / z
+            * 10**18
+            / _denominator
+        ),
     ]
 
-    # G approach:
-    NNAG2 = Decimal(N**N * A * gamma**2)
-    GD = G * D
-    p1 = [
-        x * (GD + NNAG2 * y) / y * 10**18 / (GD + NNAG2 * x),
-        x * (GD + NNAG2 * z) / z * 10**18 / (GD + NNAG2 * x),
-    ]
-
-    for i in range(2):
-        assert approx(p[i], p1[i])
-
-    return p
+    return _p
 
 
 def _check_p(a, b):
@@ -180,6 +216,7 @@ def test_against_expt(dydx_optimised_math):
 
     # test vyper implementation
     output_vyper = dydx_optimised_math.get_p(xp, D, [ANN, gamma])
+
     assert _check_p(output_vyper[0], p[0])
     assert _check_p(output_vyper[1], p[1])
 

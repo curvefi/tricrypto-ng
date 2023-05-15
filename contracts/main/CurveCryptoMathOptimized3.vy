@@ -547,55 +547,47 @@ def get_p(
 
     assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe D values"
 
-    D: int256 = convert(_D, int256)
-    ANN: int256 = convert(_A_gamma[0], int256)
-    gamma: int256 = convert(_A_gamma[1], int256)
-    x: int256 = convert(_xp[0], int256)
-    y: int256 = convert(_xp[1], int256)
-    z: int256 = convert(_xp[2], int256)
-
-    S: int256 = unsafe_add(unsafe_add(x, y), z)
-
-    # constant which is in 10**36 precision:
-    NN_A_gamma2: int256 = unsafe_mul(27 * ANN, unsafe_mul(gamma, gamma))
-
-    # K = P * N**N / D**N.
-    # K is dimensionless and has 10**36 precision:
-    K: int256 = unsafe_div(
-        unsafe_div(
-            unsafe_div(27 * x * y, D) * z,
-            D
-        ) * 10**36,
-        D
+    # K0 = P * N**N / D**N.
+    # K0 is dimensionless and has 10**36 precision:
+    K0: uint256 = unsafe_div(
+        unsafe_div(unsafe_div(27 * _xp[0] * _xp[1], _D) * _xp[2], _D) * 10**36,
+        _D
     )
 
-    # G = (
-    #     3 * K**2
-    #     - 2 * K * (2 * gamma + 3)
-    #     + N_COINS**N_COINS * A * gamma**2 * (S - D) / D
-    #     + (gamma + 1) * (gamma + 3)
+    # GK0 is in 10**36 precision and is dimensionless.
+    # GK0 = (
+    #     2 * _K0 * _K0 / 10**36 * _K0 / 10**36
+    #     + (gamma + 10**18)**2
+    #     - (_K0 * _K0 / 10**36 * (2 * gamma + 3 * 10**18) / 10**18)
     # )
-    # G is in 10**36 precision and is dimensionless.
-    G: int256 = (
-        unsafe_div(3 * K**2, 10**36)
-        - unsafe_div(K * (unsafe_add(unsafe_mul(4 * gamma, 10**18), 6*10**36)), 10**36)
-        + unsafe_div(unsafe_div(unsafe_div(NN_A_gamma2 * (S - D), D), 27), 10000)
-        + unsafe_mul(unsafe_add(gamma, 10**18), unsafe_add(gamma, 3*10**18))
+    # GK0 is always positive. So the following should never revert:
+    GK0: uint256 = (
+        unsafe_div(unsafe_div(2 * K0 * K0, 10**36) * K0, 10**36)
+        + pow_mod256(unsafe_add(_A_gamma[1], 10**18), 2)
+        - unsafe_div(
+            unsafe_div(pow_mod256(K0, 2), 10**36) * unsafe_add(unsafe_mul(2, _A_gamma[1]), 3 * 10**18),
+            10**18
+        )
     )
 
-    # Safety check: ensure G is positive:
-    assert G > 0, "dev: G must be greater than 0"
+    # NNAG2 = N**N * A * gamma**2
+    NNAG2: uint256 = unsafe_div(unsafe_mul(_A_gamma[0], pow_mod256(_A_gamma[1], 2)), A_MULTIPLIER)
 
-    # G3 = G * D / (N**N * ANN * gamma**2)
-    # G3 is dimensionless. It is not in 10**36 precision (lower, about 10**20):
-    G3: uint256 = convert(unsafe_div(G * D * 27 * 10000, NN_A_gamma2), uint256)
+    # denominator = (GK0 + NNAG2 * x / D * _K0 / 10**36)
+    denominator: uint256 = (GK0 + unsafe_div(unsafe_div(NNAG2 * _xp[0], _D) * K0, 10**36) )
 
-    # p_xy = x * (G3 + y) / y * 10**18 / (G3 + x)
-    # p_xz = x * (G3 + z) / z * 10**18 / (G3 + x)
+    # p_xy = x * (GK0 + NNAG2 * y / D * K0 / 10**36) / y * 10**18 / denominator
+    # p_xz = x * (GK0 + NNAG2 * z / D * K0 / 10**36) / z * 10**18 / denominator
     # p is in 10**18 precision.
     return [
-        unsafe_div(unsafe_div(_xp[0] * (G3 + _xp[1]), _xp[1]) * 10**18, G3 + _xp[0]),
-        unsafe_div(unsafe_div(_xp[0] * (G3 + _xp[2]), _xp[2]) * 10**18, unsafe_add(G3, _xp[0])),
+        unsafe_div(
+            _xp[0] * ( GK0 + unsafe_div(unsafe_div(NNAG2 * _xp[1], _D) * K0, 10**36) ) / _xp[1] * 10**18,
+            denominator
+        ),
+        unsafe_div(
+            _xp[0] * ( GK0 + unsafe_div(unsafe_div(NNAG2 * _xp[2], _D) * K0, 10**36) ) / _xp[2] * 10**18,
+            denominator
+        ),
     ]
 
 
