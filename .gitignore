@@ -147,3 +147,7 @@ todo.txt
 node_modules
 *.json
 /audits
+
+# temp
+docs/
+scripts/experiments/get_p.py

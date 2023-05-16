@@ -69,7 +69,8 @@ def _get_dydx_vyper(swap, i, j, price_calc):
 
     D = swap.D()
 
-    return price_calc.get_p(x1, x2, x3, D, A, gamma)
+    dxdy = price_calc.get_p(x1, x2, x3, D, A, gamma)
+    return dxdy
 
 
 def _get_prices_vyper(swap, price_calc):
@@ -113,7 +114,7 @@ def _get_prices_numeric_nofee(swap, views, sell_usd):
 
 @given(
     dollar_amount=strategy(
-        "uint256", min_value=5 * 10**4, max_value=5 * 10**5
+        "uint256", min_value=5 * 10**4, max_value=5 * 10**8
     ),
 )
 @settings(**SETTINGS)
@@ -147,6 +148,7 @@ def test_dxdy_similar(
     for n in range(2):
 
         assert abs(log(dxdy_vyper[n] / dxdy_numeric_nofee[n])) < 1e-5
+
         dxdy_swap = yuge_swap.last_prices(n)  # <-- we check unsafe impl here.
         assert abs(log(dxdy_vyper[n] / dxdy_swap)) < 1e-5
 
