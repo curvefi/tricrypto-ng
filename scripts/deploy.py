@@ -37,6 +37,51 @@ def _test_metaregistry_integration(network, factory_handler, pool):
         assert metaregistry.get_balances(pool) == balances
 
 
+def _deploy_pool_from_factory(network, account, factory):
+
+    PARAMS = deploy_utils.get_tricrypto_usdc_params()
+
+    for _network, data in deploy_utils.curve_dao_network_settings.items():
+
+        if f"{_network}:" in network:
+
+            coins = [
+                to_checksum_address(data.usdc_address),
+                to_checksum_address(data.wbtc_address),
+                to_checksum_address(data.weth_address),
+            ]
+            weth = to_checksum_address(data.weth_address)
+            PARAMS["coins"] = coins
+
+    logger.info("Deploying Pool:")
+    factory = project.CurveTricryptoFactory.at(factory)
+    tx = factory.deploy_pool(
+        PARAMS["name"],
+        PARAMS["symbol"],
+        PARAMS["coins"],
+        weth,
+        PARAMS["implementation_index"],
+        PARAMS["A"],
+        PARAMS["gamma"],
+        PARAMS["mid_fee"],
+        PARAMS["out_fee"],
+        PARAMS["fee_gamma"],
+        PARAMS["allowed_extra_profit"],
+        PARAMS["adjustment_step"],
+        PARAMS["ma_time"],
+        PARAMS["initial_prices"],
+        sender=account,
+        **deploy_utils._get_tx_params(),
+    )
+    pool = project.CurveTricryptoOptimizedWETH.at(
+        tx.events.filter(factory.TricryptoPoolDeployed)[0].pool
+    )
+    logger.info(f"Success! Deployed pool at {pool}!")
+    _get_encoded_constructor_args(tx)
+
+    return pool
+
+
 def _get_encoded_constructor_args(tx):
 
     tx_object = networks.active_provider.get_receipt(tx)
@@ -137,7 +182,7 @@ def cli():
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-def deploy_factory(network, account):
+def deploy_and_test_infra(network, account):
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
@@ -182,11 +227,16 @@ def deploy_factory(network, account):
         logger.info(
             "Deploying Factory handler to integrate it to the metaregistry:"
         )
-        account.deploy(
+        factory_handler = account.deploy(
             project.CurveTricryptoFactoryHandler,
             factory.address,
             **deploy_utils._get_tx_params(),
         )
+
+        # test metaregistry integration:
+        if "mainnet-fork" in network:
+            pool = _deploy_pool_from_factory(network, account, factory)
+            _test_metaregistry_integration(network, factory_handler, pool)
 
     print("Success!")
 
@@ -197,45 +247,7 @@ def deploy_factory(network, account):
 @click.option("--factory", required=True, type=str)
 def deploy_pool_via_factory(network, account, factory):
 
-    PARAMS = deploy_utils.get_tricrypto_usdc_params()
-
-    for _network, data in deploy_utils.curve_dao_network_settings.items():
-
-        if f"{_network}:" in network:
-
-            coins = [
-                to_checksum_address(data.usdc_address),
-                to_checksum_address(data.wbtc_address),
-                to_checksum_address(data.weth_address),
-            ]
-            weth = to_checksum_address(data.weth_address)
-            PARAMS["coins"] = coins
-
-    logger.info("Deploying Pool:")
-    factory = project.CurveTricryptoFactory.at(factory)
-    tx = factory.deploy_pool(
-        PARAMS["name"],
-        PARAMS["symbol"],
-        PARAMS["coins"],
-        weth,
-        PARAMS["implementation_index"],
-        PARAMS["A"],
-        PARAMS["gamma"],
-        PARAMS["mid_fee"],
-        PARAMS["out_fee"],
-        PARAMS["fee_gamma"],
-        PARAMS["allowed_extra_profit"],
-        PARAMS["adjustment_step"],
-        PARAMS["ma_time"],
-        PARAMS["initial_prices"],
-        sender=account,
-        **deploy_utils._get_tx_params(),
-    )
-    pool = project.CurveTricryptoOptimizedWETH.at(
-        tx.events.filter(factory.TricryptoPoolDeployed)[0].pool
-    )
-    logger.info(f"Success! Deployed pool at {pool}!")
-    _get_encoded_constructor_args(tx)
+    _deploy_pool_from_factory(network, account, factory)
 
 
 @cli.command(cls=NetworkBoundCommand)
