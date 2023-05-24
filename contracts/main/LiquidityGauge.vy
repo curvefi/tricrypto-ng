@@ -1,10 +1,11 @@
-# @version 0.3.8
+# @version 0.3.9
 
 """
-@title Liquidity Gauge
+@title LiquidityGaugeV6
 @author Curve.Fi
 @license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice Implementation contract for use with Curve Factory
+@dev Differs from v5.0.0 in that it uses create_from_blueprint to deploy Gauges
 """
 from vyper.interfaces import ERC20
 

@@ -1,4 +1,4 @@
-# @version 0.3.8
+# @version 0.3.9
 
 # (c) Curve.Fi, 2020-2023
 # AMM Math for 3-coin Curve Cryptoswap Pools

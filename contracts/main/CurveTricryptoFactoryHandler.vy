@@ -1,7 +1,7 @@
-# @version 0.3.8
+# @version 0.3.9
 
 """
-@title Curve Tricrypto Factory Handler
+@title CurveTricryptoFactoryHandler
 @author Curve.Fi
 @license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice A Registry Handler for the MetaRegistry
