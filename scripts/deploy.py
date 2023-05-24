@@ -220,14 +220,13 @@ def deploy_and_test_infra(network, account):
     )
 
     pool = _deploy_pool_from_factory(network, account, factory, weth)
+    coins = [
+        to_checksum_address(pool.coins(0)),
+        to_checksum_address(pool.coins(1)),
+        to_checksum_address(pool.coins(2)),
+    ]
 
     if "mainnet-fork" in network:
-        coins = [
-            to_checksum_address(pool.coins(0)),
-            to_checksum_address(pool.coins(1)),
-            to_checksum_address(pool.coins(2)),
-        ]
-
         impersonated_bridge = accounts[
             "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"
         ]

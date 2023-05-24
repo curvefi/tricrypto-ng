@@ -11,6 +11,9 @@ plugins:
   - name: optimism
   - name: polygon
 
+vyper:
+  evm_version: paris
+
 default_ecosystem: ethereum
 
 ethereum:
@@ -25,6 +28,7 @@ ethereum:
 
 hardhat:
   port: auto
+  hard_fork: paris
   fork:
     ethereum:
       mainnet:
