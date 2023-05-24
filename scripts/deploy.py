@@ -219,6 +219,22 @@ def deploy_and_test_infra(network, account):
         account, fee_receiver, weth, deployed_contracts
     )
 
+    pool = _deploy_pool_from_factory(network, account, factory, weth)
+
+    if "mainnet-fork" in network:
+        coins = [
+            to_checksum_address(pool.coins(0)),
+            to_checksum_address(pool.coins(1)),
+            to_checksum_address(pool.coins(2)),
+        ]
+
+        impersonated_bridge = accounts[
+            "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"
+        ]
+        deploy_utils.test_deployment(
+            pool, coins, fee_receiver, impersonated_bridge
+        )
+
     # ------------------- GAUGE IMPLEMENTATION DEPLOYMENT --------------------
 
     logger.info("Deploying gauge blueprint contract:")
@@ -243,9 +259,7 @@ def deploy_and_test_infra(network, account):
         )
 
         # test metaregistry integration:
-        if "mainnet-fork" in network:
-            pool = _deploy_pool_from_factory(network, account, factory, weth)
-            _test_metaregistry_integration(network, factory_handler, pool)
+        _test_metaregistry_integration(network, factory_handler, pool)
 
     print("Success!")
 
