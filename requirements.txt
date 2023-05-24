@@ -20,3 +20,4 @@ hypothesis>=6.68.1
 
 # vyper and dev framework:
 git+https://github.com/vyperlang/titanoboa.git@4c87a762aace11792d4a416905e3cc485adc3047
+git+https://github.com/vyperlang/vyper.git@b3c7efa38eef63d9d979ad663a9ecfd77e343987

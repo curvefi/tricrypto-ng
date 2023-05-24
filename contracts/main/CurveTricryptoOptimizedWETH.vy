@@ -660,7 +660,7 @@ def remove_liquidity(
     @param min_amounts Minimum amounts of tokens to withdraw
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
-    @param claim_fees If True, call self._claim_admin_fees(). Default is True.
+    @param claim_admin_fees If True, call self._claim_admin_fees(). Default is True.
     @return uint256[3] Amount of pool tokens received by the `receiver`
     """
     amount: uint256 = _amount
@@ -1915,9 +1915,10 @@ def ma_time() -> uint256:
     """
     @notice Returns the current moving average time in seconds
     @dev To get time in seconds, the parameter is multipled by ln(2)
+         One can expect off-by-one errors here.
     @return uint256 ma_time value.
     """
-    return self._unpack(self.packed_rebalancing_params)[2] * 693 / 1000
+    return self._unpack(self.packed_rebalancing_params)[2] * 694 / 1000
 
 
 @view

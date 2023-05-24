@@ -1,3 +1,4 @@
+import math
 import warnings
 
 import click
@@ -37,13 +38,13 @@ def _test_metaregistry_integration(network, factory_handler, pool):
         assert metaregistry.get_balances(pool) == balances
 
 
-def _deploy_pool_from_factory(network, account, factory):
+def _deploy_pool_from_factory(network, account, factory, weth):
 
     PARAMS = deploy_utils.get_tricrypto_usdc_params()
-
+    coins = []
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
-        if f"{_network}:" in network:
+        if f"{_network}" in network:
 
             coins = [
                 to_checksum_address(data.usdc_address),
@@ -52,13 +53,16 @@ def _deploy_pool_from_factory(network, account, factory):
             ]
             weth = to_checksum_address(data.weth_address)
             PARAMS["coins"] = coins
+            break
+
+    assert coins is not None
 
     logger.info("Deploying Pool:")
     factory = project.CurveTricryptoFactory.at(factory)
     tx = factory.deploy_pool(
         PARAMS["name"],
         PARAMS["symbol"],
-        PARAMS["coins"],
+        coins,
         weth,
         PARAMS["implementation_index"],
         PARAMS["A"],
@@ -77,18 +81,24 @@ def _deploy_pool_from_factory(network, account, factory):
         tx.events.filter(factory.TricryptoPoolDeployed)[0].pool
     )
     logger.info(f"Success! Deployed pool at {pool}!")
-    _get_encoded_constructor_args(tx)
+    _get_encoded_constructor_args(tx, PARAMS)
 
     return pool
 
 
-def _get_encoded_constructor_args(tx):
+def _get_encoded_constructor_args(tx, PARAMS):
 
-    tx_object = networks.active_provider.get_receipt(tx)
+    if type(tx) is str:
+        tx_object = networks.active_provider.get_receipt(tx)
+    else:
+        tx_object = tx
+
     logs = tx_object.decode_logs()
     for log in logs:
         if log.event_name == "TricryptoPoolDeployed":
             break
+
+    pool = project.CurveTricryptoOptimizedWETH.at(log.pool)
 
     packed = lambda x: (x[0] << 128) | (x[1] << 64) | x[2]  # noqa: E731
     unpacked = lambda x: [  # noqa: E731
@@ -108,32 +118,33 @@ def _get_encoded_constructor_args(tx):
     assert unpacked(packed_precisions) == precisions
 
     # pack fees
-    fee_params = [log.mid_fee, log.out_fee, log.fee_gamma]
-    packed_fee_params = packed(fee_params)
-    assert unpacked(packed_fee_params) == fee_params
+    fee_params = [pool.mid_fee(), pool.out_fee(), pool.fee_gamma()]
+    assert log.packed_fee_params == packed(fee_params)
 
     # pack liquidity rebalancing params
     rebalancing_params = [
-        log.allowed_extra_profit,
-        log.adjustment_step,
-        log.ma_exp_time,
+        pool.allowed_extra_profit(),
+        pool.adjustment_step(),
+        int(pool.ma_time() // math.log(2)),
     ]
-    packed_rebalancing_params = packed(rebalancing_params)
-    assert unpacked(packed_rebalancing_params) == rebalancing_params
+    assert log.packed_rebalancing_params == packed(rebalancing_params)
 
     # pack A_gamma
-    packed_A_gamma = log.A << 128
-    packed_A_gamma = packed_A_gamma | log.gamma
+    packed_A_gamma = pool.A() << 128
+    packed_A_gamma = packed_A_gamma | pool.gamma()
+
+    assert log.packed_A_gamma == packed_A_gamma
 
     # pack initial prices
     PRICE_SIZE = 256 // 2
     PRICE_MASK = 2**PRICE_SIZE - 1
-    packed_prices = 0
+    unpacked_prices = []
+    packed_prices = log.packed_prices
     for k in range(2):
-        packed_prices = packed_prices << PRICE_SIZE
-        p = log.initial_prices[1 - k]
-        assert p < PRICE_MASK
-        packed_prices = p | packed_prices
+        unpacked_prices.append(packed_prices & PRICE_MASK)
+        packed_prices = packed_prices >> PRICE_SIZE
+
+    assert unpacked_prices == PARAMS["initial_prices"]
 
     pool = project.CurveTricryptoOptimizedWETH.at(log.pool)
     weth = pool.coins(2)
@@ -148,8 +159,8 @@ def _get_encoded_constructor_args(tx):
         log.salt,
         packed_precisions,
         packed_A_gamma,
-        packed_fee_params,
-        packed_rebalancing_params,
+        packed(fee_params),
+        packed(rebalancing_params),
         packed_prices,
     ]
     constructor_abi = [
@@ -184,6 +195,9 @@ def cli():
 @account_option()
 def deploy_and_test_infra(network, account):
 
+    if "mainnet-fork" in network:
+        account = accounts["0xbabe61887f1de2713c6f97e567623453d3c79f67"]
+
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
         if _network in network:
@@ -197,12 +211,7 @@ def deploy_and_test_infra(network, account):
 
     deployed_contracts = {}
     if "ethereum:mainnet" in network:
-        deployed_contracts = {
-            "math": "0x53cc3e49418380E835fC8caCD5932482c586eFEa",
-            "views": "0x3139Bf97B6376386b8cd1c5919554F055fa2A2AE",
-            "amm_impl": "0x96EE7fD5023d1171a22fEDB178aeA82912a39Fbd",
-            "factory": "0x01Bb983A4Ac1790DdA8514166ba46454139ccc39",
-        }
+        deployed_contracts = {}
 
     # --------------------- DEPLOY FACTORY AND POOL ---------------------------
 
@@ -235,7 +244,7 @@ def deploy_and_test_infra(network, account):
 
         # test metaregistry integration:
         if "mainnet-fork" in network:
-            pool = _deploy_pool_from_factory(network, account, factory)
+            pool = _deploy_pool_from_factory(network, account, factory, weth)
             _test_metaregistry_integration(network, factory_handler, pool)
 
     print("Success!")
@@ -247,7 +256,13 @@ def deploy_and_test_infra(network, account):
 @click.option("--factory", required=True, type=str)
 def deploy_pool_via_factory(network, account, factory):
 
-    _deploy_pool_from_factory(network, account, factory)
+    for _network, data in deploy_utils.curve_dao_network_settings.items():
+
+        if _network in network:
+
+            weth = to_checksum_address(data.weth_address)
+
+    _deploy_pool_from_factory(network, account, factory, weth)
 
 
 @cli.command(cls=NetworkBoundCommand)
