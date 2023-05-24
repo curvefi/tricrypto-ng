@@ -1383,14 +1383,14 @@ def _calc_withdraw_one_coin(
     #   default. This is because the fee calculation will otherwise underflow.
 
     xp_imprecise: uint256[N_COINS] = xp
-    xp_correction: uint256 = xp[i] * N_COINS * token_amount / self.totalSupply
+    xp_correction: uint256 = xp[i] * N_COINS * token_amount / token_supply
     fee: uint256 = self._unpack(self.packed_fee_params)[1]  # <- self.out_fee.
 
     if xp_correction < xp_imprecise[i]:
         xp_imprecise[i] -= xp_correction
         fee = self._fee(xp_imprecise)
 
-    dD: uint256 = token_amount * D / token_supply
+    dD: uint256 = unsafe_div(token_amount * D, token_supply)
     D_fee: uint256 = fee * dD / (2 * 10**10) + 1  # <------- Actual fee on D.
 
     # --------- Calculate `approx_fee` (assuming balanced state) in ith token.
@@ -1769,6 +1769,11 @@ def last_prices(k: uint256) -> uint256:
     """
     @notice Returns last price of the coin at index `k` w.r.t the coin
             at index 0.
+    @dev last_prices returns the quote by the AMM for an infinitesimally small swap
+         after the last trade. It is not equivalent to the last traded price, and
+         is computed by taking the partial differential of `x` w.r.t `y`. The
+         derivative is calculated in `get_p` and then multiplied with price_scale
+         to give last_prices.
     @param k The index of the coin.
     @return uint256 Last logged price of coin.
     """
