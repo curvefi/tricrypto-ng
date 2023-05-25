@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 
 import click
-from ape import networks, project, Contract
+from ape import Contract, networks, project
 from ape.api.address import Address
 from ape.logging import logger
 from eth_abi import encode

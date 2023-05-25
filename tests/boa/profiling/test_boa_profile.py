@@ -37,7 +37,7 @@ def _random_deposit(swap):
     swap.add_liquidity(amounts, 0, True, value=amounts[2])
 
     boa.env.time_travel(random.randint(12, 600))
-    
+
 
 def _random_deposit_weth(swap):
 
@@ -64,7 +64,7 @@ def _random_deposit_one(swap):
 
     # swap.add_liquidity(amounts, 0, use_eth, value=value)
     swap.add_liquidity(amounts, 0, False)
-        
+
     boa.env.time_travel(random.randint(12, 600))
 
 
@@ -99,12 +99,12 @@ def test_profile_amms(swap_with_deposit, coins, user, math_contract):
     boa.env.set_balance(user, 10**50)
 
     with boa.env.prank(user):
-        
+
         for k in range(NUM_RUNS):
 
             # deposit:
             _random_deposit(swap)
-            
+
             # deposit with weth:
             _random_deposit_weth(swap)
 
