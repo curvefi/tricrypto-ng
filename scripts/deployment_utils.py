@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 
 import click
-from ape import networks, project
+from ape import networks, project, Contract
 from ape.api.address import Address
 from ape.logging import logger
 from eth_abi import encode
@@ -212,7 +212,7 @@ def test_deployment(pool, coins, fee_receiver, account):
     )
 
     for coin in coins:
-        coin_contract = project.ERC20Mock.at(coin)
+        coin_contract = Contract(coin)
         bal = coin_contract.balanceOf(account)
         assert bal > 0, "Not enough coins!"
 

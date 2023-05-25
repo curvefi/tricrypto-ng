@@ -11,10 +11,20 @@ plugins:
   - name: optimism
   - name: polygon
 
-vyper:
-  evm_version: shanghai
-
 default_ecosystem: ethereum
+
+# vyper:
+#   evm_version: london
+
+hardhat:
+  port: auto
+  # hard_fork: london
+  fork:
+    ethereum:
+      mainnet:
+        upstream_provider: alchemy
+      sepolia:
+        upstream_provider: alchemy
 
 ethereum:
   default_network: mainnet-fork
@@ -25,16 +35,6 @@ ethereum:
     transaction_acceptance_timeout: 99999999
   sepolia:
     transaction_acceptance_timeout: 99999999
-
-hardhat:
-  port: auto
-  hard_fork: shanghai
-  fork:
-    ethereum:
-      mainnet:
-        upstream_provider: alchemy
-      sepolia:
-        upstream_provider: alchemy
 
 geth:
   ethereum:

@@ -226,13 +226,11 @@ def deploy_and_test_infra(network, account):
         to_checksum_address(pool.coins(2)),
     ]
 
+    _account = account
     if "mainnet-fork" in network:
-        impersonated_bridge = accounts[
-            "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"
-        ]
-        deploy_utils.test_deployment(
-            pool, coins, fee_receiver, impersonated_bridge
-        )
+        _account = accounts["0x8EB8a3b98659Cce290402893d0123abb75E3ab28"]
+        
+    deploy_utils.test_deployment(pool, coins, fee_receiver, _account)
 
     # ------------------- GAUGE IMPLEMENTATION DEPLOYMENT --------------------
 
