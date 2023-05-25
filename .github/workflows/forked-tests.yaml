@@ -36,5 +36,8 @@ jobs:
       - name: Install Requirements
         run: pip install -r requirements_ape.txt
 
+      - name: Install Ape plugins
+        run: ape plugins install .
+
       - name: Run Tests
         run: python -m pytest tests/ape -n auto

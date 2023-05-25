@@ -32,7 +32,7 @@ hardhat:
   fork:
     ethereum:
       mainnet:
-        upstream_provider: geth
+        upstream_provider: alchemy
       sepolia:
         upstream_provider: alchemy
 
