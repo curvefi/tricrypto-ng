@@ -23,53 +23,26 @@ def fee_receiver(accounts):
 
 @pytest.fixture(scope="module")
 def user(accounts):
-    return accounts[3]
+    # impersonate Avalanche bridge:
+    return accounts["0x8EB8a3b98659Cce290402893d0123abb75E3ab28"]
 
 
 # ------ token fixtures -------
 
 
 @pytest.fixture(scope="module")
-def weth(user, accounts, project, deployer, owner):
-
-    binance = accounts["0x28C6c06298d514Db089934071355E5743bf21d60"]
-    _weth = project.WETH9.at("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-
-    binance_bal = int(binance.balance - 10**19)
-    binance.transfer(user, binance_bal)
-    binance.transfer(deployer, 2 * 10**18)
-    binance.transfer(owner, 2 * 10**18)
-    binance.transfer(user, 2 * 10**18)
-    _weth.deposit(sender=user, value=binance_bal // 2)
-
-    return _weth
+def weth():
+    return Contract("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
 
 
 @pytest.fixture(scope="module")
-def wbtc(user, accounts):
-    token_contract = Contract("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599")
-
-    binance14 = accounts["0x28C6c06298d514Db089934071355E5743bf21d60"]
-    acc1 = accounts["0x6daB3bCbFb336b29d06B9C793AEF7eaA57888922"]
-
-    for acc in [binance14, acc1]:
-        token_balance = int(token_contract.balanceOf(acc) / 1.1)
-        token_contract.transfer(user, token_balance, sender=acc)
-
-    return token_contract
+def wbtc():
+    return Contract("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599")
 
 
 @pytest.fixture(scope="module")
-def usdt(user, accounts):
-    token_contract = Contract("0xdac17f958d2ee523a2206206994597c13d831ec7")
-
-    binance_pegged_tokens = accounts[
-        "0x47ac0fb4f2d84898e4d9e7b4dab3c24507a6d503"
-    ]
-    token_balance = int(token_contract.balanceOf(binance_pegged_tokens) / 1.1)
-    token_contract.transfer(user, token_balance, sender=binance_pegged_tokens)
-
-    return token_contract
+def usdt():
+    return Contract("0xdac17f958d2ee523a2206206994597c13d831ec7")
 
 
 @pytest.fixture(scope="module")
@@ -99,9 +72,7 @@ def token_legacy():
 
 @pytest.fixture(scope="module")
 def swap_legacy(coins, user, token_legacy, project):
-    swap = project.TricryptoLegacy.at(
-        "0xd51a44d3fae010294c616388b506acda1bfaae46"
-    )
+    swap = Contract("0xd51a44d3fae010294c616388b506acda1bfaae46")
     for coin in coins:
         coin.approve(swap, 2**256 - 1, sender=user)
 
@@ -145,9 +116,6 @@ def factory(deployer, fee_receiver, owner, weth, project):
     amm_blueprint = deploy_blueprint(
         project.CurveTricryptoOptimizedWETH, deployer, project
     )
-    hyperoptimised_amm_blueprint = deploy_blueprint(
-        project.CurveTricryptoHyperOptimizedWETH, deployer, project
-    )
     gauge_blueprint = deploy_blueprint(
         project.LiquidityGauge, deployer, project
     )
@@ -156,15 +124,13 @@ def factory(deployer, fee_receiver, owner, weth, project):
     views_contract = project.CurveCryptoViews3Optimized.deploy(sender=deployer)
 
     factory = project.CurveTricryptoFactory.deploy(
-        fee_receiver, owner, weth, math_contract, sender=deployer
+        fee_receiver, owner, sender=deployer
     )
 
     factory.set_pool_implementation(amm_blueprint, 0, sender=owner)
-    factory.set_pool_implementation(
-        hyperoptimised_amm_blueprint, 1, sender=owner
-    )
     factory.set_gauge_implementation(gauge_blueprint, sender=owner)
     factory.set_views_implementation(views_contract, sender=owner)
+    factory.set_math_implementation(math_contract, sender=owner)
 
     return factory
 
@@ -189,7 +155,7 @@ def params(swap_legacy):
 
 
 @pytest.fixture(scope="module")
-def swap_optimised(deployer, factory, coins, params, user, project, weth):
+def swap(deployer, factory, coins, params, project, weth):
 
     tx = factory.deploy_pool(
         "Curve.fi USDC-BTC-ETH",
@@ -208,16 +174,21 @@ def swap_optimised(deployer, factory, coins, params, user, project, weth):
         params["initial_prices"],
         sender=deployer,
     )
-
-    pool_address = tx.events[1].pool
+    emitted_events = tx.decode_logs()
+    pool_address = emitted_events[1].pool
     pool = project.CurveTricryptoOptimizedWETH.at(pool_address)
+    return pool
+
+
+@pytest.fixture(scope="module")
+def swap_optimised(swap, user):
 
     for coin in coins:
-        coin.approve(pool, 2**256 - 1, sender=user)
+        coin.approve(swap, 2**256 - 1, sender=user)
 
     amounts = _get_deposit_amounts(
         10**6, [10**18] + params["initial_prices"], coins
     )
-    pool.add_liquidity(amounts, 0, False, sender=user)
+    swap.add_liquidity(amounts, 0, False, sender=user)
 
-    return pool
+    return swap

@@ -3,7 +3,9 @@ name: forked-tests
 on: ["push", "pull_request"]
 
 env:
+  ETHERSCAN_TOKEN: ${{ secrets.ETHERSCAN_TOKEN }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  WEB3_ALCHEMY_PROJECT_ID: ${{secrets.ALCHEMY_API_KEY}}
 
 jobs:
   ape-tests:

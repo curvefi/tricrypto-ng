@@ -12,7 +12,7 @@ plugins:
   - name: polygon
 
 vyper:
-  evm_version: paris
+  evm_version: shanghai
 
 default_ecosystem: ethereum
 
@@ -28,7 +28,7 @@ ethereum:
 
 hardhat:
   port: auto
-  hard_fork: paris
+  hard_fork: shanghai
   fork:
     ethereum:
       mainnet:

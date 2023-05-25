@@ -3,7 +3,7 @@ from math import log
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.unitary.pool.stateful.stateful_base import StatefulBase
+from tests.boa.unitary.pool.stateful.stateful_base import StatefulBase
 
 MAX_SAMPLES = 20
 STEP_COUNT = 100
