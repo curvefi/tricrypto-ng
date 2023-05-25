@@ -12,23 +12,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+
       - name: Cache Compiler Installations
         uses: actions/cache@v2
         with:
           path: |
             ~/.vvm
           key: compiler-cache
+
       - name: Setup Python 3.10.4
         uses: actions/setup-python@v2
         with:
           python-version: 3.10.4
-      - name: Setup Node.js
-        uses: actions/setup-node@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
         with:
-          node-version: 16
-      - name: Install Hardhat
-        run: npm ci
+          node-version: "16"
+
+      - name: Install Node Dependencies
+        run: npm install --save-dev hardhat
+
       - name: Install Requirements
         run: pip install -r requirements_ape.txt
+
       - name: Run Tests
         run: python -m pytest tests/ape -n auto
