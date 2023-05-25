@@ -144,7 +144,7 @@ A_MULTIPLIER: constant(uint256) = 10000
 packed_precisions: uint256
 
 MATH: public(immutable(Math))
-coins: public(address[N_COINS])
+coins: public(immutable(address[N_COINS]))
 factory: public(address)
 
 price_scale_packed: uint256  # <------------------------ Internal price scale.
@@ -254,8 +254,8 @@ def __init__(
 
     name = _name
     symbol = _symbol
+    coins = _coins
 
-    self.coins = _coins
     self.packed_precisions = packed_precisions  # <------- Precisions of coins
     #                            are calculated as 10**(18 - coin.decimals()).
 
@@ -304,7 +304,7 @@ def __init__(
 @external
 def __default__():
     if msg.value > 0:
-        assert WETH20 in self.coins, "dev: ETH not in pool"
+        assert WETH20 in coins
 
 
 @internal
@@ -486,6 +486,9 @@ def exchange_extended(
     @notice Exchange with callback method.
     @dev This method does not allow swapping in native token, but does allow
          swaps that transfer out native token from the pool.
+    @dev Does not allow flashloans
+    @dev One use-case is to reduce the number of redundant ERC20 token
+         transfers in zaps.
     @param i Index value for the input coin
     @param j Index value for the output coin
     @param dx Amount of input coin being swapped in
@@ -563,10 +566,10 @@ def add_liquidity(
 
         if amounts[i] > 0:
 
-            if self.coins[i] == WETH20:
+            if coins[i] == WETH20:
 
                 self._transfer_in(
-                    self.coins[i],
+                    coins[i],
                     amounts[i],
                     0,  # <-----------------------------------
                     msg.value,  #                             | No callbacks
@@ -580,7 +583,7 @@ def add_liquidity(
             else:
 
                 self._transfer_in(
-                    self.coins[i],
+                    coins[i],
                     amounts[i],
                     0,
                     0,  # <----------------- mvalue = 0 if coin is not WETH20.
@@ -711,7 +714,7 @@ def remove_liquidity(
     # ---------------------------------- Transfers ---------------------------
 
     for i in range(N_COINS):
-        self._transfer_out(self.coins[i], d_balances[i], use_eth, receiver)
+        self._transfer_out(coins[i], d_balances[i], use_eth, receiver)
 
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
 
@@ -765,7 +768,7 @@ def remove_liquidity_one_coin(
 
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
-    self._transfer_out(self.coins[i], dy, use_eth, receiver)
+    self._transfer_out(coins[i], dy, use_eth, receiver)
 
     packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
     #        Safe to use D from _calc_withdraw_one_coin here ---^
@@ -939,13 +942,13 @@ def _exchange(
 
     ########################## TRANSFER IN <-------
     self._transfer_in(
-        self.coins[i], dx, dy, mvalue,
+        coins[i], dx, dy, mvalue,
         callbacker, callback_sig,  # <-------- Callback method is called here.
         sender, receiver, use_eth,
     )
 
     ########################## -------> TRANSFER OUT
-    self._transfer_out(self.coins[j], dy, use_eth, receiver)
+    self._transfer_out(coins[j], dy, use_eth, receiver)
 
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
@@ -1186,7 +1189,6 @@ def _claim_admin_fees():
     #         `self.balances` yet: pool balances only account for incoming and
     #                  outgoing tokens excluding fees. Following 'gulps' fees:
 
-    coins: address[N_COINS] = self.coins
     for i in range(N_COINS):
         if coins[i] == WETH20:
             self.balances[i] = self.balance
