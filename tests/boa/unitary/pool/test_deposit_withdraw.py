@@ -248,11 +248,15 @@ def test_second_deposit_one(
     mint_for_testing(coins[i], user, amounts[i])
 
     try:
+
         calculated = views_contract.calc_token_amount(
             amounts, True, swap_with_deposit
         )
         measured = swap_with_deposit.balanceOf(user)
         d_balances = [swap_with_deposit.balances(i) for i in range(3)]
+
+        with boa.env.prank(user):
+            swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
         d_balances = [
             swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
@@ -261,9 +265,6 @@ def test_second_deposit_one(
 
         assert calculated <= measured
         assert tuple(amounts) == tuple(d_balances)
-
-        with boa.env.prank(user):
-            swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
     except boa.BoaError as b_error:
 
