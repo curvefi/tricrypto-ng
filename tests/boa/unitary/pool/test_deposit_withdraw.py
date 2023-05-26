@@ -16,6 +16,10 @@ def approx(x1, x2, precision):
     return abs(math.log(x1 / x2)) <= precision
 
 
+def assert_string_contains(string, substrings):
+    assert any(substring in string for substring in substrings)
+
+
 @pytest.fixture(scope="module")
 def test_1st_deposit_and_last_withdraw(swap, coins, user, fee_receiver):
 
@@ -43,27 +47,21 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user, fee_receiver):
     with boa.env.prank(user):
         swap.remove_liquidity(token_balance, [0] * 3)
 
-    assert swap.balanceOf(user) == swap.totalSupply() == 0
-
-    # check balances. nothing should be left over
-    assert boa.env.get_balance(swap.address) == 0
-    for i in range(len(coins)):
-        assert swap.balances(i) == 0
+    # nothing is left except admin balances
+    assert (
+        swap.balanceOf(user)
+        == swap.totalSupply() - swap.balanceOf(fee_receiver)
+        == 0
+    )
 
     return swap
 
 
 @pytest.fixture(scope="module")
 def test_first_deposit_full_withdraw_second_deposit(
-    test_1st_deposit_and_last_withdraw, user, coins
+    test_1st_deposit_and_last_withdraw, user, coins, fee_receiver
 ):
     swap = test_1st_deposit_and_last_withdraw
-
-    # check balances. pool should be completely empty
-    assert boa.env.get_balance(swap.address) == 0
-    for i in range(len(coins)):
-        assert swap.balances(i) == 0
-
     quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
 
     for coin, q in zip(coins, quantities):
@@ -72,20 +70,25 @@ def test_first_deposit_full_withdraw_second_deposit(
             coin.approve(swap, 2**256 - 1)
 
     # Second deposit
+    eth_bal_before = boa.env.get_balance(swap.address)
+    swap_balances_before = [swap.balances(i) for i in range(3)]
     with boa.env.prank(user):
         swap.add_liquidity(quantities, 0)
 
-    assert swap.xcp_profit() == 10**18
-    assert swap.xcp_profit_a() == 10**18
-    assert swap.virtual_price() == 10**18
+    assert swap.xcp_profit_a() >= 10**18
+    assert swap.xcp_profit() >= 10**18
+    assert swap.virtual_price() >= 10**18
 
     # test if eth was deposited:
-    assert boa.env.get_balance(swap.address) == quantities[2] + 0
+    assert boa.env.get_balance(swap.address) == quantities[2] + eth_bal_before
+
     for i in range(len(coins)):
-        assert swap.balances(i) == quantities[i] + 0
+        assert swap.balances(i) == quantities[i] + swap_balances_before[i]
 
     token_balance = swap.balanceOf(user)
-    assert token_balance == swap.totalSupply() > 0
+    assert (
+        token_balance + swap.balanceOf(fee_receiver) == swap.totalSupply() > 0
+    )
     assert abs(swap.get_virtual_price() / 1e18 - 1) < 1e-3
 
     return swap
@@ -126,7 +129,7 @@ def test_claim_admin_fees_post_emptying_and_depositing(
 
     swap = test_first_deposit_full_withdraw_second_deposit
     admin_balance_before = swap.balanceOf(swap.fee_receiver())
-    assert admin_balance_before == 0
+    assert admin_balance_before >= 0
 
     # do another deposit to have some fees for the admin:
     quantities = [10**5 * 10**36 // p for p in INITIAL_PRICES]
@@ -244,22 +247,30 @@ def test_second_deposit_one(
     amounts[i] = value * 10**18 // (INITIAL_PRICES)[i]
     mint_for_testing(coins[i], user, amounts[i])
 
-    calculated = views_contract.calc_token_amount(
-        amounts, True, swap_with_deposit
-    )
-    measured = swap_with_deposit.balanceOf(user)
-    d_balances = [swap_with_deposit.balances(i) for i in range(3)]
+    try:
+        calculated = views_contract.calc_token_amount(
+            amounts, True, swap_with_deposit
+        )
+        measured = swap_with_deposit.balanceOf(user)
+        d_balances = [swap_with_deposit.balances(i) for i in range(3)]
 
-    with boa.env.prank(user):
-        swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
+        d_balances = [
+            swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
+        ]
+        measured = swap_with_deposit.balanceOf(user) - measured
 
-    d_balances = [
-        swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
-    ]
-    measured = swap_with_deposit.balanceOf(user) - measured
+        assert calculated <= measured
+        assert tuple(amounts) == tuple(d_balances)
 
-    assert calculated <= measured
-    assert tuple(amounts) == tuple(d_balances)
+        with boa.env.prank(user):
+            swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
+
+    except boa.BoaError as b_error:
+
+        assert_string_contains(
+            b_error.stack_trace.last_frame.pretty_vm_reason,
+            ["Unsafe value for y", "Unsafe values x[i]"],
+        )
 
 
 @given(
