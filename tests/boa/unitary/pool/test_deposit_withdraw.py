@@ -94,20 +94,12 @@ def test_first_deposit_full_withdraw_second_deposit(
     amount=strategy("uint256", max_value=2 * 10**18, min_value=10**10),
 )
 @settings(**SETTINGS)
-def test_second_deposit_single_token(swap, coins, user, i, amount):
-
-    quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
-
-    for coin, q in zip(coins, quantities):
-        mint_for_testing(coin, user, q)
-        with boa.env.prank(user):
-            coin.approve(swap, 2**256 - 1)
-
-    # Very first deposit: need some deposit in there to deposit single tokens
-    with boa.env.prank(user):
-        swap.add_liquidity(quantities, 0)
+def test_second_deposit_single_token(
+    swap_with_deposit, coins, user, i, amount
+):
 
     # deposit single token:
+    quantities = [0, 0, 0]
     for j in range(3):
         if j != i:
             quantities[j] = 0
@@ -116,12 +108,12 @@ def test_second_deposit_single_token(swap, coins, user, i, amount):
 
     # Single sided deposit
     with boa.env.prank(user):
-        swap.add_liquidity(quantities, 0)
+        swap_with_deposit.add_liquidity(quantities, 0)
 
     # deposit single sided but pure eth:
     mint_for_testing(coins[2], user, amount, True)
     with boa.env.prank(user):
-        swap.add_liquidity([0, 0, amount], 0, True, value=amount)
+        swap_with_deposit.add_liquidity([0, 0, amount], 0, True, value=amount)
 
 
 def test_claim_admin_fees_post_emptying_and_depositing(

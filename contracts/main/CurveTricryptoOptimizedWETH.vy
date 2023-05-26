@@ -534,9 +534,6 @@ def add_liquidity(
 
     assert amounts[0] + amounts[1] + amounts[2] > 0  #dev: no coins to add
 
-    self._claim_admin_fees()  # <---- Claiming fees reduces virtual_price. So,
-    #       claim fees before adding liquidity; depositor is not micro-rugged.
-
     # --------------------- Get prices, balances -----------------------------
 
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
@@ -616,6 +613,9 @@ def add_liquidity(
         d_token = self.get_xcp(D)  # <------------------------- Making initial
         #                                            virtual price equal to 1.
 
+    if d_token == 0:
+        raise
+
     assert d_token > 0  # dev: nothing minted
 
     if old_D > 0:
@@ -643,6 +643,9 @@ def add_liquidity(
     log AddLiquidity(
         receiver, amounts, d_token_fee, token_supply, packed_price_scale
     )
+
+    self._claim_admin_fees()  # <---- Claiming fees reduces virtual_price. So,
+    #       claim fees before adding liquidity; depositor is not micro-rugged.
 
     return d_token
 

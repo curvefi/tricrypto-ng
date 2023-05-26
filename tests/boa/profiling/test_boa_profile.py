@@ -51,8 +51,7 @@ def _random_deposit_weth(swap):
 def _random_deposit_one(swap):
     balances = [swap.balances(i) for i in range(3)]
     c = random.uniform(0, 0.05)
-    # i = random.randint(0, 2)
-    i = 2
+    i = random.randint(0, 2)
     use_eth = i == 2
     amounts = [0, 0, 0]
     value = 0
@@ -62,8 +61,25 @@ def _random_deposit_one(swap):
             if use_eth:
                 value = amounts[i]
 
-    # swap.add_liquidity(amounts, 0, use_eth, value=value)
-    swap.add_liquidity(amounts, 0, False)
+    swap.add_liquidity(amounts, 0, use_eth, value=value)
+
+    boa.env.time_travel(random.randint(12, 600))
+
+
+def _random_deposit_eth(swap):
+    balances = [swap.balances(i) for i in range(3)]
+    c = random.uniform(0, 0.05)
+    i = 2
+    use_eth = True
+    amounts = [0, 0, 0]
+    value = 0
+    for j in range(3):
+        if i == j:
+            amounts[i] = int(balances[i] * c)
+            if use_eth:
+                value = amounts[i]
+
+    swap.add_liquidity(amounts, 0, use_eth, value=value)
 
     boa.env.time_travel(random.randint(12, 600))
 
@@ -86,8 +102,7 @@ def _random_withdraw_one(swap):
     swap.remove_liquidity_one_coin(amount, i, 0, use_eth)
 
 
-# @pytest.mark.skip
-# @pytest.mark.profile
+@pytest.mark.profile
 def test_profile_amms(swap_with_deposit, coins, user, math_contract):
 
     swap = swap_with_deposit
@@ -109,7 +124,10 @@ def test_profile_amms(swap_with_deposit, coins, user, math_contract):
             _random_deposit_weth(swap)
 
             # deposit single token:
-            # _random_deposit_one(swap)
+            _random_deposit_one(swap)
+
+            # deposit only eth:
+            _random_deposit_eth(swap)
 
             # swap:
             _random_exchange(swap)
