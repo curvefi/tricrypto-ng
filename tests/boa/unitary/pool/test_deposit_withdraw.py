@@ -147,7 +147,11 @@ def test_claim_admin_fees_post_emptying_and_depositing(
 
     assert swap.xcp_profit() > 0
     assert swap.virtual_price() > 10**18
-    assert swap.xcp_profit_a() == 10**18
+
+    if swap.totalSupply() > 10**18:
+        assert swap.xcp_profit_a() > 10**18
+    else:
+        assert swap.xcp_profit_a() == 10**18
 
     with boa.env.prank(user):
         swap.claim_admin_fees()
