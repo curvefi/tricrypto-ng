@@ -19,11 +19,11 @@ def test_commit_incorrect_fee_params(swap, factory_admin, params):
     p = copy.deepcopy(params)
     p["mid_fee"] = p["out_fee"] + 1
     with boa.env.prank(factory_admin):
-        with boa.reverts(dev="mid-fee is too high"):
+        with boa.reverts("mid-fee is too high"):
             _commit_new_params(swap, p)
 
         p["out_fee"] = 0
-        with boa.reverts(dev="fee is out of range"):
+        with boa.reverts("fee is out of range"):
             _commit_new_params(swap, p)
 
         # too large out_fee revert to old out_fee:
@@ -41,7 +41,7 @@ def test_commit_incorrect_fee_gamma(swap, factory_admin, params):
 
     with boa.env.prank(factory_admin):
 
-        with boa.reverts(dev="fee_gamma out of range [1 .. 10**18]"):
+        with boa.reverts("fee_gamma out of range [1 .. 10**18]"):
             _commit_new_params(swap, p)
 
         p["fee_gamma"] = 10**18 + 1
@@ -69,7 +69,7 @@ def test_commit_rebalancing_params(swap, factory_admin, params):
             assert logs.args[4] == params["adjustment_step"]
             assert logs.args[5] == params["ma_time"]
 
-        with boa.reverts(dev="MA time should be longer than 60/ln(2)"):
+        with boa.reverts("MA time should be longer than 60/ln(2)"):
             p["ma_time"] = 86
             _commit_new_params(swap, p)
 

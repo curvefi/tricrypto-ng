@@ -232,7 +232,7 @@ def _imbalance_swap(swap, coins, imbalance_frac, user, dollar_amount, i, j):
     except boa.BoaError as b_error:
         assert_string_contains(
             b_error.stack_trace.last_frame.pretty_vm_reason,
-            ["dev: unsafe value for y", "dev: unsafe values x[i]"],
+            ["Unsafe value for y", "Unsafe values x[i]"],
         )
         return
 
@@ -245,7 +245,7 @@ def _imbalance_swap(swap, coins, imbalance_frac, user, dollar_amount, i, j):
     except boa.BoaError as b_error:
         assert_string_contains(
             b_error.stack_trace.last_frame.pretty_vm_reason,
-            ["dev: unsafe value for y", "dev: unsafe values x[i]"],
+            ["Unsafe value for y", "Unsafe values x[i]"],
         )
         return
 
@@ -376,8 +376,5 @@ def test_dxdy_dump(
     ]
 
     for n in range(2):
-        try:
-            assert dxdy_math_1[n] < dxdy_math_0[n]
-            assert dxdy_swap_1[n] < dxdy_swap_0[n]
-        except:
-            breakpoint()
+        assert dxdy_math_1[n] < dxdy_math_0[n]
+        assert dxdy_swap_1[n] < dxdy_swap_0[n]

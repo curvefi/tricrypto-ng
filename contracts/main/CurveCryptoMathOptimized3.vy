@@ -52,7 +52,7 @@ def get_y(
     for k in range(3):
         if k != i:
             frac = x[k] * 10**18 / _D
-            assert frac > 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "Unsafe values x[i]"
             # if above conditions are met, x[k] > 0
 
     j: uint256 = 0
@@ -223,7 +223,7 @@ def get_y(
     ]
 
     frac = unsafe_div(out[0] * 10**18, _D)
-    assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe value for y
+    assert frac >= 10**16 - 1 and frac < 10**20 + 1,  "Unsafe value for y"
     # due to precision issues, get_y can be off by 2 wei or so wrt _newton_y
 
     return out
@@ -245,7 +245,7 @@ def _newton_y(
     for k in range(3):
         if k != i:
             frac = x[k] * 10**18 / D
-            assert frac > 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+            assert frac > 10**16 - 1 and frac < 10**20 + 1, "Unsafe values x[i]"
 
     y: uint256 = D / N_COINS
     K0_i: uint256 = 10**18
@@ -324,7 +324,7 @@ def _newton_y(
 
         if diff < max(convergence_limit, y / 10**14):
             frac = y * 10**18 / D
-            assert frac > 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe value for y
+            assert frac > 10**16 - 1 and frac < 10**20 + 1,  "Unsafe value for y"
             return y
 
     raise "Did not converge"
@@ -526,7 +526,7 @@ def newton_D(
             # Test that we are safe with the next get_y
             for _x in x:
                 frac = unsafe_div(unsafe_mul(_x, 10**18), D)
-                assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
+                assert frac >= 10**16 - 1 and frac < 10**20 + 1, "Unsafe values x[i]"
 
             return D
     raise "Did not converge"
