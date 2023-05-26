@@ -17,7 +17,7 @@ def approx(x1, x2, precision):
 
 
 @pytest.fixture(scope="module")
-def test_1st_deposit_and_last_withdraw(swap, coins, user):
+def test_1st_deposit_and_last_withdraw(swap, coins, user, fee_receiver):
 
     quantities = [10**36 // p for p in INITIAL_PRICES]  # $3M worth
 
@@ -26,15 +26,17 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user):
         with boa.env.prank(user):
             coin.approve(swap, 2**256 - 1)
 
-    # Very first deposit
+    bal_before = boa.env.get_balance(swap.address)
     with boa.env.prank(user):
         swap.add_liquidity(quantities, 0)
 
     # test if eth was deposited:
-    assert boa.env.get_balance(swap.address) == quantities[2]
+    assert boa.env.get_balance(swap.address) == bal_before + quantities[2]
 
     token_balance = swap.balanceOf(user)
-    assert token_balance == swap.totalSupply() > 0
+    assert (
+        token_balance == swap.totalSupply() - swap.balanceOf(fee_receiver) > 0
+    )
     assert abs(swap.get_virtual_price() / 1e18 - 1) < 1e-3
 
     # Empty the contract

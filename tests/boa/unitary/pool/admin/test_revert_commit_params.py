@@ -79,13 +79,13 @@ def test_revert_commit_twice(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _commit_new_params(swap, params)
 
-        with boa.reverts("dev: active action"):
+        with boa.reverts(dev="active action"):
             _commit_new_params(swap, params)
 
 
 def test_revert_unauthorised_commit(swap, user, params):
 
-    with boa.env.prank(user), boa.reverts("dev: only owner"):
+    with boa.env.prank(user), boa.reverts(dev="only owner"):
         _commit_new_params(swap, params)
 
 
@@ -94,7 +94,7 @@ def test_unauthorised_revert(swap, user, factory_admin, params):
     with boa.env.prank(factory_admin):
         _commit_new_params(swap, params)
 
-    with boa.env.prank(user), boa.reverts("dev: only owner"):
+    with boa.env.prank(user), boa.reverts(dev="only owner"):
         swap.revert_new_parameters()
 
 
@@ -114,5 +114,5 @@ def test_revert_new_params(swap, factory_admin, params):
         swap.revert_new_parameters()
         boa.env.time_travel(7 * 24 * 60 * 60)
 
-        with boa.reverts("dev: no active action"):
+        with boa.reverts(dev="no active action"):
             swap.apply_new_parameters()

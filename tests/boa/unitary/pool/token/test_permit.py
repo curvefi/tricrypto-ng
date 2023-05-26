@@ -46,7 +46,7 @@ def test_permit_success(eth_acc, bob, swap, sign_permit):
 
 
 def test_permit_reverts_owner_is_invalid(bob, swap):
-    with boa.reverts("dev: invalid owner"), boa.env.prank(bob):
+    with boa.reverts(dev="invalid owner"), boa.env.prank(bob):
         swap.permit(
             ZERO_ADDRESS,
             bob,
@@ -59,7 +59,7 @@ def test_permit_reverts_owner_is_invalid(bob, swap):
 
 
 def test_permit_reverts_deadline_is_invalid(bob, swap):
-    with boa.reverts("dev: permit expired"), boa.env.prank(bob):
+    with boa.reverts(dev="permit expired"), boa.env.prank(bob):
         swap.permit(
             bob,
             bob,
@@ -72,7 +72,7 @@ def test_permit_reverts_deadline_is_invalid(bob, swap):
 
 
 def test_permit_reverts_signature_is_invalid(bob, swap):
-    with boa.reverts("dev: invalid signature"), boa.env.prank(bob):
+    with boa.reverts(dev="invalid signature"), boa.env.prank(bob):
         swap.permit(
             bob,
             bob,
