@@ -613,9 +613,6 @@ def add_liquidity(
         d_token = self.get_xcp(D)  # <------------------------- Making initial
         #                                            virtual price equal to 1.
 
-    if d_token == 0:
-        raise
-
     assert d_token > 0  # dev: nothing minted
 
     if old_D > 0:
