@@ -44,15 +44,15 @@ def get_y(
     """
 
     # Safety checks
-    assert _ANN > MIN_A - 1 and _ANN < MAX_A + 1, "dev: unsafe values A"
-    assert _gamma > MIN_GAMMA - 1 and _gamma < MAX_GAMMA + 1, "dev: unsafe values gamma"
-    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe values D"
+    assert _ANN > MIN_A - 1 and _ANN < MAX_A + 1  # dev: unsafe values A
+    assert _gamma > MIN_GAMMA - 1 and _gamma < MAX_GAMMA + 1  # dev: unsafe values gamma
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1  # dev: unsafe values D
 
     frac: uint256 = 0
     for k in range(3):
         if k != i:
             frac = x[k] * 10**18 / _D
-            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+            assert frac > 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
             # if above conditions are met, x[k] > 0
 
     j: uint256 = 0
@@ -223,7 +223,7 @@ def get_y(
     ]
 
     frac = unsafe_div(out[0] * 10**18, _D)
-    assert frac >= 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe value for y"
+    assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe value for y
     # due to precision issues, get_y can be off by 2 wei or so wrt _newton_y
 
     return out
@@ -245,7 +245,7 @@ def _newton_y(
     for k in range(3):
         if k != i:
             frac = x[k] * 10**18 / D
-            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+            assert frac > 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
 
     y: uint256 = D / N_COINS
     K0_i: uint256 = 10**18
@@ -324,7 +324,7 @@ def _newton_y(
 
         if diff < max(convergence_limit, y / 10**14):
             frac = y * 10**18 / D
-            assert frac > 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe value for y"
+            assert frac > 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe value for y
             return y
 
     raise "Did not converge"
@@ -349,8 +349,8 @@ def newton_D(
            to zero (no apriori)
     """
     x: uint256[N_COINS] = self._sort(x_unsorted)
-    assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS, "dev: out of limits"
-    assert x[0] > 0, "dev: empty pool"
+    assert x[0] < max_value(uint256) / 10**18 * N_COINS**N_COINS  # dev: out of limits
+    assert x[0] > 0  # dev: empty pool
 
     # Safe to do unsafe add since we checked largest x's bounds previously
     S: uint256 = unsafe_add(unsafe_add(x[0], x[1]), x[2])
@@ -526,7 +526,7 @@ def newton_D(
             # Test that we are safe with the next get_y
             for _x in x:
                 frac = unsafe_div(unsafe_mul(_x, 10**18), D)
-                assert frac >= 10**16 - 1 and frac < 10**20 + 1, "dev: unsafe values x[i]"
+                assert frac >= 10**16 - 1 and frac < 10**20 + 1  # dev: unsafe values x[i]
 
             return D
     raise "Did not converge"
@@ -545,7 +545,7 @@ def get_p(
     @param _A_gamma Amplification coefficient and gamma.
     """
 
-    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1, "dev: unsafe D values"
+    assert _D > 10**17 - 1 and _D < 10**15 * 10**18 + 1  # dev: unsafe D values
 
     # K0 = P * N**N / D**N.
     # K0 is dimensionless and has 10**36 precision:

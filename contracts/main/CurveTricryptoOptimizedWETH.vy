@@ -340,9 +340,9 @@ def _transfer_in(
     """
 
     if use_eth and _coin == WETH20:
-        assert mvalue == dx, "dev: incorrect eth amount"
+        assert mvalue == dx  # dev: incorrect eth amount
     else:
-        assert mvalue == 0, "dev: nonzero eth amount"
+        assert mvalue == 0  # dev: nonzero eth amount
 
         if callback_sig == empty(bytes32):
 
@@ -365,7 +365,7 @@ def _transfer_in(
                     _abi_encode(sender, receiver, _coin, dx, dy)
                 )
             )
-            assert ERC20(_coin).balanceOf(self) - b == dx, "dev: callback didn't give us coins"
+            assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
             #                                          ^------ note: dx cannot
             #                   be 0, so the contract MUST receive some _coin.
 
@@ -500,7 +500,7 @@ def exchange_extended(
     @return uint256 Amount of tokens at index j received by the `receiver`
     """
 
-    assert cb != empty(bytes32), "dev: No callback specified"
+    assert cb != empty(bytes32)  # dev: No callback specified
     return self._exchange(
         sender, 0, i, j, dx, min_dy, use_eth, receiver, msg.sender, cb
     )  # callbacker should never be self ------------------^
@@ -532,7 +532,7 @@ def add_liquidity(
     d_token_fee: uint256 = 0
     old_D: uint256 = 0
 
-    assert amounts[0] + amounts[1] + amounts[2] > 0  #dev: no coins to add
+    assert amounts[0] + amounts[1] + amounts[2] > 0  # dev: no coins to add
 
     # --------------------- Get prices, balances -----------------------------
 
@@ -870,8 +870,8 @@ def _exchange(
     callback_sig: bytes32
 ) -> uint256:
 
-    assert i != j, "dev: coin index out of range"
-    assert dx > 0, "dev: do not exchange 0 coins"
+    assert i != j  # dev: coin index out of range
+    assert dx > 0  # dev: do not exchange 0 coins
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
@@ -1563,8 +1563,8 @@ def permit(
     @param _s The second 32 bytes of the ECDSA signature.
     @return bool Success.
     """
-    assert _owner != empty(address), "dev: invalid owner"
-    assert block.timestamp <= _deadline, "dev: permit expired"
+    assert _owner != empty(address)  # dev: invalid owner
+    assert block.timestamp <= _deadline  # dev: permit expired
 
     nonce: uint256 = self.nonces[_owner]
     digest: bytes32 = keccak256(
@@ -1578,7 +1578,7 @@ def permit(
             ),
         )
     )
-    assert ecrecover(digest, _v, _r, _s) == _owner, "dev: invalid signature"
+    assert ecrecover(digest, _v, _r, _s) == _owner  # dev: invalid signature
 
     self.nonces[_owner] = unsafe_add(nonce, 1)  # <-- Unsafe add is safe here.
     self._approve(_owner, _spender, _value)
@@ -1968,8 +1968,8 @@ def ramp_A_gamma(
     @param future_gamma The future gamma value.
     @param future_time The timestamp at which the ramping will end.
     """
-    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
-    assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1), "dev: ramp undergoing"
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
+    assert block.timestamp > self.initial_A_gamma_time + (MIN_RAMP_TIME - 1)  # dev: ramp undergoing
     assert future_time > block.timestamp + MIN_RAMP_TIME - 1  # dev: insufficient time
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -2013,7 +2013,7 @@ def stop_ramp_A_gamma():
     @notice Stop Ramping A and gamma parameters immediately.
     @dev Only accessible by factory admin.
     """
-    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
 
     A_gamma: uint256[2] = self._A_gamma()
     current_A_gamma: uint256 = shift(A_gamma[0], 128)
@@ -2047,8 +2047,8 @@ def commit_new_parameters(
     @param _new_adjustment_step The new adjustment step.
     @param _new_ma_time The new ma time. ma_time is time_in_seconds/ln(2).
     """
-    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
-    assert self.admin_actions_deadline == 0, "dev: active action"
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
+    assert self.admin_actions_deadline == 0  # dev: active action
 
     _deadline: uint256 = block.timestamp + ADMIN_ACTIONS_DELAY
     self.admin_actions_deadline = _deadline
@@ -2122,8 +2122,8 @@ def apply_new_parameters():
     @notice Apply committed parameters.
     @dev Only callable after admin_actions_deadline.
     """
-    assert block.timestamp >= self.admin_actions_deadline, "dev: insufficient time"
-    assert self.admin_actions_deadline != 0, "dev: no active action"
+    assert block.timestamp >= self.admin_actions_deadline  # dev: insufficient time
+    assert self.admin_actions_deadline != 0  # dev: no active action
 
     self.admin_actions_deadline = 0
 
@@ -2153,5 +2153,5 @@ def revert_new_parameters():
     @dev Only accessible by factory admin. Setting admin_actions_deadline to 0
          ensures a revert in apply_new_parameters.
     """
-    assert msg.sender == Factory(self.factory).admin(), "dev: only owner"
+    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
     self.admin_actions_deadline = 0

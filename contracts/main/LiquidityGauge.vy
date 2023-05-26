@@ -555,8 +555,8 @@ def permit(
     @param _s The bytes[32:64] of the valid secp256k1 signature of permit by owner
     @return True, if transaction completes successfully
     """
-    assert _owner != empty(address), "dev: invalid owner"
-    assert block.timestamp <= _deadline, "dev: permit expired"
+    assert _owner != empty(address)  # dev: invalid owner
+    assert block.timestamp <= _deadline  # dev: permit expired
 
     nonce: uint256 = self.nonces[_owner]
     digest: bytes32 = keccak256(
@@ -570,7 +570,7 @@ def permit(
             ),
         )
     )
-    assert ecrecover(digest, _v, _r, _s) == _owner, "dev: invalid signature"
+    assert ecrecover(digest, _v, _r, _s) == _owner  # dev: invalid signature
 
     self.allowance[_owner][_spender] = _value
     self.nonces[_owner] = nonce + 1
