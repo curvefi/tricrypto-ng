@@ -234,13 +234,18 @@ def deploy_and_test_infra(network, account):
 
     # ------------------- GAUGE IMPLEMENTATION DEPLOYMENT --------------------
 
-    logger.info("Deploying gauge blueprint contract:")
-    gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
+    if (
+        "ethereum:mainnet" in network
+    ):  # Gauges are different in other chains ...
+        logger.info("Deploying gauge blueprint contract:")
+        gauge_impl = deploy_utils.deploy_blueprint(
+            project.LiquidityGauge, account
+        )
 
-    logger.info("Set Gauge Implementation:")
-    factory.set_gauge_implementation(
-        gauge_impl, sender=account, **deploy_utils._get_tx_params()
-    )
+        logger.info("Set Gauge Implementation:")
+        factory.set_gauge_implementation(
+            gauge_impl, sender=account, **deploy_utils._get_tx_params()
+        )
 
     # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
 
@@ -425,7 +430,7 @@ def deploy_gauge_and_set_up_vote(network, account, pool, factory):
         [
             (deploy_utils.GAUGE_CONTROLLER, "add_gauge", gauge.address, 5, 0),
         ],
-        "Add tricryptoUSDC [ethereum] gauge to the gauge controller",
+        "Add tricryptoUSDC Ethereum gauge to the gauge controller",
         account,
     )
 

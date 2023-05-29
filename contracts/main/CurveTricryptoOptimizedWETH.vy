@@ -641,8 +641,7 @@ def add_liquidity(
         receiver, amounts, d_token_fee, token_supply, packed_price_scale
     )
 
-    self._claim_admin_fees()  # <---- Claiming fees reduces virtual_price. So,
-    #       claim fees before adding liquidity; depositor is not micro-rugged.
+    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
 
     return d_token
 
