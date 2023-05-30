@@ -202,7 +202,7 @@ MAX_A_CHANGE: constant(uint256) = 10
 MIN_GAMMA: constant(uint256) = 10**10
 MAX_GAMMA: constant(uint256) = 5 * 10**16
 
-PRICE_SIZE: constant(int128) = 256 / (N_COINS - 1)
+PRICE_SIZE: constant(uint128) = 256 / (N_COINS - 1)
 PRICE_MASK: constant(uint256) = 2**PRICE_SIZE - 1
 
 # ----------------------- ERC20 Specific vars --------------------------------
@@ -799,7 +799,7 @@ def _pack(x: uint256[3]) -> uint256:
     @param x The uint256[3] to pack
     @return uint256 Integer with packed values
     """
-    return shift(x[0], 128) | shift(x[1], 64) | x[2]
+    return (x[0] << 128) | (x[1] << 64) | x[2]
 
 
 @internal
@@ -811,8 +811,8 @@ def _unpack(_packed: uint256) -> uint256[3]:
     @return uint256[3] A list of length 3 with unpacked integers
     """
     return [
-        shift(_packed, -128) & 18446744073709551615,
-        shift(_packed, -64) & 18446744073709551615,
+        (_packed >> 128) & 18446744073709551615,
+        (_packed >> 64) & 18446744073709551615,
         _packed & 18446744073709551615,
     ]
 
@@ -828,7 +828,7 @@ def _pack_prices(prices_to_pack: uint256[N_COINS-1]) -> uint256:
     packed_prices: uint256 = 0
     p: uint256 = 0
     for k in range(N_COINS - 1):
-        packed_prices = shift(packed_prices, PRICE_SIZE)
+        packed_prices = packed_prices << PRICE_SIZE
         p = prices_to_pack[N_COINS - 2 - k]
         assert p < PRICE_MASK
         packed_prices = p | packed_prices
@@ -847,7 +847,7 @@ def _unpack_prices(_packed_prices: uint256) -> uint256[2]:
     packed_prices: uint256 = _packed_prices
     for k in range(N_COINS - 1):
         unpacked_prices[k] = packed_prices & PRICE_MASK
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
+        packed_prices = packed_prices >> PRICE_SIZE
 
     return unpacked_prices
 
@@ -1251,7 +1251,7 @@ def xp() -> uint256[N_COINS]:
     for i in range(1, N_COINS):
         p: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
         result[i] = result[i] * p / PRECISION
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
+        packed_prices = packed_prices >> PRICE_SIZE
 
     return result
 
@@ -1263,7 +1263,7 @@ def _A_gamma() -> uint256[2]:
 
     A_gamma_1: uint256 = self.future_A_gamma
     gamma1: uint256 = A_gamma_1 & 2**128 - 1
-    A1: uint256 = shift(A_gamma_1, -128)
+    A1: uint256 = A_gamma_1 >> 128
 
     if block.timestamp < t1:
 
@@ -1276,7 +1276,7 @@ def _A_gamma() -> uint256[2]:
         t0 = block.timestamp - t0
         t2: uint256 = t1 - t0
 
-        A1 = (shift(A_gamma_0, -128) * t2 + A1 * t0) / t1
+        A1 = ((A_gamma_0 >> 128) * t2 + A1 * t0) / t1
         gamma1 = ((A_gamma_0 & 2**128 - 1) * t2 + gamma1 * t0) / t1
 
     return [A1, gamma1]
@@ -1304,7 +1304,7 @@ def get_xcp(D: uint256) -> uint256:
 
     for i in range(1, N_COINS):
         x[i] = D * 10**18 / (N_COINS * (packed_prices & PRICE_MASK))
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
+        packed_prices = packed_prices >> PRICE_SIZE
 
     return MATH.geometric_mean(x)
 
@@ -1362,7 +1362,7 @@ def _calc_withdraw_one_coin(
         if i == k:
             price_scale_i = p * xp[i]
         xp[k] = unsafe_div(xp[k] * xx[k] * p, PRECISION)
-        packed_prices = shift(packed_prices, -PRICE_SIZE)
+        packed_prices = packed_prices >> PRICE_SIZE
 
     if update_D:  # <-------------- D is updated if pool is undergoing a ramp.
         D0 = MATH.newton_D(A_gamma[0], A_gamma[1], xp, 0)
@@ -1972,7 +1972,7 @@ def ramp_A_gamma(
     assert future_time > block.timestamp + MIN_RAMP_TIME - 1  # dev: insufficient time
 
     A_gamma: uint256[2] = self._A_gamma()
-    initial_A_gamma: uint256 = shift(A_gamma[0], 128)
+    initial_A_gamma: uint256 = A_gamma[0] << 128
     initial_A_gamma = initial_A_gamma | A_gamma[1]
 
     assert future_A > MIN_A - 1
@@ -1991,7 +1991,7 @@ def ramp_A_gamma(
     self.initial_A_gamma = initial_A_gamma
     self.initial_A_gamma_time = block.timestamp
 
-    future_A_gamma: uint256 = shift(future_A, 128)
+    future_A_gamma: uint256 = future_A << 128
     future_A_gamma = future_A_gamma | future_gamma
     self.future_A_gamma_time = future_time
     self.future_A_gamma = future_A_gamma
@@ -2015,7 +2015,7 @@ def stop_ramp_A_gamma():
     assert msg.sender == Factory(self.factory).admin()  # dev: only owner
 
     A_gamma: uint256[2] = self._A_gamma()
-    current_A_gamma: uint256 = shift(A_gamma[0], 128)
+    current_A_gamma: uint256 = A_gamma[0] << 128
     current_A_gamma = current_A_gamma | A_gamma[1]
     self.initial_A_gamma = current_A_gamma
     self.future_A_gamma = current_A_gamma

@@ -361,7 +361,9 @@ def test_deployment(pool, coins, fee_receiver, account):
     logger.info("Successfully tested deployment!")
 
 
-def deploy_amm_factory(account, fee_receiver, weth, deployed_contracts={}):
+def deploy_amm_factory(
+    account, fee_receiver, weth, network, deployed_contracts={}
+):
 
     if "math" not in deployed_contracts:
         logger.info("Deploying math contract:")
@@ -395,12 +397,24 @@ def deploy_amm_factory(account, fee_receiver, weth, deployed_contracts={}):
 
     if "factory" not in deployed_contracts:
         logger.info("Deploy factory:")
-        factory = project.CurveTricryptoFactory.deploy(
-            fee_receiver,
-            account.address,
-            sender=account,
-            **_get_tx_params(),
-        )
+
+        if any([_n in network for _n in ["arbitrum", "optimism"]]):
+            factory = project.CurveL2TricryptoFactory.deploy(
+                fee_receiver,
+                account.address,
+                sender=account,
+                **_get_tx_params(),
+            )
+        elif "ethereum" in network:
+            factory = project.CurveTricryptoFactory.deploy(
+                fee_receiver,
+                account.address,
+                sender=account,
+                **_get_tx_params(),
+            )
+        else:
+            raise NotImplementedError
+
         constructor_args = [fee_receiver, account.address, weth]
         logger.info(
             f"Constructor args: {encode(['address', 'address', 'address'], constructor_args).hex()}\n"  # noqa: E501

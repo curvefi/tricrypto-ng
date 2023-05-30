@@ -713,13 +713,20 @@ def _exp(_power: int256) -> uint256:
         26449188498355588339934803723976023,
     )
 
-    return shift(
-        unsafe_mul(
-            convert(unsafe_div(p, q), uint256),
-            3822833074963236453042738258902158003155416615667,
-        ),
-        unsafe_sub(k, 195),
-    )
+    if k < 0:
+        return (
+            unsafe_mul(
+                convert(unsafe_div(p, q), uint256),
+                3822833074963236453042738258902158003155416615667,
+            ) >> convert(unsafe_sub(k, 195), uint256)
+        )
+
+    return (
+            unsafe_mul(
+                convert(unsafe_div(p, q), uint256),
+                3822833074963236453042738258902158003155416615667,
+            ) << convert(unsafe_sub(k, 195), uint256)
+        )
 
 
 @internal
@@ -744,31 +751,31 @@ def _snekmate_log_2(x: uint256, roundup: bool) -> uint256:
 
     # The following lines cannot overflow because we have the well-known
     # decay behaviour of `log_2(max_value(uint256)) < max_value(uint256)`.
-    if (shift(x, -128) != empty(uint256)):
-        value = shift(x, -128)
+    if x >> 128 != empty(uint256):
+        value = x >> 128
         result = 128
-    if (shift(value, -64) != empty(uint256)):
-        value = shift(value, -64)
+    if value >> 64 != empty(uint256):
+        value = value >> 64
         result = unsafe_add(result, 64)
-    if (shift(value, -32) != empty(uint256)):
-        value = shift(value, -32)
+    if value >> 32 != empty(uint256):
+        value = value >> 32
         result = unsafe_add(result, 32)
-    if (shift(value, -16) != empty(uint256)):
-        value = shift(value, -16)
+    if value >> 16 != empty(uint256):
+        value = value >> 16
         result = unsafe_add(result, 16)
-    if (shift(value, -8) != empty(uint256)):
-        value = shift(value, -8)
+    if value >> 8 != empty(uint256):
+        value = value >> 8
         result = unsafe_add(result, 8)
-    if (shift(value, -4) != empty(uint256)):
-        value = shift(value, -4)
+    if value >> 4 != empty(uint256):
+        value = value >> 4
         result = unsafe_add(result, 4)
-    if (shift(value, -2) != empty(uint256)):
-        value = shift(value, -2)
+    if value >> 2 != empty(uint256):
+        value = value >> 2
         result = unsafe_add(result, 2)
-    if (shift(value, -1) != empty(uint256)):
+    if value >> 1 != empty(uint256):
         result = unsafe_add(result, 1)
 
-    if (roundup and (shift(1, convert(result, int256)) < x)):
+    if (roundup and (1 << result) < x):
         result = unsafe_add(result, 1)
 
     return result
