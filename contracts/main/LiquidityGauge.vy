@@ -1,10 +1,11 @@
-# @version 0.3.8
+# @version 0.3.9
 
 """
-@title Liquidity Gauge
+@title LiquidityGaugeV6
 @author Curve.Fi
 @license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice Implementation contract for use with Curve Factory
+@dev Differs from v5.0.0 in that it uses create_from_blueprint to deploy Gauges
 """
 from vyper.interfaces import ERC20
 
@@ -177,7 +178,10 @@ def __init__(_lp_token: address):
     self.symbol = concat(symbol, "-gauge")
 
     self.period_timestamp[0] = block.timestamp
-    self.inflation_params = shift(CRV20(CRV).future_epoch_time_write(), 216) + CRV20(CRV).rate()
+    self.inflation_params = (
+        (CRV20(CRV).future_epoch_time_write() << 216)
+        + CRV20(CRV).rate()
+    )
 
     NAME_HASH = keccak256(name)
     salt = block.prevhash
@@ -226,12 +230,12 @@ def _checkpoint(addr: address):
 
     inflation_params: uint256 = self.inflation_params
     rate: uint256 = inflation_params % 2 ** 216
-    prev_future_epoch: uint256 = shift(inflation_params, -216)
+    prev_future_epoch: uint256 = inflation_params >> 216
     new_rate: uint256 = rate
 
     if prev_future_epoch >= _period_time:
         new_rate = CRV20(CRV).rate()
-        self.inflation_params = shift(CRV20(CRV).future_epoch_time_write(), 216) + new_rate
+        self.inflation_params = (CRV20(CRV).future_epoch_time_write() << 216) + new_rate
 
     if self.is_killed:
         # Stop distributing inflation as soon as killed
@@ -325,7 +329,7 @@ def _checkpoint_rewards(_user: address, _total_supply: uint256, _claim: bool, _r
                 new_claimable = user_balance * (integral - integral_for) / 10**18
 
             claim_data: uint256 = self.claim_data[_user][token]
-            total_claimable: uint256 = shift(claim_data, -128) + new_claimable
+            total_claimable: uint256 = (claim_data >> 128) + new_claimable
             if total_claimable > 0:
                 total_claimed: uint256 = claim_data % 2**128
                 if _claim:
@@ -342,7 +346,7 @@ def _checkpoint_rewards(_user: address, _total_supply: uint256, _claim: bool, _r
                         assert convert(response, bool)
                     self.claim_data[_user][token] = total_claimed + total_claimable
                 elif new_claimable > 0:
-                    self.claim_data[_user][token] = total_claimed + shift(total_claimable, 128)
+                    self.claim_data[_user][token] = total_claimed + (total_claimable << 128)
 
 
 @internal
@@ -554,8 +558,8 @@ def permit(
     @param _s The bytes[32:64] of the valid secp256k1 signature of permit by owner
     @return True, if transaction completes successfully
     """
-    assert _owner != empty(address), "dev: invalid owner"
-    assert block.timestamp <= _deadline, "dev: permit expired"
+    assert _owner != empty(address)  # dev: invalid owner
+    assert block.timestamp <= _deadline  # dev: permit expired
 
     nonce: uint256 = self.nonces[_owner]
     digest: bytes32 = keccak256(
@@ -569,7 +573,7 @@ def permit(
             ),
         )
     )
-    assert ecrecover(digest, _v, _r, _s) == _owner, "dev: invalid signature"
+    assert ecrecover(digest, _v, _r, _s) == _owner  # dev: invalid signature
 
     self.allowance[_owner][_spender] = _value
     self.nonces[_owner] = nonce + 1
@@ -774,7 +778,7 @@ def claimable_reward(_user: address, _reward_token: address) -> uint256:
     integral_for: uint256 = self.reward_integral_for[_reward_token][_user]
     new_claimable: uint256 = self.balanceOf[_user] * (integral - integral_for) / 10**18
 
-    return shift(self.claim_data[_user][_reward_token], -128) + new_claimable
+    return (self.claim_data[_user][_reward_token] >> 128) + new_claimable
 
 
 @external
@@ -803,7 +807,7 @@ def future_epoch_time() -> uint256:
     """
     @notice Get the locally stored CRV future epoch start time
     """
-    return shift(self.inflation_params, -216)
+    return self.inflation_params >> 216
 
 
 @view

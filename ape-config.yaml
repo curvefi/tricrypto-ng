@@ -13,6 +13,15 @@ plugins:
 
 default_ecosystem: ethereum
 
+hardhat:
+  port: auto
+  fork:
+    ethereum:
+      mainnet:
+        upstream_provider: alchemy
+      sepolia:
+        upstream_provider: alchemy
+
 ethereum:
   default_network: mainnet-fork
   mainnet_fork:
@@ -22,15 +31,6 @@ ethereum:
     transaction_acceptance_timeout: 99999999
   sepolia:
     transaction_acceptance_timeout: 99999999
-
-hardhat:
-  port: auto
-  fork:
-    ethereum:
-      mainnet:
-        upstream_provider: geth
-      sepolia:
-        upstream_provider: alchemy
 
 geth:
   ethereum:

@@ -44,7 +44,18 @@ Please refrain from reporting any smart contract vulnerabilities publicly. The b
 
 # Deployments
 
-To be deployed (TBD) ...
+Ethereum:
+
+1. Factory: [0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963](https://etherscan.io/address/0x0c0e5f2ff0ff18a3be9b835635039256dc4b4963)
+2. AMM Blueprint: [0x66442B0C5260B92cAa9c234ECf2408CBf6b19a6f](https://etherscan.io/address/0x66442B0C5260B92cAa9c234ECf2408CBf6b19a6f)
+3. Math: [0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE](https://etherscan.io/address/0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE)
+4. Views: [0x064253915b8449fdEFac2c4A74aA9fdF56691a31](https://etherscan.io/address/0x064253915b8449fdEFac2c4A74aA9fdF56691a31)
+5. Gauge Blueprint: [0x5fC124a161d888893529f67580ef94C2784e9233](https://etherscan.io/address/0x5fC124a161d888893529f67580ef94C2784e9233)
+6. TricryptoFactoryHandler: [0x5c57f810665E9aafb753bB9e38E6C467a6Bc4a25](https://etherscan.io/address/0x9335BF643C455478F8BE40fA20B5164b90215B80)
+
+Deployed Pool:
+
+1. [TricryptoUSDC 0x7f86bf177dd4f3494b841a37e810a34dd56c829b](https://etherscan.io/address/0x7f86bf177dd4f3494b841a37e810a34dd56c829b)
 
 ### License
 

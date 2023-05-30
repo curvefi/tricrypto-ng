@@ -1,4 +1,4 @@
-# @version 0.3.8
+# @version 0.3.9
 
 """
 @title CurveCryptoViews3Optimized
@@ -408,7 +408,7 @@ def _unpack(_packed: uint256) -> uint256[3]:
     @return The unpacked uint256[3]
     """
     return [
-        shift(_packed, -128) & 18446744073709551615,
-        shift(_packed, -64) & 18446744073709551615,
+        (_packed >> 128) & 18446744073709551615,
+        (_packed >> 64) & 18446744073709551615,
         _packed & 18446744073709551615,
     ]

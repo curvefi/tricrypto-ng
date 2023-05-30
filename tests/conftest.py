@@ -1,7 +1,7 @@
 pytest_plugins = [
-    "tests.fixtures.accounts",
-    "tests.fixtures.tokens",
-    "tests.fixtures.functions",
-    "tests.fixtures.pool",
-    "tests.fixtures.factory",
+    "tests.boa.fixtures.accounts",
+    "tests.boa.fixtures.tokens",
+    "tests.boa.fixtures.functions",
+    "tests.boa.fixtures.pool",
+    "tests.boa.fixtures.factory",
 ]
