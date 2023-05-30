@@ -15,32 +15,25 @@ from scripts.vote_utils import make_vote
 
 warnings.filterwarnings("ignore")
 
-
-def _test_metaregistry_integration(network, factory_handler, pool):
-
-    assert "ethereum" in network
-    is_sim = "mainnet-fork" in network
-
-    if is_sim:
-
-        # Test metaregistry integration:
-        metaregistry = Contract("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
-        metaregistry_admin = accounts[metaregistry.owner()]
-        metaregistry.add_registry_handler(
-            factory_handler, sender=metaregistry_admin
-        )
-
-        registry_handlers = metaregistry.get_registry_handlers_from_pool(pool)
-        balances = [pool.balances(i) for i in range(3)] + [0] * 5
-
-        assert metaregistry.is_registered(pool)
-        assert factory_handler in registry_handlers
-        assert metaregistry.get_balances(pool) == balances
+DEPLOYED_CONTRACTS = {
+    "ethereum:mainnet": {
+        "factory": "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963",
+        "math": "0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE",
+        "views": "0x064253915b8449fdEFac2c4A74aA9fdF56691a31",
+        "amm_impl": "0x66442B0C5260B92cAa9c234ECf2408CBf6b19a6f",
+        "gauge_impl": "0x5fC124a161d888893529f67580ef94C2784e9233",
+        "factory_handler": "0x5c57f810665E9aafb753bB9e38E6C467a6Bc4a25",
+    }
+}
 
 
-def _deploy_pool_from_factory(network, account, factory, weth):
+def _deploy_pool_from_factory(
+    network, account, factory, weth, PARAMS=None
+):  # noqa: E501
 
-    PARAMS = deploy_utils.get_tricrypto_usdc_params()
+    if PARAMS is None:
+        PARAMS = deploy_utils.get_tricrypto_usdc_params()
+
     coins = []
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
@@ -209,14 +202,10 @@ def deploy_and_test_infra(network, account):
     assert owner, f"Curve's DAO contracts may not be on {network}."
     assert fee_receiver, f"Curve's DAO contracts may not be on {network}."
 
-    deployed_contracts = {}
-    if "ethereum:mainnet" in network:
-        deployed_contracts = {}
-
     # --------------------- DEPLOY FACTORY AND POOL ---------------------------
 
     factory = deploy_utils.deploy_amm_factory(
-        account, fee_receiver, weth, network, deployed_contracts
+        account, fee_receiver, weth, network, DEPLOYED_CONTRACTS[network]
     )
 
     pool = _deploy_pool_from_factory(network, account, factory, weth)
@@ -232,25 +221,50 @@ def deploy_and_test_infra(network, account):
 
     deploy_utils.test_deployment(pool, coins, fee_receiver, _account)
 
+    print("Success!")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+@click.option("--factory", required=True, type=str)
+def set_up_gauge(network, account, factory):
+
+    factory = project.CurveTricryptoFactory.at(factory)
+
+    if "ethereum:mainnet" not in network:
+        return  # only applicable for ethereum mainnet
+
     # ------------------- GAUGE IMPLEMENTATION DEPLOYMENT --------------------
+    logger.info("Deploying gauge blueprint contract:")
+    gauge_impl = deploy_utils.deploy_blueprint(project.LiquidityGauge, account)
 
-    if (
-        "ethereum:mainnet" in network
-    ):  # Gauges are different in other chains ...
-        logger.info("Deploying gauge blueprint contract:")
-        gauge_impl = deploy_utils.deploy_blueprint(
-            project.LiquidityGauge, account
-        )
+    logger.info("Set Gauge Implementation:")
+    factory.set_gauge_implementation(
+        gauge_impl, sender=account, **deploy_utils._get_tx_params()
+    )
 
-        logger.info("Set Gauge Implementation:")
-        factory.set_gauge_implementation(
-            gauge_impl, sender=account, **deploy_utils._get_tx_params()
-        )
 
-    # ------------- ADDRESSPROVIDER AND METAREGISTRY INTEGRATION -------------
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+def integrate_metaregistry(network, account):
 
-    if "ethereum:mainnet" in network:  # only supported in ethereum so far ...
-        logger.info("Integrate into AddressProvider and Metaregistry ...")
+    factory = project.CurveTricryptoFactory.at(
+        DEPLOYED_CONTRACTS[network]["factory"]
+    )  # noqa: E501
+
+    if "ethereum:mainnet" not in network:
+        return  # only applicable for ethereum mainnet
+
+    pool = project.CurveTricryptoOptimizedWETH.at(factory.pool_list(0))
+    metaregistry = Contract("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
+    boss = Contract(metaregistry.owner())
+
+    # set up metaregistry integration:
+    if not metaregistry.is_registered(pool):
+
+        logger.info("Integrate into Metaregistry ...")
         logger.info(
             "Deploying Factory handler to integrate it to the metaregistry:"
         )
@@ -260,25 +274,130 @@ def deploy_and_test_infra(network, account):
             **deploy_utils._get_tx_params(),
         )
 
-        # test metaregistry integration:
-        _test_metaregistry_integration(network, factory_handler, pool)
+        boss.execute(
+            metaregistry.address,
+            metaregistry.add_registry_handler.encode_input(factory_handler),
+            sender=account,
+            **deploy_utils._get_tx_params(),
+        )
 
-    print("Success!")
+        registry_handlers = metaregistry.get_registry_handlers_from_pool(pool)
+        balances = [pool.balances(i) for i in range(3)] + [0] * 5
+
+        # Test metaregistry integration:
+        assert metaregistry.is_registered(pool)
+        assert factory_handler in registry_handlers
+        assert metaregistry.get_balances(pool) == balances
+
+        logger.info("Metaregistry Integrated!")
+
+    print("Done!")
 
 
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-@click.option("--factory", required=True, type=str)
-def deploy_pool_via_factory(network, account, factory):
+def integrate_address_provider(network, account):
 
-    for _network, data in deploy_utils.curve_dao_network_settings.items():
+    assert "ethereum:mainnet" in network  # only for ethereum mainnet
 
-        if _network in network:
+    address_provider = Contract("0x0000000022d53366457f9d5e68ec105046fc4383")
+    max_id = address_provider.max_id()
+    description = "Curve Tricrypto Factory"
+    boss = Contract(address_provider.admin())
+    factory = DEPLOYED_CONTRACTS[network]["factory"]
 
-            weth = to_checksum_address(data.weth_address)
+    account_is_boss_handler = False
+    for i in range(2):
+        if account.address.lower() == boss.admins(i).lower():
+            account_is_boss_handler = True
+            break
 
-    _deploy_pool_from_factory(network, account, factory, weth)
+    assert account_is_boss_handler  # only authorised accounts can write to address provider  # noqa: E501
+
+    for index in range(max_id + 1):
+        if address_provider.get_id_info(index).description is description:
+            break
+
+    if index == max_id:
+
+        logger.info(f"Adding a new registry provider entry at id: {index + 1}")
+
+        # we're adding a new id
+        with accounts.use_sender(account) as account:
+            boss.execute(
+                address_provider.address,
+                address_provider.add_new_id.encode_input(factory, description),
+                gas_limit=400000,
+                **deploy_utils._get_tx_params(),
+            )
+
+    else:
+
+        assert address_provider.get_id_info(index).description == description
+
+        logger.info(
+            f"Updating existing registry provider entry at id: {index}"
+        )
+
+        # we're updating an existing id with the same description:
+        with accounts.use_sender(account) as account:
+            boss.execute(
+                address_provider.address,
+                address_provider.set_address.encode_input(index, factory),
+                gas_limit=200000,
+                **deploy_utils._get_tx_params(),
+            )
+
+    assert address_provider.get_id_info(index).addr.lower() == factory.lower()
+
+    logger.info("AddressProvider integration complete!")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+@click.option("--id", required=True, type=int)
+def clean_address_provider(network, account, id):
+
+    address_provider = Contract("0x0000000022d53366457f9d5e68ec105046fc4383")
+    boss = Contract(address_provider.admin())
+    id_info = address_provider.get_id_info(id)
+    assert id_info.addr != "0x0000000000000000000000000000000000000000"
+
+    logger.info(
+        f"Cleaning existing entry in registry provider entry at id: {id}"
+    )  # noqa: E501
+    logger.info(f"Description at id {id}: {id_info.description}")
+    logger.info(
+        f"Contract address being cleaned up: {Contract(id_info.addr)}"
+    )  # noqa: E501
+
+    # keep check of what was previously in the address provider:
+    previous_entries = []
+    for i in range(address_provider.max_id() + 1):
+        id_info = address_provider.get_id_info(i)
+        previous_entries.append((id_info.addr, id_info.description))
+
+    with accounts.use_sender(account) as account:
+        boss.execute(
+            address_provider.address,
+            address_provider.unset_address.encode_input(id),
+            gas_limit=200000,
+            **deploy_utils._get_tx_params(),
+        )
+
+    for i in range(address_provider.max_id() + 1):
+        id_info = address_provider.get_id_info(i)
+        assert previous_entries[i][1] == id_info.description
+        if i != id:
+            assert previous_entries[i][0] == id_info.addr
+        else:
+            assert id_info.addr == "0x0000000000000000000000000000000000000000"
+
+    logger.info(
+        f"Successfully and safuly unset id: {id} in AddressProvider on {network}!"  # noqa: E501
+    )
 
 
 @cli.command(cls=NetworkBoundCommand)
@@ -322,7 +441,7 @@ def deploy_pool_directly(network, account):
 @network_option()
 @account_option()
 @click.option("--pool", required=True, type=str)
-def withdraw_all_from_pool(network, account, pool):
+def withdraw_liquidity(network, account, pool):
 
     pool = project.CurveTricryptoOptimizedWETH.at(pool)
     token_balance = pool.balanceOf(account)
@@ -341,7 +460,11 @@ def withdraw_all_from_pool(network, account, pool):
         f"{min_amt_received} underlying tokens."
     )
     tx = pool.remove_liquidity(
-        token_balance, min_amt_received, True, sender=account
+        token_balance,
+        min_amt_received,
+        False,
+        sender=account,
+        **deploy_utils._get_tx_params(),
     )
     tokens_received = tx.events.filter(pool.RemoveLiquidity)[0].token_amounts
     logger.info(f"Removed! Received {tokens_received} amount of coins.")
@@ -352,6 +475,11 @@ def withdraw_all_from_pool(network, account, pool):
 @account_option()
 @click.option("--pool", required=True, type=str)
 def test_deployed_pool(network, account, pool):
+
+    if "mainnet-fork" in network:
+        account = accounts[
+            "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"
+        ]  # AVAX bridge  # noqa: E501
 
     pool = project.CurveTricryptoOptimizedWETH.at(pool)
     fee_receiver = pool.fee_receiver()
@@ -382,9 +510,15 @@ def transfer_factory_to_dao(network, account, factory):
 
     assert factory is not None
 
+    factory = project.CurveTricryptoFactory.at(factory)
+    assert factory.admin() == account
+
     logger.info("Tranfer factory ownership to the DAO")
     factory.commit_transfer_ownership(
-        owner, sender=account, **deploy_utils._get_tx_params()
+        owner,
+        sender=account,
+        gas_limit=200000,
+        **deploy_utils._get_tx_params(),
     )
     assert factory.future_admin() == owner
 
