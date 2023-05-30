@@ -18,7 +18,7 @@ from vyper.utils import SizeLimits
 def test_exp(math_optimized, x):
 
     if x >= 135305999368893231589:
-        with boa.reverts("exp overflow"):
+        with boa.reverts("wad_exp overflow"):
             math_optimized.wad_exp(x)
 
     elif x <= -42139678854452767551:

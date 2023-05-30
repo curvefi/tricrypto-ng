@@ -216,7 +216,7 @@ def deploy_and_test_infra(network, account):
     # --------------------- DEPLOY FACTORY AND POOL ---------------------------
 
     factory = deploy_utils.deploy_amm_factory(
-        account, fee_receiver, weth, deployed_contracts
+        account, fee_receiver, weth, network, deployed_contracts
     )
 
     pool = _deploy_pool_from_factory(network, account, factory, weth)

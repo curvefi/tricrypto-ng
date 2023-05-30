@@ -35,7 +35,7 @@ def get_y(
 ) -> uint256[2]:
     """
     @notice Calculate x[i] given other balances x[0..N_COINS-1] and invariant D.
-    @dev ANN = A * N**N . AMM contract's A is actuall ANN.
+    @dev ANN = A * N**N.
     @param _ANN AMM.A() value.
     @param _gamma AMM.gamma() value.
     @param x Balances multiplied by prices and precisions of all coins.
@@ -634,7 +634,7 @@ def wad_exp(_power: int256) -> uint256:
     @notice Calculates the e**x with 1e18 precision
     @param _power The number to calculate the exponential of
     """
-    return self._exp(_power)
+    return self._snekmate_wad_exp(_power)
 
 
 @internal
@@ -661,72 +661,73 @@ def _reduction_coefficient(x: uint256[N_COINS], fee_gamma: uint256) -> uint256:
 
 @internal
 @pure
-def _exp(_power: int256) -> uint256:
+def _snekmate_wad_exp(x: int256) -> uint256:
 
-    # This implementation is borrowed from transmissions11 and Remco Bloemen:
-    # https://github.com/transmissions11/solmate/blob/main/src/utils/SignedWadMath.sol
-    # Method: wadExp
+    """
+    @dev Calculates the natural exponential function of a signed integer with
+         a precision of 1e18.
+    @notice Note that this function consumes about 810 gas units. The implementation
+            is inspired by Remco Bloemen's implementation under the MIT license here:
+            https://xn--2-umb.com/22/exp-ln.
+    @dev This implementation is derived from Snekmate, which is authored
+         by pcaversaccio (Snekmate), distributed under the AGPL-3.0 license.
+         https://github.com/pcaversaccio/snekmate
+    @param x The 32-byte variable.
+    @return int256 The 32-byte calculation result.
+    """
+    value: int256 = x
 
-    if _power <= -42139678854452767551:
-        return 0
+    # If the result is `< 0.5`, we return zero. This happens when we have the following:
+    # "x <= floor(log(0.5e18) * 1e18) ~ -42e18".
+    if (x <= -42139678854452767551):
+        return empty(uint256)
 
-    if _power >= 135305999368893231589:
-        raise "exp overflow"
+    # When the result is "> (2 ** 255 - 1) / 1e18" we cannot represent it as a signed integer.
+    # This happens when "x >= floor(log((2 ** 255 - 1) / 1e18) * 1e18) ~ 135".
+    assert x < 135305999368893231589, "wad_exp overflow"
 
-    x: int256 = unsafe_div(unsafe_mul(_power, 2**96), 10**18)
+    # `x` is now in the range "(-42, 136) * 1e18". Convert to "(-42, 136) * 2 ** 96" for higher
+    # intermediate precision and a binary base. This base conversion is a multiplication with
+    # "1e18 / 2 ** 96 = 5 ** 18 / 2 ** 78".
+    value = unsafe_div(x << 78, 5 ** 18)
 
-    k: int256 = unsafe_div(
-        unsafe_add(
-            unsafe_div(unsafe_mul(x, 2**96), 54916777467707473351141471128),
-            2**95,
-        ),
-        2**96,
-    )
-    x = unsafe_sub(x, unsafe_mul(k, 54916777467707473351141471128))
+    # Reduce the range of `x` to "(-½ ln 2, ½ ln 2) * 2 ** 96" by factoring out powers of two
+    # so that "exp(x) = exp(x') * 2 ** k", where `k` is a signer integer. Solving this gives
+    # "k = round(x / log(2))" and "x' = x - k * log(2)". Thus, `k` is in the range "[-61, 195]".
+    k: int256 = unsafe_add(unsafe_div(value << 96, 54916777467707473351141471128), 2 ** 95) >> 96
+    value = unsafe_sub(value, unsafe_mul(k, 54916777467707473351141471128))
 
-    y: int256 = unsafe_add(x, 1346386616545796478920950773328)
-    y = unsafe_add(
-        unsafe_div(unsafe_mul(y, x), 2**96), 57155421227552351082224309758442
-    )
-    p: int256 = unsafe_sub(unsafe_add(y, x), 94201549194550492254356042504812)
-    p = unsafe_add(
-        unsafe_div(unsafe_mul(p, y), 2**96),
-        28719021644029726153956944680412240,
-    )
-    p = unsafe_add(
-        unsafe_mul(p, x), (4385272521454847904659076985693276 * 2**96)
-    )
+    # Evaluate using a "(6, 7)"-term rational approximation. Since `p` is monic,
+    # we will multiply by a scaling factor later.
+    y: int256 = unsafe_add(unsafe_mul(unsafe_add(value, 1346386616545796478920950773328), value) >> 96, 57155421227552351082224309758442)
+    p: int256 = unsafe_add(unsafe_mul(unsafe_add(unsafe_mul(unsafe_sub(unsafe_add(y, value), 94201549194550492254356042504812), y) >> 96,\
+                           28719021644029726153956944680412240), value), 4385272521454847904659076985693276 << 96)
 
-    q: int256 = x - 2855989394907223263936484059900
-    q = unsafe_add(unsafe_div(unsafe_mul(q, x), 2**96), 50020603652535783019961831881945)
-    q = unsafe_sub(unsafe_div(unsafe_mul(q, x), 2**96), 533845033583426703283633433725380)
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        3604857256930695427073651918091429,
-    )
-    q = unsafe_sub(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        14423608567350463180887372962807573,
-    )
-    q = unsafe_add(
-        unsafe_div(unsafe_mul(q, x), 2**96),
-        26449188498355588339934803723976023,
-    )
+    # We leave `p` in the "2 ** 192" base so that we do not have to scale it up
+    # again for the division.
+    q: int256 = unsafe_add(unsafe_mul(unsafe_sub(value, 2855989394907223263936484059900), value) >> 96, 50020603652535783019961831881945)
+    q = unsafe_sub(unsafe_mul(q, value) >> 96, 533845033583426703283633433725380)
+    q = unsafe_add(unsafe_mul(q, value) >> 96, 3604857256930695427073651918091429)
+    q = unsafe_sub(unsafe_mul(q, value) >> 96, 14423608567350463180887372962807573)
+    q = unsafe_add(unsafe_mul(q, value) >> 96, 26449188498355588339934803723976023)
 
-    if k < 0:
-        return (
-            unsafe_mul(
-                convert(unsafe_div(p, q), uint256),
-                3822833074963236453042738258902158003155416615667,
-            ) >> convert(unsafe_sub(k, 195), uint256)
-        )
+    # The polynomial `q` has no zeros in the range because all its roots are complex.
+    # No scaling is required, as `p` is already "2 ** 96" too large. Also,
+    # `r` is in the range "(0.09, 0.25) * 2**96" after the division.
+    r: int256 = unsafe_div(p, q)
 
-    return (
-            unsafe_mul(
-                convert(unsafe_div(p, q), uint256),
-                3822833074963236453042738258902158003155416615667,
-            ) << convert(unsafe_sub(k, 195), uint256)
-        )
+    # To finalise the calculation, we have to multiply `r` by:
+    #   - the scale factor "s = ~6.031367120",
+    #   - the factor "2 ** k" from the range reduction, and
+    #   - the factor "1e18 / 2 ** 96" for the base conversion.
+    # We do this all at once, with an intermediate result in "2**213" base,
+    # so that the final right shift always gives a positive value.
+
+    # Note that to circumvent Vyper's safecast feature for the potentially
+    # negative parameter value `r`, we first convert `r` to `bytes32` and
+    # subsequently to `uint256`. Remember that the EVM default behaviour is
+    # to use two's complement representation to handle signed integers.
+    return unsafe_mul(convert(convert(r, bytes32), uint256), 3822833074963236453042738258902158003155416615667) >> convert(unsafe_sub(195, k), uint256)
 
 
 @internal
