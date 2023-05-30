@@ -68,6 +68,7 @@ base_registry: public(BaseRegistry)
 def __init__(_registry_address: address):
     self.base_registry = BaseRegistry(_registry_address)
 
+
 # ---- internal methods ---- #
 @internal
 @view
@@ -174,8 +175,6 @@ def get_admin_balances(_pool: address) -> uint256[MAX_METAREGISTRY_COINS]:
     @return uint256[MAX_METAREGISTRY_COINS] Array of admin balances
     """
 
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     xcp_profit: uint256 = CurvePool(_pool).xcp_profit()
     xcp_profit_a: uint256 = CurvePool(_pool).xcp_profit_a()
     admin_fee: uint256 = CurvePool(_pool).admin_fee()
@@ -212,7 +211,6 @@ def get_balances(_pool: address) -> uint256[MAX_METAREGISTRY_COINS]:
     @param _pool Address of the pool
     @return uint256[MAX_METAREGISTRY_COINS] Array of balances
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
     return self._get_balances(_pool)
 
 
@@ -225,7 +223,6 @@ def get_base_pool(_pool: address) -> address:
     @param _pool Address of the pool
     @return Address of the base pool
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
     return empty(address)
 
 
@@ -240,8 +237,6 @@ def get_coin_indices(_pool: address, _from: address, _to: address) -> (uint256, 
     @return (uint256, uint256, bool) Tuple of indices of the coins in the pool,
             and whether the market is an underlying market or not.
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     i: uint256 = 0
     j: uint256 = 0
 
@@ -258,8 +253,6 @@ def get_coins(_pool: address) -> address[MAX_METAREGISTRY_COINS]:
     @param _pool Address of the pool
     @return address[MAX_METAREGISTRY_COINS] Array of coins
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return self._get_coins(_pool)
 
 
@@ -271,8 +264,6 @@ def get_decimals(_pool: address) -> uint256[MAX_METAREGISTRY_COINS]:
     @param _pool Address of the pool
     @return uint256[MAX_METAREGISTRY_COINS] Array of decimals
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return self._get_decimals(_pool)
 
 
@@ -288,8 +279,6 @@ def get_fees(_pool: address) -> uint256[10]:
             3. mid fee (fee when cryptoswap pool is pegged)
             4. out fee (fee when cryptoswap pool depegs)
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     fees: uint256[10] = empty(uint256[10])
     pool_fees: uint256[4] = [CurvePool(_pool).fee(), CurvePool(_pool).admin_fee(), CurvePool(_pool).mid_fee(), CurvePool(_pool).out_fee()]
     for i in range(4):
@@ -307,8 +296,6 @@ def get_gauges(_pool: address) -> (address[10], int128[10]):
             1. gauge addresses
             2. gauge types
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     gauges: address[10] = empty(address[10])
     types: int128[10] = empty(int128[10])
     gauges[0] = self.base_registry.get_gauge(_pool)
@@ -324,8 +311,6 @@ def get_lp_token(_pool: address) -> address:
     @param _pool Address of the pool
     @return Address of the Liquidity Provider token
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return _pool
 
 
@@ -337,8 +322,6 @@ def get_n_coins(_pool: address) -> uint256:
     @param _pool Address of the pool
     @return uint256 Number of coins
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return self._get_n_coins(_pool)
 
 
@@ -350,8 +333,6 @@ def get_n_underlying_coins(_pool: address) -> uint256:
     @param _pool Address of the pool
     @return uint256 Number of underlying coins
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     _coins: address[MAX_METAREGISTRY_COINS] = self._get_coins(_pool)
 
     for i in range(MAX_METAREGISTRY_COINS):
@@ -368,9 +349,7 @@ def get_pool_asset_type(_pool: address) -> uint256:
     @param _pool Address of the pool
     @return uint256 Asset type
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
-    return 4
+    return 3
 
 
 @external
@@ -381,8 +360,6 @@ def get_pool_from_lp_token(_lp_token: address) -> address:
     @param _lp_token Address of the Liquidity Provider token
     @return Address of the pool
     """
-    assert self._is_registered(_lp_token), "dev: Pool belongs to a different factory"
-
     return _lp_token
 
 
@@ -394,8 +371,6 @@ def get_pool_name(_pool: address) -> String[64]:
     @param _pool Address of the pool
     @return String[64] Name of the pool
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return ERC20(self.base_registry.get_token(_pool)).name()
 
 @external
@@ -407,8 +382,6 @@ def get_pool_params(_pool: address) -> uint256[20]:
     @dev only applicable for cryptopools
     @param _pool Address of the pool for which data is being queried.
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     pool_params: uint256[20] = empty(uint256[20])
     pool_params[0] = CurvePool(_pool).A()
     pool_params[1] = CurvePool(_pool).D()
@@ -428,8 +401,6 @@ def get_underlying_balances(_pool: address) -> uint256[MAX_METAREGISTRY_COINS]:
     @param _pool Address of the pool
     @return uint256[MAX_METAREGISTRY_COINS] Array of underlying balances
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return self._get_balances(_pool)
 
 
@@ -441,8 +412,6 @@ def get_underlying_coins(_pool: address) -> address[MAX_METAREGISTRY_COINS]:
     @param _pool Address of the pool
     @return address[MAX_METAREGISTRY_COINS] Array of underlying coins
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return self._get_coins(_pool)
 
 
@@ -454,8 +423,6 @@ def get_underlying_decimals(_pool: address) -> uint256[MAX_METAREGISTRY_COINS]:
     @param _pool Address of the pool
     @return uint256[MAX_METAREGISTRY_COINS] Array of underlying decimals
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return self._get_decimals(_pool)
 
 
@@ -467,8 +434,6 @@ def get_virtual_price_from_lp_token(_token: address) -> uint256:
     @param _token Address of the Liquidity Provider token
     @return uint256 Virtual price
     """
-    assert self._is_registered(_token), "dev: Pool belongs to a different factory"
-
     return CurvePool(_token).get_virtual_price()
 
 
@@ -480,8 +445,6 @@ def is_meta(_pool: address) -> bool:
     @param _pool Address of the pool
     @return bool Whether the pool is a meta pool
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return False
 
 
@@ -493,8 +456,6 @@ def is_registered(_pool: address) -> bool:
     @param _pool The address of the pool
     @return A bool corresponding to whether the pool belongs or not
     """
-    assert self._is_registered(_pool), "dev: Pool belongs to a different factory"
-
     return self._get_n_coins(_pool) > 0
 
 

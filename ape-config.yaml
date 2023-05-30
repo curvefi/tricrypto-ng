@@ -13,12 +13,8 @@ plugins:
 
 default_ecosystem: ethereum
 
-# vyper:
-#   evm_version: london
-
 hardhat:
   port: auto
-  # hard_fork: london
   fork:
     ethereum:
       mainnet:

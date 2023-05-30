@@ -57,8 +57,6 @@ Deployed Pool:
 
 1. [TricryptoUSDC 0x7f86bf177dd4f3494b841a37e810a34dd56c829b](https://etherscan.io/address/0x7f86bf177dd4f3494b841a37e810a34dd56c829b)
 
-Awaiting DAO Ownership Transfer.
-
 ### License
 
 (c) Curve.Fi, 2023 - [All rights reserved](LICENSE).

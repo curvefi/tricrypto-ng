@@ -1,5 +1,4 @@
 import math
-import warnings
 
 import click
 from ape import Contract, accounts, networks, project
@@ -12,8 +11,6 @@ from hexbytes import HexBytes
 import scripts.deployment_utils as deploy_utils
 from scripts.simulate import simulate
 from scripts.vote_utils import make_vote
-
-warnings.filterwarnings("ignore")
 
 DEPLOYED_CONTRACTS = {
     "ethereum:mainnet": {
@@ -289,7 +286,74 @@ def integrate_metaregistry(network, account):
         assert factory_handler in registry_handlers
         assert metaregistry.get_balances(pool) == balances
 
+        # check if the integration didnt brick the metaregistry:
+        assert metaregistry.is_registered(
+            "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7"
+        )
+
         logger.info("Metaregistry Integrated!")
+
+    print("Done!")
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+def update_metaregistry_integration(network, account):
+
+    factory = project.CurveTricryptoFactory.at(
+        DEPLOYED_CONTRACTS[network]["factory"]
+    )  # noqa: E501
+
+    if "ethereum:mainnet" not in network:
+        return  # only applicable for ethereum mainnet
+
+    pool = project.CurveTricryptoOptimizedWETH.at(factory.pool_list(0))
+    metaregistry = Contract("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
+    boss = Contract(metaregistry.owner())
+
+    METAREGISTRY_INDEX = 5
+    logger.info("Update Metaregistry Integration ...")
+    logger.info(
+        "Deploying Factory handler to integrate it to the metaregistry:"
+    )
+    factory_handler = account.deploy(
+        project.CurveTricryptoFactoryHandler,
+        factory.address,
+        gas_limit=2000000,
+        **deploy_utils._get_tx_params(),
+    )
+
+    registry_length = metaregistry.registry_length()
+
+    boss.execute(
+        metaregistry.address,
+        metaregistry.update_registry_handler.encode_input(
+            METAREGISTRY_INDEX, factory_handler
+        ),
+        sender=account,
+        gas_limit=200000,
+        **deploy_utils._get_tx_params(),
+    )
+
+    registry_handlers = metaregistry.get_registry_handlers_from_pool(pool)
+    balances = [pool.balances(i) for i in range(3)] + [0] * 5
+
+    # Test metaregistry integration:
+    assert metaregistry.is_registered(pool)
+    assert factory_handler in registry_handlers
+    assert metaregistry.get_balances(pool) == balances
+
+    # check if the integration didnt brick the metaregistry:
+    assert metaregistry.is_registered(
+        "0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7"
+    )
+    assert metaregistry.registry_length() == registry_length
+    assert metaregistry.is_registered(
+        "0xdc24316b9ae028f1497c275eb9192a3ea0f67022"
+    )
+
+    logger.info("Metaregistry Integrated!")
 
     print("Done!")
 
@@ -496,8 +560,9 @@ def test_deployed_pool(network, account, pool):
 @cli.command(cls=NetworkBoundCommand)
 @network_option()
 @account_option()
-@click.option("--factory", required=True, type=str)
-def transfer_factory_to_dao(network, account, factory):
+def transfer_factory_to_dao(network, account):
+
+    factory = DEPLOYED_CONTRACTS[network]["factory"]
 
     assert "ethereum:mainnet" in network
     is_sim = "mainnet-fork" in network
@@ -513,14 +578,15 @@ def transfer_factory_to_dao(network, account, factory):
     factory = project.CurveTricryptoFactory.at(factory)
     assert factory.admin() == account
 
-    logger.info("Tranfer factory ownership to the DAO")
-    factory.commit_transfer_ownership(
-        owner,
-        sender=account,
-        gas_limit=200000,
-        **deploy_utils._get_tx_params(),
-    )
-    assert factory.future_admin() == owner
+    if not factory.future_admin() == owner:
+        logger.info("Transfer factory ownership to the DAO")
+        factory.commit_transfer_ownership(
+            owner,
+            sender=account,
+            gas_limit=200000,
+            **deploy_utils._get_tx_params(),
+        )
+        assert factory.future_admin() == owner
 
     logger.info("Create vote for the DAO to accept ownership of the factory")
     vote_id_dao_ownership = make_vote(
