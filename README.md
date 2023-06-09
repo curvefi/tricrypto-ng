@@ -57,6 +57,17 @@ Deployed Pool:
 
 1. [TricryptoUSDC 0x7f86bf177dd4f3494b841a37e810a34dd56c829b](https://etherscan.io/address/0x7f86bf177dd4f3494b841a37e810a34dd56c829b)
 
+Arbitrum:
+
+1. Factory: [0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8](https://arbiscan.io/address/0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8)
+2. AMM Blueprint: [0xd7E72f3615aa65b92A4DBdC211E296a35512988B](https://arbiscan.io/address/0xd7E72f3615aa65b92A4DBdC211E296a35512988B)
+3. Math: [0x604388Bb1159AFd21eB5191cE22b4DeCdEE2Ae22](https://arbiscan.io/address/0x604388Bb1159AFd21eB5191cE22b4DeCdEE2Ae22)
+4. Views: [0x06452f9c013fc37169B57Eab8F50A7A48c9198A3](https://arbiscan.io/address/0x06452f9c013fc37169B57Eab8F50A7A48c9198A3)
+
+Deployed Pool:
+
+1. [TricryptoUSDC 0x7706128aFAC8875981b2412faC6C4f3053EA705f](https://etherscan.io/address/0x7706128aFAC8875981b2412faC6C4f3053EA705f)
+
 ### License
 
 (c) Curve.Fi, 2023 - [All rights reserved](LICENSE).

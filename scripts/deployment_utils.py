@@ -8,7 +8,7 @@ from ape.logging import logger
 from eth_abi import encode
 from pycoingecko import CoinGeckoAPI
 
-DOLLAR_VALUE_OF_TOKENS_TO_DEPOSIT = 20
+DOLLAR_VALUE_OF_TOKENS_TO_DEPOSIT = 5
 
 
 def _get_tx_params():
@@ -97,7 +97,7 @@ curve_dao_network_settings = {
     "arbitrum:mainnet": CurveNetworkSettings(
         dao_ownership_contract="0xb055ebbacc8eefc166c169e9ce2886d0406ab49b",
         fee_receiver_address="0xd4f94d0aaa640bbb72b5eec2d85f6d114d81a88e",
-        usdc_address="0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
+        usdc_address="0xaf88d065e77c8cC2239327C5EDb3A432268e5831",  # native usdc token.  # noqa: E501
         wbtc_address="0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f",
         weth_address="0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     ),
@@ -212,6 +212,7 @@ def test_deployment(pool, coins, fee_receiver, account):
     )
 
     for coin in coins:
+
         coin_contract = Contract(coin)
         bal = coin_contract.balanceOf(account)
         assert bal > 0, "Not enough coins!"
@@ -240,7 +241,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         0,
         False,
         sender=account,
-        gas_limit=400000,
         **_get_tx_params(),
     )
     d_tokens = tx.return_value
@@ -254,7 +254,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         True,
         sender=account,
         value=tokens_to_add[2],
-        gas_limit=400000,
         **_get_tx_params(),
     )
     d_tokens = tx.return_value
@@ -271,7 +270,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         amt_usdc_in,
         0,
         sender=account,
-        gas_limit=400000,
         **_get_tx_params(),
     )
     dy_eth = tx.events.filter(pool.TokenExchange)[
@@ -287,7 +285,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         dy_eth,
         0,
         sender=account,
-        gas_limit=400000,
         value=dy_eth,
         **_get_tx_params(),
     )
@@ -302,7 +299,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         dy_usdc * 2,
         0,
         sender=account,
-        gas_limit=400000,
         **_get_tx_params(),
     )
     dy_wbtc = tx.events.filter(pool.TokenExchange)[0].tokens_bought
@@ -320,7 +316,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         0,
         True,
         sender=account,
-        gas_limit=400000,
         **_get_tx_params(),
     )
     dy_eth = tx.events.filter(pool.RemoveLiquidityOne)[0].coin_amount
@@ -341,7 +336,6 @@ def test_deployment(pool, coins, fee_receiver, account):
             0,
             False,
             sender=account,
-            gas_limit=400000,
             **_get_tx_params(),
         )  # noqa: E501
 
@@ -377,7 +371,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         [0, 0, 0],
         True,
         sender=account,
-        gas_limit=400000,
         **_get_tx_params(),
     )
     dy_tokens = tx.events.filter(pool.RemoveLiquidity)[0].token_amounts
@@ -394,7 +387,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         [0, 0, 0],
         False,
         sender=account,
-        gas_limit=400000,
         **_get_tx_params(),
     )
     dy_tokens = tx.return_value

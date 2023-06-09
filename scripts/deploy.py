@@ -20,7 +20,13 @@ DEPLOYED_CONTRACTS = {
         "amm_impl": "0x66442B0C5260B92cAa9c234ECf2408CBf6b19a6f",
         "gauge_impl": "0x5fC124a161d888893529f67580ef94C2784e9233",
         "factory_handler": "0x5c57f810665E9aafb753bB9e38E6C467a6Bc4a25",
-    }
+    },
+    "arbitrum:mainnet": {
+        "factory": "0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8",
+        "math": "0x604388Bb1159AFd21eB5191cE22b4DeCdEE2Ae22",
+        "views": "0x06452f9c013fc37169B57Eab8F50A7A48c9198A3",
+        "amm_impl": "0xd7E72f3615aa65b92A4DBdC211E296a35512988B",
+    },
 }
 
 
@@ -185,7 +191,10 @@ def cli():
 @account_option()
 def deploy_and_test_infra(network, account):
 
-    if "mainnet-fork" in network:
+    if account.alias == "fiddydeployer":
+        account.set_autosign(True)
+
+    if "ethereum:mainnet-fork" in network:
         account = accounts["0xbabe61887f1de2713c6f97e567623453d3c79f67"]
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
@@ -213,7 +222,7 @@ def deploy_and_test_infra(network, account):
     ]
 
     _account = account
-    if "mainnet-fork" in network:
+    if "ethereum:mainnet-fork" in network:  # bridge
         _account = accounts["0x8EB8a3b98659Cce290402893d0123abb75E3ab28"]
 
     deploy_utils.test_deployment(pool, coins, fee_receiver, _account)
@@ -540,7 +549,10 @@ def withdraw_liquidity(network, account, pool):
 @click.option("--pool", required=True, type=str)
 def test_deployed_pool(network, account, pool):
 
-    if "mainnet-fork" in network:
+    if account.alias == "fiddydeployer":
+        account.set_autosign(True)
+
+    if "ethereum:mainnet-fork" in network:
         account = accounts[
             "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"
         ]  # AVAX bridge  # noqa: E501
