@@ -54,6 +54,7 @@ event TransferOwnership:
 struct PoolArray:
     coins: address[N_COINS]
     decimals: uint256[N_COINS]
+    implementation: address
 
 
 N_COINS: constant(uint256) = 3
@@ -227,6 +228,7 @@ def deploy_pool(
     self.pool_count = length + 1
     self.pool_data[pool].decimals = decimals
     self.pool_data[pool].coins = _coins
+    self.pool_data[pool].implementation = pool_implementation
 
     # add coins to market:
     self._add_coins_to_market(_coins[0], _coins[1], pool)
@@ -348,6 +350,17 @@ def accept_transfer_ownership():
 
 
 # <--- Factory Getters --->
+
+
+@view
+@external
+def get_implementation_address(_pool: address) -> address:
+    """
+    @notice Get the address of the implementation contract used for a factory pool
+    @param _pool Pool address
+    @return Implementation contract address
+    """
+    return self.pool_data[_pool].implementation
 
 
 @view
