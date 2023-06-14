@@ -51,7 +51,7 @@ Ethereum:
 3. Math: [0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE](https://etherscan.io/address/0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE)
 4. Views: [0x064253915b8449fdEFac2c4A74aA9fdF56691a31](https://etherscan.io/address/0x064253915b8449fdEFac2c4A74aA9fdF56691a31)
 5. Gauge Blueprint: [0x5fC124a161d888893529f67580ef94C2784e9233](https://etherscan.io/address/0x5fC124a161d888893529f67580ef94C2784e9233)
-6. TricryptoFactoryHandler: [0x5c57f810665E9aafb753bB9e38E6C467a6Bc4a25](https://etherscan.io/address/0x9335BF643C455478F8BE40fA20B5164b90215B80)
+6. TricryptoFactoryHandler: [0x30a4249C42be05215b6063691949710592859697](https://etherscan.io/address/0x30a4249C42be05215b6063691949710592859697)
 
 Deployed Pool:
 

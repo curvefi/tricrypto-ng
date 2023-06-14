@@ -19,7 +19,7 @@ DEPLOYED_CONTRACTS = {
         "views": "0x064253915b8449fdEFac2c4A74aA9fdF56691a31",
         "amm_impl": "0x66442B0C5260B92cAa9c234ECf2408CBf6b19a6f",
         "gauge_impl": "0x5fC124a161d888893529f67580ef94C2784e9233",
-        "factory_handler": "0x5c57f810665E9aafb753bB9e38E6C467a6Bc4a25",
+        "factory_handler": "0x30a4249C42be05215b6063691949710592859697",
     },
     "arbitrum:mainnet": {
         "factory": "0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8",
@@ -360,6 +360,14 @@ def update_metaregistry_integration(network, account):
     assert metaregistry.registry_length() == registry_length
     assert metaregistry.is_registered(
         "0xdc24316b9ae028f1497c275eb9192a3ea0f67022"
+    )
+
+    # if addr is not registered, do not return addr
+    assert (
+        metaregistry.get_pool_from_lp_token(
+            "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
+        )
+        == "0x0000000000000000000000000000000000000000"
     )
 
     logger.info("Metaregistry Integrated!")
