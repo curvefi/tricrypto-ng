@@ -360,7 +360,9 @@ def get_pool_from_lp_token(_lp_token: address) -> address:
     @param _lp_token Address of the Liquidity Provider token
     @return Address of the pool
     """
-    return _lp_token
+    if self._get_n_coins(_lp_token) > 0:
+        return _lp_token
+    return empty(address)
 
 
 @external
