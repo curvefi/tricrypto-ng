@@ -323,7 +323,6 @@ def _transfer_in(
     @params callback_sig signature of the callback function.
     @params sender address to transfer `_coin` from.
     @params receiver address to transfer `_coin` to.
-    @params use_eth True if the transfer is ETH, False otherwise.
     """
 
     if callback_sig == empty(bytes32):
@@ -360,7 +359,6 @@ def _transfer_out(_coin: address, _amount: uint256, receiver: address):
          `remove_liquidity_one` and `_exchange` methods.
     @params _coin Address of the token to transfer out
     @params _amount Amount of token to transfer out
-    @params use_eth Whether to transfer ETH or not
     @params receiver Address to send the tokens to
     """
     assert ERC20(_coin).transfer(receiver, _amount, default_return_value=True)
@@ -384,7 +382,6 @@ def exchange(
     @param j Index value for the output coin
     @param dx Amount of input coin being swapped in
     @param min_dy Minimum amount of output coin to receive
-    @param use_eth True if the input coin is native token, False otherwise
     @param receiver Address to send the output coin to. Default is msg.sender
     @return uint256 Amount of tokens at index j received by the `receiver
     """
@@ -422,7 +419,6 @@ def exchange_extended(
     @param j Index value for the output coin
     @param dx Amount of input coin being swapped in
     @param min_dy Minimum amount of output coin to receive
-    @param use_eth True if output is native token, False otherwise
     @param sender Address to transfer input coin from
     @param receiver Address to send the output coin to
     @param cb Callback signature
@@ -449,6 +445,8 @@ def add_liquidity(
     @param receiver Address to send the LP tokens to. Default is msg.sender
     @return uint256 Amount of LP tokens received by the `receiver
     """
+
+    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
@@ -549,8 +547,6 @@ def add_liquidity(
         receiver, amounts, d_token_fee, token_supply, packed_price_scale
     )
 
-    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
-
     return d_token
 
 
@@ -566,7 +562,6 @@ def remove_liquidity(
             tokens are withdrawn in balanced proportions. No fees are charged.
     @param _amount Amount of LP tokens to burn
     @param min_amounts Minimum amounts of tokens to withdraw
-    @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
     @return uint256[3] Amount of pool tokens received by the `receiver`
     """
@@ -627,7 +622,6 @@ def remove_liquidity_one_coin(
     token_amount: uint256,
     i: uint256,
     min_amount: uint256,
-    use_eth: bool = False,
     receiver: address = msg.sender
 ) -> uint256:
     """
@@ -637,10 +631,11 @@ def remove_liquidity_one_coin(
     @param token_amount Amount of LP tokens to burn
     @param i Index of the token to withdraw
     @param min_amount Minimum amount of token to withdraw.
-    @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
     @return Amount of tokens at index i received by the `receiver`
     """
+
+    self._claim_admin_fees()  # <- Claim admin fees before removing liquidity.
 
     A_gamma: uint256[2] = self._A_gamma()
 
@@ -649,9 +644,6 @@ def remove_liquidity_one_coin(
     p: uint256 = 0
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
     approx_fee: uint256 = 0
-
-    # ---------------------------- Claim admin fees before removing liquidity.
-    self._claim_admin_fees()
 
     # ------------------------------------------------------------------------
 
