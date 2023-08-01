@@ -560,7 +560,6 @@ def remove_liquidity(
     _amount: uint256,
     min_amounts: uint256[N_COINS],
     receiver: address = msg.sender,
-    claim_admin_fees: bool = True,
 ) -> uint256[N_COINS]:
     """
     @notice This withdrawal method is very safe, does no complex math since
@@ -575,10 +574,6 @@ def remove_liquidity(
     amount: uint256 = _amount
     balances: uint256[N_COINS] = self.balances
     d_balances: uint256[N_COINS] = empty(uint256[N_COINS])
-
-    if claim_admin_fees:
-        self._claim_admin_fees()  # <------ We claim fees so that the DAO gets
-        #         paid before withdrawal. In emergency cases, set it to False.
 
     # -------------------------------------------------------- Burn LP tokens.
 
