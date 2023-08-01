@@ -37,10 +37,6 @@ interface Math:
         _xp: uint256[N_COINS], _D: uint256, _A_gamma: uint256[2],
     ) -> uint256[N_COINS-1]: view
 
-interface WETH:
-    def deposit(): payable
-    def withdraw(_amount: uint256): nonpayable
-
 interface Factory:
     def admin() -> address: view
     def fee_receiver() -> address: view
@@ -300,24 +296,15 @@ def __init__(
 # ------------------- Token transfers in and out of the AMM ------------------
 
 
-@payable
-@external
-def __default__():
-    if msg.value > 0:
-        assert WETH20 in coins
-
-
 @internal
 def _transfer_in(
     _coin: address,
     dx: uint256,
     dy: uint256,
-    mvalue: uint256,
     callbacker: address,
     callback_sig: bytes32,
     sender: address,
     receiver: address,
-    use_eth: bool
 ):
     """
     @notice Transfers `_coin` from `sender` to `self` and calls `callback_sig`
@@ -339,45 +326,34 @@ def _transfer_in(
     @params use_eth True if the transfer is ETH, False otherwise.
     """
 
-    if use_eth and _coin == WETH20:
-        assert mvalue == dx  # dev: incorrect eth amount
+    if callback_sig == empty(bytes32):
+
+        assert ERC20(_coin).transferFrom(
+            sender, self, dx, default_return_value=True
+        )
+
     else:
-        assert mvalue == 0  # dev: nonzero eth amount
 
-        if callback_sig == empty(bytes32):
+        # --------- This part of the _transfer_in logic is only accessible
+        #                                                    by _exchange.
 
-            assert ERC20(_coin).transferFrom(
-                sender, self, dx, default_return_value=True
+        #                 First call callback logic and then check if pool
+        #                  gets dx amounts of _coins[i], revert otherwise.
+        b: uint256 = ERC20(_coin).balanceOf(self)
+        raw_call(
+            callbacker,
+            concat(
+                slice(callback_sig, 0, 4),
+                _abi_encode(sender, receiver, _coin, dx, dy)
             )
-
-        else:
-
-            # --------- This part of the _transfer_in logic is only accessible
-            #                                                    by _exchange.
-
-            #                 First call callback logic and then check if pool
-            #                  gets dx amounts of _coins[i], revert otherwise.
-            b: uint256 = ERC20(_coin).balanceOf(self)
-            raw_call(
-                callbacker,
-                concat(
-                    slice(callback_sig, 0, 4),
-                    _abi_encode(sender, receiver, _coin, dx, dy)
-                )
-            )
-            assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
-            #                                          ^------ note: dx cannot
-            #                   be 0, so the contract MUST receive some _coin.
-
-        if _coin == WETH20:
-            WETH(WETH20).withdraw(dx)  # <--------- if WETH was transferred in
-            #           previous step and `not use_eth`, withdraw WETH to ETH.
+        )
+        assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
+        #                                          ^------ note: dx cannot
+        #                   be 0, so the contract MUST receive some _coin.
 
 
 @internal
-def _transfer_out(
-    _coin: address, _amount: uint256, use_eth: bool, receiver: address
-):
+def _transfer_out(_coin: address, _amount: uint256, receiver: address):
     """
     @notice Transfer a single token from the pool to receiver.
     @dev This function is called by `remove_liquidity` and
@@ -387,22 +363,12 @@ def _transfer_out(
     @params use_eth Whether to transfer ETH or not
     @params receiver Address to send the tokens to
     """
-
-    if use_eth and _coin == WETH20:
-        raw_call(receiver, b"", value=_amount)
-    else:
-        if _coin == WETH20:
-            WETH(WETH20).deposit(value=_amount)
-
-        assert ERC20(_coin).transfer(
-            receiver, _amount, default_return_value=True
-        )
+    assert ERC20(_coin).transfer(receiver, _amount, default_return_value=True)
 
 
 # -------------------------- AMM Main Functions ------------------------------
 
 
-@payable
 @external
 @nonreentrant("lock")
 def exchange(
@@ -410,7 +376,6 @@ def exchange(
     j: uint256,
     dx: uint256,
     min_dy: uint256,
-    use_eth: bool = False,
     receiver: address = msg.sender
 ) -> uint256:
     """
@@ -425,45 +390,10 @@ def exchange(
     """
     return self._exchange(
         msg.sender,
-        msg.value,
         i,
         j,
         dx,
         min_dy,
-        use_eth,
-        receiver,
-        empty(address),
-        empty(bytes32)
-    )
-
-
-@payable
-@external
-@nonreentrant('lock')
-def exchange_underlying(
-    i: uint256,
-    j: uint256,
-    dx: uint256,
-    min_dy: uint256,
-    receiver: address = msg.sender
-) -> uint256:
-    """
-    @notice Exchange using native token transfers.
-    @param i Index value for the input coin
-    @param j Index value for the output coin
-    @param dx Amount of input coin being swapped in
-    @param min_dy Minimum amount of output coin to receive
-    @param receiver Address to send the output coin to. Default is msg.sender
-    @return uint256 Amount of tokens at index j received by the `receiver
-    """
-    return self._exchange(
-        msg.sender,
-        msg.value,
-        i,
-        j,
-        dx,
-        min_dy,
-        True,
         receiver,
         empty(address),
         empty(bytes32)
@@ -477,7 +407,6 @@ def exchange_extended(
     j: uint256,
     dx: uint256,
     min_dy: uint256,
-    use_eth: bool,
     sender: address,
     receiver: address,
     cb: bytes32
@@ -502,24 +431,21 @@ def exchange_extended(
 
     assert cb != empty(bytes32)  # dev: No callback specified
     return self._exchange(
-        sender, 0, i, j, dx, min_dy, use_eth, receiver, msg.sender, cb
+        sender, i, j, dx, min_dy, receiver, msg.sender, cb
     )  # callbacker should never be self ------------------^
 
 
-@payable
 @external
 @nonreentrant("lock")
 def add_liquidity(
     amounts: uint256[N_COINS],
     min_mint_amount: uint256,
-    use_eth: bool = False,
     receiver: address = msg.sender
 ) -> uint256:
     """
     @notice Adds liquidity into the pool.
     @param amounts Amounts of each coin to add.
     @param min_mint_amount Minimum amount of LP to mint.
-    @param use_eth True if native token is being added to the pool.
     @param receiver Address to send the LP tokens to. Default is msg.sender
     @return uint256 Amount of LP tokens received by the `receiver
     """
@@ -563,33 +489,15 @@ def add_liquidity(
 
         if amounts[i] > 0:
 
-            if coins[i] == WETH20:
-
-                self._transfer_in(
-                    coins[i],
-                    amounts[i],
-                    0,  # <-----------------------------------
-                    msg.value,  #                             | No callbacks
-                    empty(address),  # <----------------------| for
-                    empty(bytes32),  # <----------------------| add_liquidity.
-                    msg.sender,  #                            |
-                    empty(address),  # <-----------------------
-                    use_eth
-                )
-
-            else:
-
-                self._transfer_in(
-                    coins[i],
-                    amounts[i],
-                    0,
-                    0,  # <----------------- mvalue = 0 if coin is not WETH20.
-                    empty(address),
-                    empty(bytes32),
-                    msg.sender,
-                    empty(address),
-                    False  # <-------- use_eth is False if coin is not WETH20.
-                )
+            self._transfer_in(
+                coins[i],
+                amounts[i],
+                0,
+                empty(address),
+                empty(bytes32),
+                msg.sender,
+                empty(address),
+            )
 
             amountsp[i] = xp[i] - xp_old[i]
 
@@ -651,7 +559,6 @@ def add_liquidity(
 def remove_liquidity(
     _amount: uint256,
     min_amounts: uint256[N_COINS],
-    use_eth: bool = False,
     receiver: address = msg.sender,
     claim_admin_fees: bool = True,
 ) -> uint256[N_COINS]:
@@ -713,7 +620,7 @@ def remove_liquidity(
     # ---------------------------------- Transfers ---------------------------
 
     for i in range(N_COINS):
-        self._transfer_out(coins[i], d_balances[i], use_eth, receiver)
+        self._transfer_out(coins[i], d_balances[i], receiver)
 
     log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
 
@@ -767,7 +674,7 @@ def remove_liquidity_one_coin(
 
     self.balances[i] -= dy
     self.burnFrom(msg.sender, token_amount)
-    self._transfer_out(coins[i], dy, use_eth, receiver)
+    self._transfer_out(coins[i], dy, receiver)
 
     packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
     #        Safe to use D from _calc_withdraw_one_coin here ---^
@@ -777,15 +684,6 @@ def remove_liquidity_one_coin(
     )
 
     return dy
-
-
-@external
-@nonreentrant("lock")
-def claim_admin_fees():
-    """
-    @notice Claim admin fees. Callable by anyone.
-    """
-    self._claim_admin_fees()
 
 
 # -------------------------- Packing functions -------------------------------
@@ -858,12 +756,10 @@ def _unpack_prices(_packed_prices: uint256) -> uint256[2]:
 @internal
 def _exchange(
     sender: address,
-    mvalue: uint256,
     i: uint256,
     j: uint256,
     dx: uint256,
     min_dy: uint256,
-    use_eth: bool,
     receiver: address,
     callbacker: address,
     callback_sig: bytes32
@@ -941,13 +837,14 @@ def _exchange(
 
     ########################## TRANSFER IN <-------
     self._transfer_in(
-        coins[i], dx, dy, mvalue,
+        coins[i],
+        dx, dy,
         callbacker, callback_sig,  # <-------- Callback method is called here.
-        sender, receiver, use_eth,
+        sender, receiver
     )
 
     ########################## -------> TRANSFER OUT
-    self._transfer_out(coins[j], dy, use_eth, receiver)
+    self._transfer_out(coins[j], dy, receiver)
 
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
@@ -1189,10 +1086,7 @@ def _claim_admin_fees():
     #                  outgoing tokens excluding fees. Following 'gulps' fees:
 
     for i in range(N_COINS):
-        if coins[i] == WETH20:
-            self.balances[i] = self.balance
-        else:
-            self.balances[i] = ERC20(coins[i]).balanceOf(self)
+        self.balances[i] = ERC20(coins[i]).balanceOf(self)
 
     #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
     #                         and the pool gulps nothing in the previous step.
@@ -1214,17 +1108,15 @@ def _claim_admin_fees():
 
     # ------------------------------ Claim admin fees by minting admin's share
     #                                                of the pool in LP tokens.
-    receiver: address = Factory(self.factory).fee_receiver()
-    if receiver != empty(address) and fees > 0:
+    admin_share: uint256 = 0
+    frac: uint256 = 0
+    fee_receiver: address = Factory(self.factory).fee_receiver()
+    if fee_receiver != empty(address) and fees > 0:
 
-        frac: uint256 = vprice * 10**18 / (vprice - fees) - 10**18
-        claimed: uint256 = self.mint_relative(receiver, frac)
-
+        frac = vprice * 10**18 / (vprice - fees) - 10**18
+        admin_share = total_supply * frac / 10**18
         xcp_profit -= fees * 2
-
         self.xcp_profit = xcp_profit
-
-        log ClaimAdminFee(receiver, claimed)
 
     # ------------------------------------------- Recalculate D b/c we gulped.
     D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
@@ -1235,8 +1127,13 @@ def _claim_admin_fees():
     #               than old virtual price, since the claim process can result
     #                                     in a small decrease in pool's value.
 
-    self.virtual_price = 10**18 * self.get_xcp(D) / self.totalSupply
+    self.virtual_price = 10**18 * self.get_xcp(D) / (total_supply + admin_share)
     self.xcp_profit_a = xcp_profit  # <------------ Cache last claimed profit.
+
+    # Mint Admin Fee share:
+    if admin_share > 0:
+        assert self.mint(fee_receiver, admin_share)
+        log ClaimAdminFee(fee_receiver, admin_share)
 
 
 @internal
@@ -1599,24 +1496,6 @@ def mint(_to: address, _value: uint256) -> bool:
 
     log Transfer(empty(address), _to, _value)
     return True
-
-
-@internal
-def mint_relative(_to: address, frac: uint256) -> uint256:
-    """
-    @dev Increases supply by factor of (1 + frac/1e18) and mints it for _to
-    @param _to The account that will receive the created tokens.
-    @param frac The fraction of the current supply to mint.
-    @return uint256 Amount of tokens minted.
-    """
-    supply: uint256 = self.totalSupply
-    d_supply: uint256 = supply * frac / 10**18
-    if d_supply > 0:
-        self.totalSupply = supply + d_supply
-        self.balanceOf[_to] += d_supply
-        log Transfer(empty(address), _to, d_supply)
-
-    return d_supply
 
 
 @internal
