@@ -568,7 +568,6 @@ def remove_liquidity(
     @param min_amounts Minimum amounts of tokens to withdraw
     @param use_eth Whether to withdraw ETH or not
     @param receiver Address to send the withdrawn tokens to
-    @param claim_admin_fees If True, call self._claim_admin_fees(). Default is True.
     @return uint256[3] Amount of pool tokens received by the `receiver`
     """
     amount: uint256 = _amount
