@@ -194,7 +194,7 @@ last_gulp_timestamp: uint256  # <------ Records the block timestamp when admin
 
 ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
 MIN_RAMP_TIME: constant(uint256) = 86400
-MIN_GULP_INTERVAL: constant(uint256) = 86400
+MIN_GULP_INTERVAL: constant(uint256) = 3600
 
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
@@ -329,17 +329,22 @@ def _transfer_in(
     @params sender address to transfer `_coin` from.
     @params receiver address to transfer `_coin` to.
     """
+    received_amounts: uint256 = 0
+    coin_balance: uint256 = ERC20(_coin).balanceOf(self)
 
     if expect_optimistic_transfer:
 
-        b: uint256 = ERC20(_coin).balanceOf(self)
-        assert b - self.stored_balances[_coin] == dx  # dev: user didn't give us coins
+        received_amounts = coin_balance - self.stored_balances[_coin]
 
     elif callback_sig == empty(bytes32):
 
         assert ERC20(_coin).transferFrom(
-            sender, self, dx, default_return_value=True
+            sender,
+            self,
+            dx,
+            default_return_value=True
         )
+        received_amounts = ERC20(_coin).balanceOf(self) - coin_balance
 
     else:
 
@@ -348,7 +353,6 @@ def _transfer_in(
 
         #                 First call callback logic and then check if pool
         #                  gets dx amounts of _coins[i], revert otherwise.
-        b: uint256 = ERC20(_coin).balanceOf(self)
         raw_call(
             callbacker,
             concat(
@@ -356,10 +360,9 @@ def _transfer_in(
                 _abi_encode(sender, receiver, _coin, dx, dy)
             )
         )
-        assert ERC20(_coin).balanceOf(self) - b == dx  # dev: callback didn't give us coins
-        #                                          ^------ note: dx cannot
-        #                   be 0, so the contract MUST receive some _coin.
+        received_amounts = ERC20(_coin).balanceOf(self) - coin_balance
 
+    assert received_amounts == dx  # dev: user didn't give us coins
     self.stored_balances[_coin] += dx
 
 
@@ -555,7 +558,7 @@ def add_liquidity(
                 empty(bytes32),
                 msg.sender,
                 empty(address),
-                False,
+                False,  # <--------------------- Disable optimistic transfers.
             )
 
             amountsp[i] = xp[i] - xp_old[i]
@@ -577,7 +580,7 @@ def add_liquidity(
     if old_D > 0:
         d_token = token_supply * D / old_D - token_supply
     else:
-        d_token = self.get_xcp(D)  # <------------------------- Making initial
+        d_token = self.get_xcp(D, packed_price_scale)  # <----- Making initial
         #                                            virtual price equal to 1.
 
     assert d_token > 0  # dev: nothing minted
@@ -1121,44 +1124,54 @@ def _claim_admin_fees():
     """
     @notice Claims admin fees and sends it to fee_receiver set in the factory.
     """
+
+    # --------------------- Check if fees can be claimed ---------------------
+
+    # Disable fee claiming if:
+    # 1. If time passed since last gulp is less than MIN_GULP_INTERVAL.
+    # 2. Pool parameters are being ramped.
+
+    if (
+        block.timestamp - self.last_gulp_timestamp < MIN_GULP_INTERVAL or
+        self.future_A_gamma_time < block.timestamp
+    ):
+        return
+
     A_gamma: uint256[2] = self._A_gamma()
 
     xcp_profit: uint256 = self.xcp_profit  # <---------- Current pool profits.
     xcp_profit_a: uint256 = self.xcp_profit_a  # <- Profits at previous claim.
     total_supply: uint256 = self.totalSupply
-    last_gulp_timestamp: uint256 = self.last_gulp_timestamp
 
     # Do not claim admin fees if:
     # 1. insufficient profits accrued since last claim, and
     # 2. there are less than 10**18 (or 1 unit of) lp tokens, else it can lead
     #    to manipulated virtual prices.
-    # 3. Pool parameters are being ramped.
-    # 4. If time passed since last gulp is less than MIN_GULP_INTERVAL.
-    if (
-        xcp_profit <= xcp_profit_a or
-        total_supply < 10**18 or
-        self.future_A_gamma_time < block.timestamp or
-        block.timestamp - last_gulp_timestamp < MIN_GULP_INTERVAL
-    ):
+
+    if (xcp_profit <= xcp_profit_a or total_supply < 10**18):
         return
+
+    # ---------- Conditions met to claim admin fees: compute state. ----------
+
+    vprice: uint256 = self.virtual_price
+    packed_price_scale: uint256 = self.price_scale_packed
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    fee_receiver: address = Factory(self.factory).fee_receiver()
 
     #      Claim tokens belonging to the admin here. This is done by 'gulping'
     #       pool tokens that have accrued as fees, but not accounted in pool's
     #         `self.balances` yet: pool balances only account for incoming and
     #                  outgoing tokens excluding fees. Following 'gulps' fees:
 
+    gulped_balances: uint256[N_COINS] = empty(uint256[N_COINS])
     for i in range(N_COINS):
         # Note: do not add gulping of tokens in external methods that involve
         # optimistic token transfers.
-        self.balances[i] = ERC20(coins[i]).balanceOf(self)
+        gulped_balances[i] = ERC20(coins[i]).balanceOf(self)
         # TODO: Add safety checks to ensure balances are not wildly manipulated.
-
-    self.last_gulp_timestamp = block.timestamp
 
     #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
     #                         and the pool gulps nothing in the previous step.
-
-    vprice: uint256 = self.virtual_price
 
     #  Admin fees are calculated as follows.
     #      1. Calculate accrued profit since last claim. `xcp_profit`
@@ -1177,47 +1190,62 @@ def _claim_admin_fees():
     #                                                of the pool in LP tokens.
     admin_share: uint256 = 0
     frac: uint256 = 0
-    fee_receiver: address = Factory(self.factory).fee_receiver()
     if fee_receiver != empty(address) and fees > 0:
 
+        # -------------------------------- Calculate admin share to be minted.
         frac = vprice * 10**18 / (vprice - fees) - 10**18
         admin_share = total_supply * frac / 10**18
+
+        # ------ Subtract fees from profits that will be used for rebalancing.
         xcp_profit -= fees * 2
-        self.xcp_profit = xcp_profit
 
     # ------------------------------------------- Recalculate D b/c we gulped.
-    D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
-    # TODO: Add a safety check here for D
-    self.D = D
+    D: uint256 = MATH.newton_D(
+        A_gamma[0],
+        A_gamma[1],
+        self.xp(gulped_balances, packed_price_scale, precisions),
+        0
+    )
 
     # ------------------- Recalculate virtual_price following admin fee claim.
     #     In this instance we do not check if current virtual price is greater
     #               than old virtual price, since the claim process can result
     #                                     in a small decrease in pool's value.
 
-    vprice = 10**18 * self.get_xcp(D) / (total_supply + admin_share)
-    # TODO: Add a safety check here to ensure vprice cannot be manipulated too
-    # high or too low.
+    vprice = (
+        10**18 * self.get_xcp(D, packed_price_scale) /
+        (total_supply + admin_share)
+    )
+    if vprice < 10**18:
+        return  # <------ Virtual price goes below 10**18 > Do not claim fees.
+
+    # ------------ Admin fee claiming is safe. Can mutate state. -------------
+
+    if admin_share > 0:
+        self.mint(fee_receiver, admin_share)  # <------- Mint Admin Fee share.
+        log ClaimAdminFee(fee_receiver, admin_share)
+
+    self.balances = gulped_balances  # <---------- Commit gulping of balances.
+    self.xcp_profit = xcp_profit
+    self.last_gulp_timestamp = block.timestamp  # <--------- Update gulp time.
     self.virtual_price = vprice
+    self.D = D
 
     if xcp_profit > xcp_profit_a:
         self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
 
-    # -------------------------------------------------- Mint Admin Fee share.
-    if admin_share > 0:
-        self.mint(fee_receiver, admin_share)
-        log ClaimAdminFee(fee_receiver, admin_share)
-
 
 @internal
-@view
-def xp() -> uint256[N_COINS]:
+@pure
+def xp(
+    balances: uint256[N_COINS],
+    price_scale_packed: uint256,
+    precisions: uint256[N_COINS]
+) -> uint256[N_COINS]:
 
-    result: uint256[N_COINS] = self.balances
-    packed_prices: uint256 = self.price_scale_packed
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
-
+    result: uint256[N_COINS] = balances
     result[0] *= precisions[0]
+    packed_prices: uint256 = price_scale_packed
     for i in range(1, N_COINS):
         p: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
         result[i] = result[i] * p / PRECISION
@@ -1270,12 +1298,12 @@ def _fee(xp: uint256[N_COINS]) -> uint256:
 
 
 @internal
-@view
-def get_xcp(D: uint256) -> uint256:
+@pure
+def get_xcp(D: uint256, price_scale_packed: uint256) -> uint256:
 
     x: uint256[N_COINS] = empty(uint256[N_COINS])
     x[0] = D / N_COINS
-    packed_prices: uint256 = self.price_scale_packed  # <-- No precisions here
+    packed_prices: uint256 = price_scale_packed  # <------ No precisions here
     #                                 because we don't switch to "real" units.
 
     for i in range(1, N_COINS):
@@ -1681,7 +1709,10 @@ def get_virtual_price() -> uint256:
          virtual price.
     @return uint256 Virtual Price.
     """
-    return 10**18 * self.get_xcp(self.D) / self.totalSupply
+    return (
+        10**18 * self.get_xcp(self.D, self.price_scale_packed) /
+        self.totalSupply
+    )
 
 
 @external
@@ -1763,7 +1794,14 @@ def fee() -> uint256:
          removed.
     @return uint256 fee bps.
     """
-    return self._fee(self.xp())
+    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    return self._fee(
+        self.xp(
+            self.balances,
+            self.price_scale_packed,
+            precisions
+        )
+    )
 
 
 @view
