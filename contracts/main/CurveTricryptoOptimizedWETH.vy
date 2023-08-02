@@ -4,7 +4,7 @@
 @title CurveTricryptoOptimizedWETH
 @author Curve.Fi
 @license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
-@notice A Curve AMM pool for 3 unpegged assets (e.g. ETH, BTC, USD).
+@notice A Curve AMM pool for 3 unpegged assets (e.g. WETH, BTC, USD).
 @dev All prices in the AMM are with respect to the first token in the pool.
 """
 
@@ -160,6 +160,7 @@ future_A_gamma_time: public(uint256)  # <------ Time when ramping is finished.
 #      (i.e. self.future_A_gamma_time < block.timestamp), the variable is left
 #                                                            and not set to 0.
 
+stored_balances: HashMap[address, uint256]  # <---- Cached pool token balances.
 balances: public(uint256[N_COINS])
 D: public(uint256)
 xcp_profit: public(uint256)
@@ -305,6 +306,7 @@ def _transfer_in(
     callback_sig: bytes32,
     sender: address,
     receiver: address,
+    expect_optimistic_transfer: bool,
 ):
     """
     @notice Transfers `_coin` from `sender` to `self` and calls `callback_sig`
@@ -325,7 +327,12 @@ def _transfer_in(
     @params receiver address to transfer `_coin` to.
     """
 
-    if callback_sig == empty(bytes32):
+    if expect_optimistic_transfer:
+
+        b: uint256 = ERC20(_coin).balanceOf(self)
+        assert b - self.stored_balances[_coin] == dx  # dev: user didn't give us coins
+
+    elif callback_sig == empty(bytes32):
 
         assert ERC20(_coin).transferFrom(
             sender, self, dx, default_return_value=True
@@ -350,6 +357,8 @@ def _transfer_in(
         #                                          ^------ note: dx cannot
         #                   be 0, so the contract MUST receive some _coin.
 
+    self.stored_balances[_coin] += dx
+
 
 @internal
 def _transfer_out(_coin: address, _amount: uint256, receiver: address):
@@ -362,6 +371,7 @@ def _transfer_out(_coin: address, _amount: uint256, receiver: address):
     @params receiver Address to send the tokens to
     """
     assert ERC20(_coin).transfer(receiver, _amount, default_return_value=True)
+    self.stored_balances[_coin] -= _amount
 
 
 # -------------------------- AMM Main Functions ------------------------------
@@ -393,7 +403,8 @@ def exchange(
         min_dy,
         receiver,
         empty(address),
-        empty(bytes32)
+        empty(bytes32),
+        False,
     )
 
 
@@ -410,8 +421,6 @@ def exchange_extended(
 ) -> uint256:
     """
     @notice Exchange with callback method.
-    @dev This method does not allow swapping in native token, but does allow
-         swaps that transfer out native token from the pool.
     @dev Does not allow flashloans
     @dev One use-case is to reduce the number of redundant ERC20 token
          transfers in zaps.
@@ -427,8 +436,51 @@ def exchange_extended(
 
     assert cb != empty(bytes32)  # dev: No callback specified
     return self._exchange(
-        sender, i, j, dx, min_dy, receiver, msg.sender, cb
-    )  # callbacker should never be self ------------------^
+        sender,
+        i,
+        j,
+        dx,
+        min_dy,
+        receiver,
+        msg.sender,
+        cb,
+        False
+    )
+
+
+@external
+@nonreentrant('lock')
+def exchange_received(
+    i: uint256,
+    j: uint256,
+    dx: uint256,
+    min_dy: uint256,
+    receiver: address,
+) -> uint256:
+    """
+    @notice Exchange: but user must transfer dx amount of coin[i] tokens to pool first
+    @dev Use-case is to reduce the number of redundant ERC20 token
+         transfers in zaps. Primarily for dex aggregators.
+    @param i Index value for the input coin
+    @param j Index value for the output coin
+    @param dx Amount of input coin being swapped in
+    @param min_dy Minimum amount of output coin to receive
+    @param sender Address to transfer input coin from
+    @param receiver Address to send the output coin to
+    @param cb Callback signature
+    @return uint256 Amount of tokens at index j received by the `receiver`
+    """
+    return self._exchange(
+        msg.sender,
+        i,
+        j,
+        dx,
+        min_dy,
+        receiver,
+        empty(address),
+        empty(bytes32),
+        True,
+    )
 
 
 @external
@@ -446,6 +498,11 @@ def add_liquidity(
     @return uint256 Amount of LP tokens received by the `receiver
     """
 
+    # Claiming admin fees involves gulping tokens: syncing token balances to
+    # stored balances. This can interfere with optimistic transfers. These
+    # optimistic transfers are enabled only for _exchange related methods,
+    # where admin fee is not claimed, and disabled for adding and removing
+    # liquidity. It is, hence, fine to claim admin fees here:
     self._claim_admin_fees()  # <--------------------------- Claim admin fees.
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -495,6 +552,7 @@ def add_liquidity(
                 empty(bytes32),
                 msg.sender,
                 empty(address),
+                False,
             )
 
             amountsp[i] = xp[i] - xp_old[i]
@@ -635,6 +693,11 @@ def remove_liquidity_one_coin(
     @return Amount of tokens at index i received by the `receiver`
     """
 
+    # Claiming admin fees involves gulping tokens: syncing token balances to
+    # stored balances. This can interfere with optimistic transfers. These
+    # optimistic transfers are enabled only for _exchange related methods,
+    # where admin fee is not claimed, and disabled for adding and removing
+    # liquidity. It is, hence, fine to claim admin fees here:
     self._claim_admin_fees()  # <- Claim admin fees before removing liquidity.
 
     A_gamma: uint256[2] = self._A_gamma()
@@ -748,7 +811,8 @@ def _exchange(
     min_dy: uint256,
     receiver: address,
     callbacker: address,
-    callback_sig: bytes32
+    callback_sig: bytes32,
+    expect_optimistic_transfer: bool,
 ) -> uint256:
 
     assert i != j  # dev: coin index out of range
@@ -826,8 +890,9 @@ def _exchange(
         coins[i],
         dx, dy,
         callbacker, callback_sig,  # <-------- Callback method is called here.
-        sender, receiver
-    )
+        sender, receiver,
+        expect_optimistic_transfer  # <---- If True, pool expects dx tokens to
+    )  #                                                    be transferred in.
 
     ########################## -------> TRANSFER OUT
     self._transfer_out(coins[j], dy, receiver)
@@ -1063,7 +1128,12 @@ def _claim_admin_fees():
     # 1. insufficient profits accrued since last claim, and
     # 2. there are less than 10**18 (or 1 unit of) lp tokens, else it can lead
     #    to manipulated virtual prices.
-    if xcp_profit <= xcp_profit_a or total_supply < 10**18:
+    # 3. Pool parameters are being ramped.
+    if (
+        xcp_profit <= xcp_profit_a or
+        total_supply < 10**18 or
+        self.future_A_gamma_time < block.timestamp
+    ):
         return
 
     #      Claim tokens belonging to the admin here. This is done by 'gulping'
@@ -1072,6 +1142,8 @@ def _claim_admin_fees():
     #                  outgoing tokens excluding fees. Following 'gulps' fees:
 
     for i in range(N_COINS):
+        # Note: do not add gulping of tokens in external methods that involve
+        # optimistic token transfers.
         self.balances[i] = ERC20(coins[i]).balanceOf(self)
 
     #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
@@ -1106,6 +1178,7 @@ def _claim_admin_fees():
 
     # ------------------------------------------- Recalculate D b/c we gulped.
     D: uint256 = MATH.newton_D(A_gamma[0], A_gamma[1], self.xp(), 0)
+    # TODO: Add a safety check here for D
     self.D = D
 
     # ------------------- Recalculate virtual_price following admin fee claim.
@@ -1113,12 +1186,17 @@ def _claim_admin_fees():
     #               than old virtual price, since the claim process can result
     #                                     in a small decrease in pool's value.
 
-    self.virtual_price = 10**18 * self.get_xcp(D) / (total_supply + admin_share)
-    self.xcp_profit_a = xcp_profit  # <------------ Cache last claimed profit.
+    vprice = 10**18 * self.get_xcp(D) / (total_supply + admin_share)
+    # TODO: Add a safety check here to ensure vprice cannot be manipulated too
+    # high or too low.
+    self.virtual_price = vprice
+
+    if xcp_profit > xcp_profit_a:
+        self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
 
     # Mint Admin Fee share:
     if admin_share > 0:
-        assert self.mint(fee_receiver, admin_share)
+        self.mint(fee_receiver, admin_share)
         log ClaimAdminFee(fee_receiver, admin_share)
 
 
@@ -1168,7 +1246,13 @@ def _A_gamma() -> uint256[2]:
 @internal
 @view
 def _fee(xp: uint256[N_COINS]) -> uint256:
+
     fee_params: uint256[3] = self._unpack(self.packed_fee_params)
+
+    if self.future_A_gamma_time < block.timestamp:
+        fee_params[0] = MAX_FEE  # mid_fee is MAX_FEE during ramping
+        fee_params[1] = MAX_FEE  # out_fee is MAX_FEE during ramping
+
     f: uint256 = MATH.reduction_coefficient(xp, fee_params[2])
     return unsafe_div(
         fee_params[0] * f + fee_params[1] * (10**18 - f),
