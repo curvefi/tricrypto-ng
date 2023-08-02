@@ -1130,6 +1130,7 @@ def _claim_admin_fees():
         # -------------------------------- Calculate admin share to be minted.
         frac = vprice * 10**18 / (vprice - fees) - 10**18
         admin_share = total_supply * frac / 10**18
+        total_supply += admin_share
 
         # ------ Subtract fees from profits that will be used for rebalancing.
         xcp_profit -= fees * 2
@@ -1147,10 +1148,7 @@ def _claim_admin_fees():
     #               than old virtual price, since the claim process can result
     #                                     in a small decrease in pool's value.
 
-    vprice = (
-        10**18 * self.get_xcp(D, packed_price_scale) /
-        (total_supply + admin_share)
-    )
+    vprice = 10**18 * self.get_xcp(D, packed_price_scale) / total_supply
     if vprice < 10**18:
         return  # <------ Virtual price goes below 10**18 > Do not claim fees.
 
