@@ -194,7 +194,7 @@ last_gulp_timestamp: uint256  # <------ Records the block timestamp when admin
 
 ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
 MIN_RAMP_TIME: constant(uint256) = 86400
-MIN_GULP_INTERVAL: constant(uint256) = 3600
+MIN_GULP_INTERVAL: constant(uint256) = 86400
 
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
@@ -304,11 +304,7 @@ def __init__(
 def _transfer_in(
     _coin: address,
     dx: uint256,
-    dy: uint256,
-    callbacker: address,
-    callback_sig: bytes32,
     sender: address,
-    receiver: address,
     expect_optimistic_transfer: bool,
 ):
     """
@@ -336,29 +332,13 @@ def _transfer_in(
 
         received_amounts = coin_balance - self.stored_balances[_coin]
 
-    elif callback_sig == empty(bytes32):
+    else:
 
         assert ERC20(_coin).transferFrom(
             sender,
             self,
             dx,
             default_return_value=True
-        )
-        received_amounts = ERC20(_coin).balanceOf(self) - coin_balance
-
-    else:
-
-        # --------- This part of the _transfer_in logic is only accessible
-        #                                                    by _exchange.
-
-        #                 First call callback logic and then check if pool
-        #                  gets dx amounts of _coins[i], revert otherwise.
-        raw_call(
-            callbacker,
-            concat(
-                slice(callback_sig, 0, 4),
-                _abi_encode(sender, receiver, _coin, dx, dy)
-            )
         )
         received_amounts = ERC20(_coin).balanceOf(self) - coin_balance
 
@@ -411,46 +391,6 @@ def exchange(
         empty(address),
         empty(bytes32),
         False,
-    )
-
-
-@external
-@nonreentrant('lock')
-def exchange_extended(
-    i: uint256,
-    j: uint256,
-    dx: uint256,
-    min_dy: uint256,
-    sender: address,
-    receiver: address,
-    cb: bytes32
-) -> uint256:
-    """
-    @notice Exchange with callback method.
-    @dev Does not allow flashloans
-    @dev One use-case is to reduce the number of redundant ERC20 token
-         transfers in zaps.
-    @param i Index value for the input coin
-    @param j Index value for the output coin
-    @param dx Amount of input coin being swapped in
-    @param min_dy Minimum amount of output coin to receive
-    @param sender Address to transfer input coin from
-    @param receiver Address to send the output coin to
-    @param cb Callback signature
-    @return uint256 Amount of tokens at index j received by the `receiver`
-    """
-
-    assert cb != empty(bytes32)  # dev: No callback specified
-    return self._exchange(
-        sender,
-        i,
-        j,
-        dx,
-        min_dy,
-        receiver,
-        msg.sender,
-        cb,
-        False
     )
 
 
@@ -553,11 +493,7 @@ def add_liquidity(
             self._transfer_in(
                 coins[i],
                 amounts[i],
-                0,
-                empty(address),
-                empty(bytes32),
                 msg.sender,
-                empty(address),
                 False,  # <--------------------- Disable optimistic transfers.
             )
 
@@ -894,9 +830,8 @@ def _exchange(
     ########################## TRANSFER IN <-------
     self._transfer_in(
         coins[i],
-        dx, dy,
-        callbacker, callback_sig,  # <-------- Callback method is called here.
-        sender, receiver,
+        dx,
+        sender,
         expect_optimistic_transfer  # <---- If True, pool expects dx tokens to
     )  #                                                    be transferred in.
 
@@ -1165,10 +1100,10 @@ def _claim_admin_fees():
 
     gulped_balances: uint256[N_COINS] = empty(uint256[N_COINS])
     for i in range(N_COINS):
+
         # Note: do not add gulping of tokens in external methods that involve
         # optimistic token transfers.
-        gulped_balances[i] = ERC20(coins[i]).balanceOf(self)
-        # TODO: Add safety checks to ensure balances are not wildly manipulated.
+        gulped_balances[i] = self.stored_balances[coins[i]]  # <-------------------- consider this.
 
     #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
     #                         and the pool gulps nothing in the previous step.
