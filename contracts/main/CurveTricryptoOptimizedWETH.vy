@@ -388,8 +388,6 @@ def exchange(
         dx,
         min_dy,
         receiver,
-        empty(address),
-        empty(bytes32),
         False,
     )
 
@@ -423,8 +421,6 @@ def exchange_received(
         dx,
         min_dy,
         receiver,
-        empty(address),
-        empty(bytes32),
         True,
     )
 
@@ -752,8 +748,6 @@ def _exchange(
     dx: uint256,
     min_dy: uint256,
     receiver: address,
-    callbacker: address,
-    callback_sig: bytes32,
     expect_optimistic_transfer: bool,
 ) -> uint256:
 
