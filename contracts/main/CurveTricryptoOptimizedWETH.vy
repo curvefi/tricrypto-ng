@@ -189,9 +189,12 @@ NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 # ----------------------- Admin params ---------------------------------------
 
 admin_actions_deadline: public(uint256)
+last_gulp_timestamp: uint256  # <------ Records the block timestamp when admin
+#                                                             fee was claimed.
 
 ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
 MIN_RAMP_TIME: constant(uint256) = 86400
+MIN_GULP_INTERVAL: constant(uint256) = 86400
 
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
@@ -1123,16 +1126,19 @@ def _claim_admin_fees():
     xcp_profit: uint256 = self.xcp_profit  # <---------- Current pool profits.
     xcp_profit_a: uint256 = self.xcp_profit_a  # <- Profits at previous claim.
     total_supply: uint256 = self.totalSupply
+    last_gulp_timestamp: uint256 = self.last_gulp_timestamp
 
     # Do not claim admin fees if:
     # 1. insufficient profits accrued since last claim, and
     # 2. there are less than 10**18 (or 1 unit of) lp tokens, else it can lead
     #    to manipulated virtual prices.
     # 3. Pool parameters are being ramped.
+    # 4. If time passed since last gulp is less than MIN_GULP_INTERVAL.
     if (
         xcp_profit <= xcp_profit_a or
         total_supply < 10**18 or
-        self.future_A_gamma_time < block.timestamp
+        self.future_A_gamma_time < block.timestamp or
+        block.timestamp - last_gulp_timestamp < MIN_GULP_INTERVAL
     ):
         return
 
@@ -1145,6 +1151,9 @@ def _claim_admin_fees():
         # Note: do not add gulping of tokens in external methods that involve
         # optimistic token transfers.
         self.balances[i] = ERC20(coins[i]).balanceOf(self)
+        # TODO: Add safety checks to ensure balances are not wildly manipulated.
+
+    self.last_gulp_timestamp = block.timestamp
 
     #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
     #                         and the pool gulps nothing in the previous step.
@@ -1194,7 +1203,7 @@ def _claim_admin_fees():
     if xcp_profit > xcp_profit_a:
         self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
 
-    # Mint Admin Fee share:
+    # -------------------------------------------------- Mint Admin Fee share.
     if admin_share > 0:
         self.mint(fee_receiver, admin_share)
         log ClaimAdminFee(fee_receiver, admin_share)
