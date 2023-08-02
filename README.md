@@ -66,7 +66,7 @@ Arbitrum:
 
 Deployed Pool:
 
-1. [TricryptoUSDC 0x7706128aFAC8875981b2412faC6C4f3053EA705f](https://etherscan.io/address/0x7706128aFAC8875981b2412faC6C4f3053EA705f)
+1. [TricryptoUSDC 0x7706128aFAC8875981b2412faC6C4f3053EA705f](https://arbiscan.io/address/0x7706128aFAC8875981b2412faC6C4f3053EA705f)
 
 ### License
 
