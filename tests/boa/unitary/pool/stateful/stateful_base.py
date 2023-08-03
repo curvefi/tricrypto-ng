@@ -220,13 +220,16 @@ class StatefulBase(RuleBasedStateMachine):
     def balances(self):
 
         balances = [self.swap.balances(i) for i in range(3)]
-        eth_balance_amm = boa.env.get_balance(self.swap.address)
-
         balances_of = [c.balanceOf(self.swap) for c in self.coins]
-        balances_of[2] = eth_balance_amm  # eth is set at i==2
+        stored_balances = [c.internal.stored_balances(c) for c in self.coins]
 
         for i in range(3):
-            assert self.balances[i] == balances[i] == balances_of[i]
+            assert (
+                self.balances[i]
+                == balances[i]
+                == balances_of[i]
+                == stored_balances[i]
+            )
 
     @invariant()
     def lp_token_total_supply(self):

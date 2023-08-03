@@ -1087,21 +1087,6 @@ def _claim_admin_fees():
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
     fee_receiver: address = Factory(self.factory).fee_receiver()
 
-    #      Claim tokens belonging to the admin here. This is done by 'gulping'
-    #       pool tokens that have accrued as fees, but not accounted in pool's
-    #         `self.balances` yet: pool balances only account for incoming and
-    #                  outgoing tokens excluding fees. Following 'gulps' fees:
-
-    gulped_balances: uint256[N_COINS] = empty(uint256[N_COINS])
-    for i in range(N_COINS):
-
-        # Note: do not add gulping of tokens in external methods that involve
-        # optimistic token transfers.
-        gulped_balances[i] = self.stored_balances[coins[i]]
-
-    #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
-    #                         and the pool gulps nothing in the previous step.
-
     #  Admin fees are calculated as follows.
     #      1. Calculate accrued profit since last claim. `xcp_profit`
     #         is the current profits. `xcp_profit_a` is the profits
