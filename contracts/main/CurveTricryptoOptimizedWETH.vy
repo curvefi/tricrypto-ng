@@ -1097,7 +1097,7 @@ def _claim_admin_fees():
 
         # Note: do not add gulping of tokens in external methods that involve
         # optimistic token transfers.
-        gulped_balances[i] = self.stored_balances[coins[i]]  # <-------------------- consider this.
+        gulped_balances[i] = self.stored_balances[coins[i]]
 
     #            If the pool has made no profits, `xcp_profit == xcp_profit_a`
     #                         and the pool gulps nothing in the previous step.
@@ -1146,7 +1146,7 @@ def _claim_admin_fees():
     if vprice < 10**18:
         return  # <------ Virtual price goes below 10**18 > Do not claim fees.
 
-    # ------------ Admin fee claiming is safe. Can mutate state. -------------
+    # ---------------------------- Update State ------------------------------
 
     if admin_share > 0:
         self.mint(fee_receiver, admin_share)  # <------- Mint Admin Fee share.

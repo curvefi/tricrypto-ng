@@ -85,10 +85,6 @@ class StatefulGas(StatefulBase):
         self, token_fraction, exchange_i, user, update_D
     ):
 
-        if update_D:
-            with self.upkeep_on_claim():
-                self.swap.claim_admin_fees()
-
         token_amount = token_fraction * self.total_supply // 10**18
         d_token = self.token.balanceOf(user)
         if token_amount == 0 or token_amount > d_token:

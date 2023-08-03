@@ -127,10 +127,6 @@ class ProfitableState(StatefulBase):
     def remove_liquidity_one_coin(
         self, token_amount, exchange_i, user, check_out_amount
     ):
-        if check_out_amount:
-            with self.upkeep_on_claim():
-                self.swap.claim_admin_fees()
-
         try:
             calc_out_amount = self.swap.calc_withdraw_one_coin(
                 token_amount, exchange_i

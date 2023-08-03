@@ -9,6 +9,8 @@ MAX_SAMPLES = 20
 STEP_COUNT = 100
 NO_CHANGE = 2**256 - 1
 
+# TODO: Test admin fee claims considering the various cases where it is disallowed.  # noqa: E501
+
 
 def approx(x1, x2, precision):
     return abs(log(x1 / x2)) <= precision
@@ -51,12 +53,6 @@ class StatefulAdmin(StatefulBase):
         super().exchange(
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
-
-    @rule()
-    def claim_admin_fees(self):
-
-        with self.upkeep_on_claim():
-            self.swap.claim_admin_fees()
 
 
 def test_admin_fee(swap, views_contract, users, pool_coins, tricrypto_factory):

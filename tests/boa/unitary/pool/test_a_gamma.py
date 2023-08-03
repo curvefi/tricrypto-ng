@@ -48,3 +48,7 @@ def test_ramp_A_gamma(swap, factory_admin):
             )
             < 1e-4 * A_gamma_initial[1]
         )
+
+
+# TODO: Add check for fees during ramps
+# TODO: Add test to ensure admin fees are not being claimed
