@@ -1086,6 +1086,7 @@ def _claim_admin_fees():
     packed_price_scale: uint256 = self.price_scale_packed
     precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
     fee_receiver: address = Factory(self.factory).fee_receiver()
+    balances: uint256[N_COINS] = self.balances
 
     #  Admin fees are calculated as follows.
     #      1. Calculate accrued profit since last claim. `xcp_profit`
@@ -1118,7 +1119,7 @@ def _claim_admin_fees():
     D: uint256 = MATH.newton_D(
         A_gamma[0],
         A_gamma[1],
-        self.xp(gulped_balances, packed_price_scale, precisions),
+        self.xp(balances, packed_price_scale, precisions),
         0
     )
 
@@ -1137,7 +1138,6 @@ def _claim_admin_fees():
         self.mint(fee_receiver, admin_share)  # <------- Mint Admin Fee share.
         log ClaimAdminFee(fee_receiver, admin_share)
 
-    self.balances = gulped_balances  # <---------- Commit gulping of balances.
     self.xcp_profit = xcp_profit
     self.last_gulp_timestamp = block.timestamp  # <--------- Update gulp time.
     self.virtual_price = vprice
