@@ -160,7 +160,6 @@ future_A_gamma_time: public(uint256)  # <------ Time when ramping is finished.
 #      (i.e. self.future_A_gamma_time < block.timestamp), the variable is left
 #                                                            and not set to 0.
 
-stored_balances: HashMap[address, uint256]  # <---- Cached pool token balances.
 balances: public(uint256[N_COINS])
 D: public(uint256)
 xcp_profit: public(uint256)
@@ -301,7 +300,7 @@ def __init__(
 
 @internal
 def _transfer_in(
-    _coin: address,
+    _coin_idx: uint256,
     dx: uint256,
     sender: address,
     expect_optimistic_transfer: bool,
@@ -325,28 +324,28 @@ def _transfer_in(
     @params receiver address to transfer `_coin` to.
     """
     received_amounts: uint256 = 0
-    coin_balance: uint256 = ERC20(_coin).balanceOf(self)
+    coin_balance: uint256 = ERC20(coins[_coin_idx]).balanceOf(self)
 
     if expect_optimistic_transfer:
 
-        received_amounts = coin_balance - self.stored_balances[_coin]
+        received_amounts = coin_balance - self.balances[_coin_idx]
 
     else:
 
-        assert ERC20(_coin).transferFrom(
+        assert ERC20(coins[_coin_idx]).transferFrom(
             sender,
             self,
             dx,
             default_return_value=True
         )
-        received_amounts = ERC20(_coin).balanceOf(self) - coin_balance
+        received_amounts = ERC20(coins[_coin_idx]).balanceOf(self) - coin_balance
 
-    assert received_amounts == dx  # dev: user didn't give us coins
-    self.stored_balances[_coin] += dx
+    assert received_amounts >= dx  # dev: user didn't give us coins
+    self.balances[_coin_idx] += dx
 
 
 @internal
-def _transfer_out(_coin: address, _amount: uint256, receiver: address):
+def _transfer_out(_coin_idx: uint256, _amount: uint256, receiver: address):
     """
     @notice Transfer a single token from the pool to receiver.
     @dev This function is called by `remove_liquidity` and
@@ -355,8 +354,12 @@ def _transfer_out(_coin: address, _amount: uint256, receiver: address):
     @params _amount Amount of token to transfer out
     @params receiver Address to send the tokens to
     """
-    assert ERC20(_coin).transfer(receiver, _amount, default_return_value=True)
-    self.stored_balances[_coin] -= _amount
+    assert ERC20(coins[_coin_idx]).transfer(
+        receiver,
+        _amount,
+        default_return_value=True
+    )
+    self.balances[_coin_idx] -= _amount
 
 
 # -------------------------- AMM Main Functions ------------------------------
@@ -460,7 +463,7 @@ def add_liquidity(
     for i in range(N_COINS):
         bal: uint256 = xp[i] + amounts[i]
         xp[i] = bal
-        self.balances[i] = bal
+
     xx = xp
 
     xp[0] *= precisions[0]
@@ -478,8 +481,9 @@ def add_liquidity(
 
         if amounts[i] > 0:
 
+            # Updates self.balances after checking transferred in amounts:
             self._transfer_in(
-                coins[i],
+                i,
                 amounts[i],
                 msg.sender,
                 False,  # <--------------------- Disable optimistic transfers.
@@ -557,7 +561,7 @@ def remove_liquidity(
     """
     amount: uint256 = _amount
     balances: uint256[N_COINS] = self.balances
-    d_balances: uint256[N_COINS] = empty(uint256[N_COINS])
+    withdraw_amounts: uint256[N_COINS] = empty(uint256[N_COINS])
 
     # -------------------------------------------------------- Burn LP tokens.
 
@@ -577,18 +581,16 @@ def remove_liquidity(
 
         for i in range(N_COINS):
 
-            d_balances[i] = balances[i]
-            self.balances[i] = 0  # <------------------------- Empty the pool.
+            withdraw_amounts[i] = balances[i]
 
     else:  # <-------------------------------------------------------- Case 1.
 
         amount -= 1  # <---- To prevent rounding errors, favor LPs a tiny bit.
 
         for i in range(N_COINS):
-            d_balances[i] = balances[i] * amount / total_supply
-            assert d_balances[i] >= min_amounts[i]
-            self.balances[i] = balances[i] - d_balances[i]
-            balances[i] = d_balances[i]  # <-- Now it's the amounts going out.
+
+            withdraw_amounts[i] = balances[i] * amount / total_supply
+            assert withdraw_amounts[i] >= min_amounts[i]
 
     D: uint256 = self.D
     self.D = D - unsafe_div(D * amount, total_supply)  # <----------- Reduce D
@@ -599,11 +601,12 @@ def remove_liquidity(
     # ---------------------------------- Transfers ---------------------------
 
     for i in range(N_COINS):
-        self._transfer_out(coins[i], d_balances[i], receiver)
+        # _transfer_out updates self.balances:
+        self._transfer_out(i, withdraw_amounts[i], receiver)
 
-    log RemoveLiquidity(msg.sender, balances, total_supply - _amount)
+    log RemoveLiquidity(msg.sender, withdraw_amounts, total_supply - _amount)
 
-    return d_balances
+    return withdraw_amounts
 
 
 @external
@@ -646,9 +649,11 @@ def remove_liquidity_one_coin(
 
     # ------------------------- Transfers ------------------------------------
 
-    self.balances[i] -= dy
+    # Burn user's tokens:
     self.burnFrom(msg.sender, token_amount)
-    self._transfer_out(coins[i], dy, receiver)
+
+    # _transfer_out updates self.balances:
+    self._transfer_out(i, dy, receiver)
 
     packed_price_scale: uint256 = self.tweak_price(A_gamma, xp, D, 0)
     #        Safe to use D from _calc_withdraw_one_coin here ---^
@@ -751,7 +756,6 @@ def _exchange(
     y: uint256 = xp[j]  # <----------------- if j > N_COINS, this will revert.
     x0: uint256 = xp[i]  # <--------------- if i > N_COINS, this will  revert.
     xp[i] = x0 + dx
-    self.balances[i] = xp[i]
 
     packed_price_scale: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS - 1] = self._unpack_prices(
@@ -801,7 +805,6 @@ def _exchange(
     assert dy >= min_dy, "Slippage"
 
     y -= dy
-    self.balances[j] = y  # <----------- Update pool balance of outgoing coin.
 
     y *= prec_j
     if j > 0:
@@ -811,15 +814,19 @@ def _exchange(
     # ---------------------- Do Transfers in and out -------------------------
 
     ########################## TRANSFER IN <-------
+
+    # _transfer_in updates self.balances here:
     self._transfer_in(
-        coins[i],
+        i,
         dx,
         sender,
         expect_optimistic_transfer  # <---- If True, pool expects dx tokens to
     )  #                                                    be transferred in.
 
     ########################## -------> TRANSFER OUT
-    self._transfer_out(coins[j], dy, receiver)
+
+    # _transfer_out updates self.balances here:
+    self._transfer_out(j, dy, receiver)
 
     # ------ Tweak price_scale with good initial guess for newton_D ----------
 
@@ -1041,6 +1048,8 @@ def tweak_price(
 def _claim_admin_fees():
     """
     @notice Claims admin fees and sends it to fee_receiver set in the factory.
+    # TODO: test if this breaks the AMM! We're not minting LP tokens for
+    # the admin
     """
 
     # --------------------- Check if fees can be claimed ---------------------
@@ -1132,8 +1141,8 @@ def _claim_admin_fees():
                 total_supply_including_admin_share
             )
 
-            # Transfer tokens to admin:
-            assert ERC20(coins[i]).transfer(fee_receiver, admin_tokens[i])
+            # _transfer_out tokens to admin and update self.balances:
+            self._transfer_out(i, admin_tokens[i], fee_receiver)
 
         log ClaimAdminFee(fee_receiver, admin_tokens)
 
