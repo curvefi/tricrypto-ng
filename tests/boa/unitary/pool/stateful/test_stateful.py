@@ -103,7 +103,7 @@ class ProfitableState(StatefulBase):
         else:
             amounts = [self.get_coin_balance(user, c) for c in self.coins]
             tokens = self.token.balanceOf(user)
-            with boa.env.prank(user), self.upkeep_on_claim():
+            with boa.env.prank(user):
                 self.swap.remove_liquidity(token_amount, [0] * 3)
             tokens -= self.token.balanceOf(user)
             self.total_supply -= tokens

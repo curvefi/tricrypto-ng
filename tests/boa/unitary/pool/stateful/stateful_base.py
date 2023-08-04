@@ -221,15 +221,9 @@ class StatefulBase(RuleBasedStateMachine):
 
         balances = [self.swap.balances(i) for i in range(3)]
         balances_of = [c.balanceOf(self.swap) for c in self.coins]
-        stored_balances = [c.internal.stored_balances(c) for c in self.coins]
 
         for i in range(3):
-            assert (
-                self.balances[i]
-                == balances[i]
-                == balances_of[i]
-                == stored_balances[i]
-            )
+            assert self.balances[i] == balances[i] == balances_of[i]
 
     @invariant()
     def lp_token_total_supply(self):

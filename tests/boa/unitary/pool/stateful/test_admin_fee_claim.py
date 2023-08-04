@@ -54,6 +54,16 @@ class StatefulAdmin(StatefulBase):
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
 
+    @rule(
+        exchange_amount_in=exchange_amount_in,
+        exchange_i=exchange_i,
+        exchange_j=exchange_j,
+        user=user,
+    )
+    def add_liquidity(self, exchange_amount_in, exchange_i, exchange_j, user):
+
+        raise
+
 
 def test_admin_fee(swap, views_contract, users, pool_coins, tricrypto_factory):
     from hypothesis import settings
