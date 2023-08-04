@@ -189,12 +189,11 @@ NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 # ----------------------- Admin params ---------------------------------------
 
 admin_actions_deadline: public(uint256)
-last_gulp_timestamp: uint256  # <------ Records the block timestamp when admin
-#                                                             fee was claimed.
+last_admin_fee_claim_timestamp: uint256
 
 ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
 MIN_RAMP_TIME: constant(uint256) = 86400
-MIN_GULP_INTERVAL: constant(uint256) = 86400
+MIN_ADMIN_FEE_CLAIM_INTERVAL: constant(uint256) = 86400
 
 MIN_A: constant(uint256) = N_COINS**N_COINS * A_MULTIPLIER / 100
 MAX_A: constant(uint256) = 1000 * A_MULTIPLIER * N_COINS**N_COINS
@@ -440,13 +439,6 @@ def add_liquidity(
     @return uint256 Amount of LP tokens received by the `receiver
     """
 
-    # Claiming admin fees involves gulping tokens: syncing token balances to
-    # stored balances. This can interfere with optimistic transfers. These
-    # optimistic transfers are enabled only for _exchange related methods,
-    # where admin fee is not claimed, and disabled for adding and removing
-    # liquidity. It is, hence, fine to claim admin fees here:
-    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
-
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
     amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -543,6 +535,8 @@ def add_liquidity(
         receiver, amounts, d_token_fee, token_supply, packed_price_scale
     )
 
+    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
+
     return d_token
 
 
@@ -631,13 +625,6 @@ def remove_liquidity_one_coin(
     @return Amount of tokens at index i received by the `receiver`
     """
 
-    # Claiming admin fees involves gulping tokens: syncing token balances to
-    # stored balances. This can interfere with optimistic transfers. These
-    # optimistic transfers are enabled only for _exchange related methods,
-    # where admin fee is not claimed, and disabled for adding and removing
-    # liquidity. It is, hence, fine to claim admin fees here:
-    self._claim_admin_fees()  # <- Claim admin fees before removing liquidity.
-
     A_gamma: uint256[2] = self._A_gamma()
 
     dy: uint256 = 0
@@ -669,6 +656,8 @@ def remove_liquidity_one_coin(
     log RemoveLiquidityOne(
         msg.sender, token_amount, i, dy, approx_fee, packed_price_scale
     )
+
+    self._claim_admin_fees()  # <--------------------------- Claim admin fees.
 
     return dy
 
@@ -1057,12 +1046,15 @@ def _claim_admin_fees():
     # --------------------- Check if fees can be claimed ---------------------
 
     # Disable fee claiming if:
-    # 1. If time passed since last gulp is less than MIN_GULP_INTERVAL.
+    # 1. If time passed since last fee claim is less than
+    #    MIN_ADMIN_FEE_CLAIM_INTERVAL.
     # 2. Pool parameters are being ramped.
 
+    last_claim_time: uint256 = self.last_admin_fee_claim_timestamp
+
     if (
-        block.timestamp - self.last_gulp_timestamp < MIN_GULP_INTERVAL or
-        self.future_A_gamma_time < block.timestamp
+        block.timestamp - last_claim_time < MIN_ADMIN_FEE_CLAIM_INTERVAL
+        or self.future_A_gamma_time < block.timestamp
     ):
         return
 
@@ -1116,9 +1108,6 @@ def _claim_admin_fees():
         xcp_profit -= fees * 2
 
     # ------------------- Recalculate virtual_price following admin fee claim.
-    #     In this instance we do not check if current virtual price is greater
-    #               than old virtual price, since the claim process can result
-    #                                     in a small decrease in pool's value.
     total_supply_including_admin_share: uint256 = (
         current_lp_token_supply + admin_share
     )
@@ -1135,11 +1124,9 @@ def _claim_admin_fees():
 
     if admin_share > 0:
 
-        # self.mint(fee_receiver, admin_share)  # <------- Mint Admin Fee share.
-
-        # TODO: Get the following reviewed:
         admin_tokens: uint256[N_COINS] = empty(uint256[N_COINS])
         for i in range(N_COINS):
+
             admin_tokens[i] = (
                 balances[i] * admin_share /
                 total_supply_including_admin_share
@@ -1150,11 +1137,8 @@ def _claim_admin_fees():
 
         log ClaimAdminFee(fee_receiver, admin_tokens)
 
-        # self.virtual_price = vprice
-
     self.xcp_profit = xcp_profit
-    self.last_gulp_timestamp = block.timestamp  # <--------- Update gulp time.
-    self.D = D
+    self.last_admin_fee_claim_timestamp = block.timestamp
 
     if xcp_profit > xcp_profit_a:
         self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
