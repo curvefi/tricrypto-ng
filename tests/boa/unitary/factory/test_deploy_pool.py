@@ -18,9 +18,7 @@ def empty_factory(deployer, fee_receiver, owner, weth):
 def test_check_packed_params_on_deployment(swap, params, coins):
 
     # check packed precisions
-    unpacked_precisions = swap.internal._unpack(
-        swap._storage.packed_precisions.get()
-    )
+    unpacked_precisions = swap.precisions()
     for i in range(len(coins)):
         assert unpacked_precisions[i] == 10 ** (18 - coins[i].decimals())
 
