@@ -57,7 +57,13 @@ def _get_dydx_vyper(swap, i, j, price_calc):
     A = swap.A()
     gamma = swap.gamma()
 
-    xp = swap.internal.xp()
+    balances = []
+    for i in range(3):
+        balances.append(swap.balances(i))
+
+    xp = swap.internal.xp(
+        balances, swap._storage.price_scale_packed.get(), swap.precisions()
+    )
 
     for k in range(3):
         if k != i and k != j:

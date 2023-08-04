@@ -137,7 +137,7 @@ WETH20: public(immutable(address))
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # <------- The precision to convert to.
 A_MULTIPLIER: constant(uint256) = 10000
-packed_precisions: uint256
+packed_precisions: immutable(uint256)
 
 MATH: public(immutable(Math))
 coins: public(immutable(address[N_COINS]))
@@ -238,7 +238,7 @@ def __init__(
     _math: address,
     _weth: address,
     _salt: bytes32,
-    packed_precisions: uint256,
+    __packed_precisions: uint256,
     packed_A_gamma: uint256,
     packed_fee_params: uint256,
     packed_rebalancing_params: uint256,
@@ -254,7 +254,7 @@ def __init__(
     symbol = _symbol
     coins = _coins
 
-    self.packed_precisions = packed_precisions  # <------- Precisions of coins
+    packed_precisions = __packed_precisions  # <------- Precisions of coins
     #                            are calculated as 10**(18 - coin.decimals()).
 
     self.initial_A_gamma = packed_A_gamma  # <------------------- A and gamma.
@@ -454,7 +454,7 @@ def add_liquidity(
 
     # --------------------- Get prices, balances -----------------------------
 
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     packed_price_scale: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS-1] = self._unpack_prices(packed_price_scale)
 
@@ -750,7 +750,7 @@ def _exchange(
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     dy: uint256 = 0
 
     y: uint256 = xp[j]  # <----------------- if j > N_COINS, this will revert.
@@ -1086,7 +1086,7 @@ def _claim_admin_fees():
 
     vprice: uint256 = self.virtual_price
     packed_price_scale: uint256 = self.price_scale_packed
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     fee_receiver: address = Factory(self.factory).fee_receiver()
     balances: uint256[N_COINS] = self.balances
 
@@ -1270,7 +1270,7 @@ def _calc_withdraw_one_coin(
     assert i < N_COINS  # dev: coin out of range
 
     xx: uint256[N_COINS] = self.balances
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     xp: uint256[N_COINS] = precisions
     D0: uint256 = 0
 
@@ -1712,7 +1712,7 @@ def fee() -> uint256:
          removed.
     @return uint256 fee bps.
     """
-    precisions: uint256[N_COINS] = self._unpack(self.packed_precisions)
+    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     return self._fee(
         self.xp(
             self.balances,
@@ -1843,7 +1843,7 @@ def precisions() -> uint256[N_COINS]:  # <-------------- For by view contract.
     @notice Returns the precisions of each coin in the pool.
     @return uint256[3] precisions of coins.
     """
-    return self._unpack(self.packed_precisions)
+    return self._unpack(packed_precisions)
 
 
 @external
