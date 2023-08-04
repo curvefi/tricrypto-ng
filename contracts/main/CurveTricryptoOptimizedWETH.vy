@@ -127,7 +127,7 @@ event StopRampA:
 
 event ClaimAdminFee:
     admin: indexed(address)
-    tokens: uint256
+    tokens: uint256[N_COINS]
 
 
 # ----------------------- Storage/State Variables ----------------------------
@@ -1070,14 +1070,15 @@ def _claim_admin_fees():
 
     xcp_profit: uint256 = self.xcp_profit  # <---------- Current pool profits.
     xcp_profit_a: uint256 = self.xcp_profit_a  # <- Profits at previous claim.
-    total_supply: uint256 = self.totalSupply
+    current_lp_token_supply: uint256 = self.totalSupply
+    D: uint256 = self.D
 
     # Do not claim admin fees if:
     # 1. insufficient profits accrued since last claim, and
     # 2. there are less than 10**18 (or 1 unit of) lp tokens, else it can lead
     #    to manipulated virtual prices.
 
-    if (xcp_profit <= xcp_profit_a or total_supply < 10**18):
+    if (xcp_profit <= xcp_profit_a or current_lp_token_supply < 10**18):
         return
 
     # ---------- Conditions met to claim admin fees: compute state. ----------
@@ -1109,38 +1110,50 @@ def _claim_admin_fees():
 
         # -------------------------------- Calculate admin share to be minted.
         frac = vprice * 10**18 / (vprice - fees) - 10**18
-        admin_share = total_supply * frac / 10**18
-        total_supply += admin_share
+        admin_share = current_lp_token_supply * frac / 10**18
 
         # ------ Subtract fees from profits that will be used for rebalancing.
         xcp_profit -= fees * 2
-
-    # ------------------------------------------- Recalculate D b/c we gulped.
-    D: uint256 = MATH.newton_D(
-        A_gamma[0],
-        A_gamma[1],
-        self.xp(balances, packed_price_scale, precisions),
-        0
-    )
 
     # ------------------- Recalculate virtual_price following admin fee claim.
     #     In this instance we do not check if current virtual price is greater
     #               than old virtual price, since the claim process can result
     #                                     in a small decrease in pool's value.
+    total_supply_including_admin_share: uint256 = (
+        current_lp_token_supply + admin_share
+    )
+    vprice = (
+        10**18 * self.get_xcp(D, packed_price_scale) /
+        total_supply_including_admin_share
+    )
 
-    vprice = 10**18 * self.get_xcp(D, packed_price_scale) / total_supply
+    # Do not claim fees if doing so causes virtual price to drop below 10**18.
     if vprice < 10**18:
-        return  # <------ Virtual price goes below 10**18 > Do not claim fees.
+        return
 
     # ---------------------------- Update State ------------------------------
 
     if admin_share > 0:
-        self.mint(fee_receiver, admin_share)  # <------- Mint Admin Fee share.
-        log ClaimAdminFee(fee_receiver, admin_share)
+
+        # self.mint(fee_receiver, admin_share)  # <------- Mint Admin Fee share.
+
+        # TODO: Get the following reviewed:
+        admin_tokens: uint256[N_COINS] = empty(uint256[N_COINS])
+        for i in range(N_COINS):
+            admin_tokens[i] = (
+                balances[i] * admin_share /
+                total_supply_including_admin_share
+            )
+
+            # Transfer tokens to admin:
+            assert ERC20(coins[i]).transfer(fee_receiver, admin_tokens[i])
+
+        log ClaimAdminFee(fee_receiver, admin_tokens)
+
+        # self.virtual_price = vprice
 
     self.xcp_profit = xcp_profit
     self.last_gulp_timestamp = block.timestamp  # <--------- Update gulp time.
-    self.virtual_price = vprice
     self.D = D
 
     if xcp_profit > xcp_profit_a:
