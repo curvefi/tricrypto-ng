@@ -34,8 +34,8 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user, fee_receiver):
     with boa.env.prank(user):
         swap.add_liquidity(quantities, 0)
 
-    # test if eth was deposited:
-    assert boa.env.get_balance(swap.address) == bal_before + quantities[2]
+    # test if eth wasnt deposited:
+    assert boa.env.get_balance(swap.address) == bal_before
 
     token_balance = swap.balanceOf(user)
     assert (
@@ -79,8 +79,8 @@ def test_first_deposit_full_withdraw_second_deposit(
     assert swap.xcp_profit() >= 10**18
     assert swap.virtual_price() >= 10**18
 
-    # test if eth was deposited:
-    assert boa.env.get_balance(swap.address) == quantities[2] + eth_bal_before
+    # test if eth was not deposited:
+    assert boa.env.get_balance(swap.address) == eth_bal_before
 
     for i in range(len(coins)):
         assert swap.balances(i) == quantities[i] + swap_balances_before[i]

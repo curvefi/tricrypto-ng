@@ -1204,7 +1204,7 @@ def _fee(xp: uint256[N_COINS]) -> uint256:
 
     fee_params: uint256[3] = self._unpack(self.packed_fee_params)
 
-    if self.future_A_gamma_time < block.timestamp:
+    if self.future_A_gamma_time > block.timestamp:  # TODO: do not charge max fee else pool rekt!
         fee_params[0] = MAX_FEE  # mid_fee is MAX_FEE during ramping
         fee_params[1] = MAX_FEE  # out_fee is MAX_FEE during ramping
 

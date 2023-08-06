@@ -63,8 +63,6 @@ class StatefulBase(RuleBasedStateMachine):
         self.total_supply = self.token.balanceOf(user)
 
     def get_coin_balance(self, user, coin):
-        if coin.symbol() == "WETH":
-            return boa.env.get_balance(user)
         return coin.balanceOf(user)
 
     def convert_amounts(self, amounts):
@@ -163,7 +161,7 @@ class StatefulBase(RuleBasedStateMachine):
             with boa.env.prank(user):
                 self.coins[exchange_i].approve(self.swap, 2**256 - 1)
                 out = self.swap.exchange(
-                    exchange_i, exchange_j, exchange_amount_in, 0
+                    exchange_i, exchange_j, exchange_amount_in, calc_amount
                 )
         except Exception:
 
@@ -179,7 +177,6 @@ class StatefulBase(RuleBasedStateMachine):
                 and self.check_limits(_amounts)
             ):
                 raise
-
             return None
 
         # This is to check that we didn't end up in a borked state after

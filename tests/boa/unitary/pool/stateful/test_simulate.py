@@ -97,7 +97,6 @@ class StatefulSimulation(StatefulBase):
         if self.swap_out:
 
             dy_trader = self.trader.buy(dx, exchange_i, exchange_j)
-
             self.trader.tweak_price(boa.env.vm.state.timestamp)
 
             # check if output value from exchange is similar:
