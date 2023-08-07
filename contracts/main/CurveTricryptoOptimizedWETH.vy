@@ -1060,10 +1060,9 @@ def _claim_admin_fees():
     # 2. Pool parameters are being ramped.
 
     last_claim_time: uint256 = self.last_admin_fee_claim_timestamp
-
     if (
-        block.timestamp - last_claim_time < MIN_ADMIN_FEE_CLAIM_INTERVAL
-        or self.future_A_gamma_time < block.timestamp
+        block.timestamp - last_claim_time < MIN_ADMIN_FEE_CLAIM_INTERVAL or
+        self.future_A_gamma_time > block.timestamp
     ):
         return
 
@@ -1079,7 +1078,7 @@ def _claim_admin_fees():
     # 2. there are less than 10**18 (or 1 unit of) lp tokens, else it can lead
     #    to manipulated virtual prices.
 
-    if (xcp_profit <= xcp_profit_a or current_lp_token_supply < 10**18):
+    if xcp_profit <= xcp_profit_a or current_lp_token_supply < 10**18:
         return
 
     # ---------- Conditions met to claim admin fees: compute state. ----------
@@ -1203,12 +1202,13 @@ def _A_gamma() -> uint256[2]:
 def _fee(xp: uint256[N_COINS]) -> uint256:
 
     fee_params: uint256[3] = self._unpack(self.packed_fee_params)
-
-    if self.future_A_gamma_time > block.timestamp:  # TODO: do not charge max fee else pool rekt!
-        fee_params[0] = MAX_FEE  # mid_fee is MAX_FEE during ramping
-        fee_params[1] = MAX_FEE  # out_fee is MAX_FEE during ramping
-
     f: uint256 = MATH.reduction_coefficient(xp, fee_params[2])
+
+    # During parameter ramping, we raise fees and disable admin fee claiming
+    if self.future_A_gamma_time > block.timestamp:  # parameter ramping
+        fee_params[0] = 10**8  # set mid_fee to 100 basis points
+        fee_params[1] = 10**8  # set out_fee to 100 basis points
+
     return unsafe_div(
         fee_params[0] * f + fee_params[1] * (10**18 - f),
         10**18

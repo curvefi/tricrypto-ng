@@ -3,7 +3,8 @@ from math import log
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
-from tests.boa.unitary.pool.stateful.stateful_base import StatefulBase
+# from tests.boa.unitary.pool.stateful.stateful_base import StatefulBase
+from tests.boa.unitary.pool.stateful.test_stateful import ProfitableState
 
 MAX_SAMPLES = 20
 STEP_COUNT = 100
@@ -16,9 +17,15 @@ def approx(x1, x2, precision):
     return abs(log(x1 / x2)) <= precision
 
 
-class StatefulAdmin(StatefulBase):
+class StatefulAdmin(ProfitableState):
     exchange_amount_in = strategy(
         "uint256", min_value=10**17, max_value=10**5 * 10**18
+    )
+    deposit_amounts = strategy(
+        "uint256[3]", min_value=10**18, max_value=10**9 * 10**18
+    )
+    token_amount = strategy(
+        "uint256", min_value=10**18, max_value=10**12 * 10**18
     )
     exchange_i = strategy("uint8", max_value=2)
     exchange_j = strategy("uint8", max_value=2)
@@ -54,15 +61,24 @@ class StatefulAdmin(StatefulBase):
             exchange_amount_in_converted, exchange_i, exchange_j, user
         )
 
+    @rule(deposit_amounts=deposit_amounts, user=user)
+    def deposit(self, deposit_amounts, user):
+        deposit_amounts[1:] = [deposit_amounts[0]] + [
+            deposit_amounts[i] * 10**18 // self.swap.price_oracle(i - 1)
+            for i in [1, 2]
+        ]
+        super().deposit(deposit_amounts, user)
+
     @rule(
-        exchange_amount_in=exchange_amount_in,
+        token_amount=token_amount,
         exchange_i=exchange_i,
-        exchange_j=exchange_j,
         user=user,
     )
-    def add_liquidity(self, exchange_amount_in, exchange_i, exchange_j, user):
+    def remove_liquidity_one_coin(self, token_amount, exchange_i, user):
 
-        raise
+        super().remove_liquidity_one_coin(
+            token_amount, exchange_i, user, False
+        )
 
 
 def test_admin_fee(swap, views_contract, users, pool_coins, tricrypto_factory):

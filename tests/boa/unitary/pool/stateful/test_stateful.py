@@ -30,19 +30,23 @@ class ProfitableState(StatefulBase):
             return
 
         amounts = self.convert_amounts(deposit_amounts)
-        new_balances = [x + y for x, y in zip(self.balances, amounts)]
 
         for coin, q in zip(self.coins, amounts):
             mint_for_testing(coin, user, q)
 
         try:
+
             tokens = self.token.balanceOf(user)
             with boa.env.prank(user), self.upkeep_on_claim():
                 self.swap.add_liquidity(amounts, 0)
             tokens = self.token.balanceOf(user) - tokens
             self.total_supply += tokens
-            self.balances = new_balances
+
+            for i in range(3):
+                self.balances[i] += amounts[i]
+
         except Exception:
+
             if self.check_limits(amounts):
                 raise
             else:
