@@ -340,6 +340,12 @@ def _transfer_in(
         )
         received_amounts = ERC20(coins[_coin_idx]).balanceOf(self) - coin_balance
 
+    # If someone donates extra tokens to the contract: do not acknowledge.
+    # We only want to know if there are dx amount of tokens. Anything extra,
+    # we ignore. This is why we need to check if received_amounts (which
+    # accounts for coin balances of the contract) is atleast dx.
+    # If we checked for received_amounts == dx, an extra transfer without a
+    # call to exchange_received will break the method.
     assert received_amounts >= dx  # dev: user didn't give us coins
     self.balances[_coin_idx] += dx
 
