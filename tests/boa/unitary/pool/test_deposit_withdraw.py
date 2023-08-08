@@ -154,12 +154,19 @@ def test_second_deposit(
         calculated = swap_with_deposit.calc_token_amount(amounts, True)
         measured = swap_with_deposit.balanceOf(user)
         d_balances = [swap_with_deposit.balances(i) for i in range(3)]
+        claimed_fees = [0, 0, 0]
 
         with boa.env.prank(user):
             swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
+        logs = swap_with_deposit.get_logs()
+        for log in logs:
+            if log.event_type.name == "ClaimAdminFee":
+                claimed_fees = log.args[0]
+
         d_balances = [
-            swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
+            swap_with_deposit.balances(i) - d_balances[i] + claimed_fees[i]
+            for i in range(3)
         ]
         measured = swap_with_deposit.balanceOf(user) - measured
 
@@ -204,12 +211,19 @@ def test_second_deposit_one(
         )
         measured = swap_with_deposit.balanceOf(user)
         d_balances = [swap_with_deposit.balances(i) for i in range(3)]
+        claimed_fees = [0, 0, 0]
 
         with boa.env.prank(user):
             swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
+        logs = swap_with_deposit.get_logs()
+        for log in logs:
+            if log.event_type.name == "ClaimAdminFee":
+                claimed_fees = log.args[0]
+
         d_balances = [
-            swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
+            swap_with_deposit.balances(i) - d_balances[i] + claimed_fees[i]
+            for i in range(3)
         ]
         measured = swap_with_deposit.balanceOf(user) - measured
 
@@ -315,11 +329,17 @@ def test_immediate_withdraw_one(
 
         measured = coins[i].balanceOf(user)
         d_balances = [swap_with_deposit.balances(k) for k in range(3)]
+        claimed_fees = [0, 0, 0]
         try:
             with boa.env.prank(user):
                 swap_with_deposit.remove_liquidity_one_coin(
                     token_amount, i, int(0.999 * calculated)
                 )
+
+            logs = swap_with_deposit.get_logs()
+            for log in logs:
+                if log.event_type.name == "ClaimAdminFee":
+                    claimed_fees = log.args[0]
 
         except Exception:
 
@@ -344,10 +364,11 @@ def test_immediate_withdraw_one(
         assert approx(calculated, measured, 1e-3)
 
         for k in range(3):
+            claimed_tokens = claimed_fees[k]
             if k == i:
-                assert d_balances[k] == measured
+                assert d_balances[k] == measured + claimed_tokens
             else:
-                assert d_balances[k] == 0
+                assert d_balances[k] == claimed_tokens
 
         # This is to check that we didn't end up in a borked state after
         # a withdrawal succeeded

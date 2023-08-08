@@ -1154,6 +1154,14 @@ def _claim_admin_fees():
     self.xcp_profit = xcp_profit
     self.last_admin_fee_claim_timestamp = block.timestamp
 
+    # Since we reduce balances: virtual price goes down
+    self.virtual_price = vprice
+
+    # The _claim_admin_fee is operationally similar to:
+    # Calculate admin's share of fees > mint LP tokens > admin does remove_liquidity
+    # So: adjust D after admin seemingly removes liquidity
+    self.D = D - unsafe_div(D * admin_share, total_supply_including_admin_share)
+
     if xcp_profit > xcp_profit_a:
         self.xcp_profit_a = xcp_profit  # <-------- Cache last claimed profit.
 
