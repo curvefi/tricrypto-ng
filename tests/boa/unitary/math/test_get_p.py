@@ -52,17 +52,10 @@ def get_p(
 
 def _get_dydx_vyper(swap, i, j, price_calc):
 
-    # ANN = swap.A()
-    # A = ANN // 10**4 // 3**3
-    A = swap.A()
-    gamma = swap.gamma()
-
-    balances = []
-    for i in range(3):
-        balances.append(swap.balances(i))
-
     xp = swap.internal.xp(
-        balances, swap._storage.price_scale_packed.get(), swap.precisions()
+        swap._storage.balances.get(),
+        swap._storage.price_scale_packed.get(),
+        swap.precisions(),
     )
 
     for k in range(3):
@@ -73,10 +66,7 @@ def _get_dydx_vyper(swap, i, j, price_calc):
     x2 = xp[j]
     x3 = xp[k]
 
-    D = swap.D()
-
-    dxdy = price_calc.get_p(x1, x2, x3, D, A, gamma)
-    return dxdy
+    return price_calc.get_p(x1, x2, x3, swap.D(), swap.A(), swap.gamma())
 
 
 def _get_prices_vyper(swap, price_calc):
