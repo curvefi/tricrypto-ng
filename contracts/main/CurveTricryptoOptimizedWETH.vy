@@ -1054,8 +1054,6 @@ def tweak_price(
 def _claim_admin_fees():
     """
     @notice Claims admin fees and sends it to fee_receiver set in the factory.
-    # TODO: test if this breaks the AMM! We're not minting LP tokens for
-    # the admin
     """
 
     # --------------------- Check if fees can be claimed ---------------------
