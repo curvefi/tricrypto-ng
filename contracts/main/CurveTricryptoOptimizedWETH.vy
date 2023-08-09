@@ -136,7 +136,7 @@ event ClaimAdminFee:
 
 # ----------------------- Storage/State Variables ----------------------------
 
-WETH20: public(immutable(address))
+WETH20: public(constant(address)) = empty(address)
 
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # <------- The precision to convert to.
@@ -247,7 +247,7 @@ def __init__(
     packed_prices: uint256,
 ):
 
-    WETH20 = _weth
+    # WETH20 = _weth
     MATH = Math(_math)
 
     self.factory = msg.sender
@@ -300,11 +300,11 @@ def __init__(
 # ------------------- Token transfers in and out of the AMM ------------------
 
 
-@payable
-@external
-def __default__():
-    if msg.value > 0:
-        assert WETH20 in coins
+# # @payable
+# @external
+# def __default__():
+#     if msg.value > 0:
+#         assert WETH20 in coins
 
 
 @internal
@@ -402,7 +402,7 @@ def _transfer_out(
 # -------------------------- AMM Main Functions ------------------------------
 
 
-@payable
+# @payable
 @external
 @nonreentrant("lock")
 def exchange(
@@ -425,7 +425,7 @@ def exchange(
     """
     return self._exchange(
         msg.sender,
-        msg.value,
+        0,  # msg.value,
         i,
         j,
         dx,
@@ -437,7 +437,7 @@ def exchange(
     )
 
 
-@payable
+# @payable
 @external
 @nonreentrant('lock')
 def exchange_underlying(
@@ -458,7 +458,7 @@ def exchange_underlying(
     """
     return self._exchange(
         msg.sender,
-        msg.value,
+        0,  # msg.value,
         i,
         j,
         dx,
@@ -506,7 +506,7 @@ def exchange_extended(
     )  # callbacker should never be self ------------------^
 
 
-@payable
+# @payable
 @external
 @nonreentrant("lock")
 def add_liquidity(
@@ -569,7 +569,7 @@ def add_liquidity(
                     coins[i],
                     amounts[i],
                     0,  # <-----------------------------------
-                    msg.value,  #                             | No callbacks
+                    0,  # msg.value,  #                             | No callbacks
                     empty(address),  # <----------------------| for
                     empty(bytes32),  # <----------------------| add_liquidity.
                     msg.sender,  #                            |
