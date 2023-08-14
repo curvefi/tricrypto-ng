@@ -418,7 +418,7 @@ def exchange_received(
     j: uint256,
     dx: uint256,
     min_dy: uint256,
-    receiver: address,
+    receiver: address = msg.sender,
 ) -> uint256:
     """
     @notice Exchange: but user must transfer dx amount of coin[i] tokens to pool first
