@@ -3,7 +3,7 @@
 """
 @title CurveTricryptoOptimizedWETH
 @author Curve.Fi
-@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
+@license Copyright (c) Curve.Fi, 2023 - all rights reserved
 @notice A Curve AMM pool for 3 unpegged assets (e.g. WETH, BTC, USD).
 @dev All prices in the AMM are with respect to the first token in the pool.
 """
@@ -309,20 +309,11 @@ def _transfer_in(
     """
     @notice Transfers `_coin` from `sender` to `self` and calls `callback_sig`
             if it is not empty.
-    @dev The callback sig must have the following args:
-         sender: address
-         receiver: address
-         coin: address
-         dx: uint256
-         dy: uint256
-    @params _coin address of the coin to transfer in.
+    @params _coin_idx uint256 Index of the coin to transfer in.
     @params dx amount of `_coin` to transfer into the pool.
-    @params dy amount of `_coin` to transfer out of the pool.
-    @params mvalue msg.value if the transfer is ETH, 0 otherwise.
-    @params callbacker address to call `callback_sig` on.
-    @params callback_sig signature of the callback function.
     @params sender address to transfer `_coin` from.
-    @params receiver address to transfer `_coin` to.
+    @params expect_optimistic_transfer bool True if pool expects user to transfer.
+            This is only enabled for exchange_received.
     """
     received_amounts: uint256 = 0
     coin_balance: uint256 = ERC20(coins[_coin_idx]).balanceOf(self)
@@ -364,8 +355,8 @@ def _transfer_out(_coin_idx: uint256, _amount: uint256, receiver: address):
     """
     @notice Transfer a single token from the pool to receiver.
     @dev This function is called by `remove_liquidity` and
-         `remove_liquidity_one` and `_exchange` methods.
-    @params _coin Address of the token to transfer out
+         `remove_liquidity_one`, `_claim_admin_fees` and `_exchange` methods.
+    @params _coin_idx uint256 Index of the token to transfer out
     @params _amount Amount of token to transfer out
     @params receiver Address to send the tokens to
     """
@@ -423,16 +414,16 @@ def exchange_received(
     receiver: address = msg.sender,
 ) -> uint256:
     """
-    @notice Exchange: but user must transfer dx amount of coin[i] tokens to pool first
+    @notice Exchange: but user must transfer dx amount of coin[i] tokens to pool first.
+            Pool will not call transferFrom and will only check if a surplus of
+            coins[i] is greater than or equal to `dx`.
     @dev Use-case is to reduce the number of redundant ERC20 token
-         transfers in zaps. Primarily for dex aggregators.
+         transfers in zaps. Primarily for dex-aggregators/arbitrageurs/searchers.
     @param i Index value for the input coin
     @param j Index value for the output coin
     @param dx Amount of input coin being swapped in
     @param min_dy Minimum amount of output coin to receive
-    @param sender Address to transfer input coin from
     @param receiver Address to send the output coin to
-    @param cb Callback signature
     @return uint256 Amount of tokens at index j received by the `receiver`
     """
     return self._exchange(
@@ -874,7 +865,7 @@ def tweak_price(
     K0_prev: uint256 = 0,
 ) -> uint256:
     """
-    @notice Tweaks price_oracle, last_price and conditionally adjusts
+    @notice Updates price_oracle, last_price and conditionally adjusts
             price_scale. This is called whenever there is an unbalanced
             liquidity operation: _exchange, add_liquidity, or
             remove_liquidity_one_coin.
