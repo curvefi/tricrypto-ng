@@ -383,6 +383,17 @@ def find_pool_for_coins(_from: address, _to: address, i: uint256 = 0) -> address
 
 @view
 @external
+def gauge_implementation() -> address:
+    """
+    @notic returns gauge implementation address stored in the factory
+    @dev Gauges are not deployed by non-eth AMM factories.
+    @return Empty address
+    """
+    return empty(address)
+
+
+@view
+@external
 def get_coins(_pool: address) -> address[N_COINS]:
     """
     @notice Get the coins within a pool
