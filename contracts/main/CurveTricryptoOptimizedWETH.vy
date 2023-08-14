@@ -145,9 +145,11 @@ factory: public(immutable(Factory))
 
 price_scale_packed: uint256  # <------------------------ Internal price scale.
 price_oracle_packed: uint256  # <------- Price target given by moving average.
+tvl_oracle: uint256  # <------------------ EMA of totalSupply * virtual_price.
 
 last_prices_packed: uint256
 last_prices_timestamp: public(uint256)
+last_tvl: public(uint256)
 
 initial_A_gamma: public(uint256)
 initial_A_gamma_time: public(uint256)
@@ -903,10 +905,13 @@ def tweak_price(
     old_xcp_profit: uint256 = self.xcp_profit
     old_virtual_price: uint256 = self.virtual_price
     last_prices_timestamp: uint256 = self.last_prices_timestamp
+    last_cached_tvl: uint256 = self.last_tvl
 
     # ----------------------- Update MA if needed ----------------------------
 
     if last_prices_timestamp < block.timestamp:
+
+        tvl_oracle: uint256 = self.tvl_oracle
 
         #   The moving average price oracle is calculated using the last_price
         #      of the trade at the previous block, and the price oracle logged
@@ -924,6 +929,8 @@ def tweak_price(
             )
         )
 
+        # ---------------------------------------------- Update price oracles.
+
         for k in range(N_COINS - 1):
 
             # ----------------- We cap state price that goes into the EMA with
@@ -934,6 +941,14 @@ def tweak_price(
                 10**18
             )
 
+        # ------------------------------------------------- Update TVL oracle.
+
+        tvl_oracle = unsafe_div(
+            last_cached_tvl * (10**18 - alpha) + tvl_oracle * alpha,
+            10**18
+        )
+
+        self.tvl_oracle = tvl_oracle
         self.price_oracle_packed = self._pack_prices(price_oracle)
         self.last_prices_timestamp = block.timestamp  # <---- Store timestamp.
 
@@ -953,6 +968,10 @@ def tweak_price(
     for k in range(N_COINS - 1):
         last_prices[k] = unsafe_div(last_prices[k] * price_scale[k], 10**18)
     self.last_prices_packed = self._pack_prices(last_prices)
+
+    # -------------------------- Calculate last_tvl --------------------------
+
+    self.last_tvl = unsafe_div(total_supply * old_virtual_price, 10**18)
 
     # ---------- Update profit numbers without price adjustment first --------
 
