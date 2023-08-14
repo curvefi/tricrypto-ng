@@ -145,7 +145,7 @@ factory: public(immutable(Factory))
 
 price_scale_packed: uint256  # <------------------------ Internal price scale.
 price_oracle_packed: uint256  # <------- Price target given by moving average.
-tvl_oracle: uint256  # <------------------ EMA of totalSupply * virtual_price.
+cached_tvl_oracle: uint256  # <----------- EMA of totalSupply * virtual_price.
 
 last_prices_packed: uint256
 last_prices_timestamp: public(uint256)
@@ -905,13 +905,13 @@ def tweak_price(
     old_xcp_profit: uint256 = self.xcp_profit
     old_virtual_price: uint256 = self.virtual_price
     last_prices_timestamp: uint256 = self.last_prices_timestamp
-    last_cached_tvl: uint256 = self.last_tvl
 
-    # ----------------------- Update MA if needed ----------------------------
+    # ----------------------- Update Oracles if needed -----------------------
 
     if last_prices_timestamp < block.timestamp:
 
-        tvl_oracle: uint256 = self.tvl_oracle
+        cached_tvl_oracle: uint256 = self.cached_tvl_oracle
+        last_cached_tvl: uint256 = self.last_tvl
 
         #   The moving average price oracle is calculated using the last_price
         #      of the trade at the previous block, and the price oracle logged
@@ -941,20 +941,23 @@ def tweak_price(
                 10**18
             )
 
+        self.price_oracle_packed = self._pack_prices(price_oracle)
+
         # ------------------------------------------------- Update TVL oracle.
 
-        tvl_oracle = unsafe_div(
-            last_cached_tvl * (10**18 - alpha) + tvl_oracle * alpha,
+        self.cached_tvl_oracle = unsafe_div(
+            last_cached_tvl * (10**18 - alpha) + cached_tvl_oracle * alpha,
             10**18
         )
 
-        self.tvl_oracle = tvl_oracle
-        self.price_oracle_packed = self._pack_prices(price_oracle)
+        # --------------------------------------------------------------------
+
         self.last_prices_timestamp = block.timestamp  # <---- Store timestamp.
 
-    #                  price_oracle is used further on to calculate its vector
-    #            distance from price_scale. This distance is used to calculate
-    #                  the amount of adjustment to be done to the price_scale.
+    #  `price_oracle` is used further on to calculate its vector distance from
+    # price_scale. This distance is used to calculate the amount of adjustment
+    # to be done to the price_scale.
+    # ------------------------------------------------------------------------
 
     # ------------------ If new_D is set to 0, calculate it ------------------
 
@@ -1724,6 +1727,39 @@ def price_oracle(k: uint256) -> uint256:
         ) / 10**18
 
     return price_oracle
+
+
+@external
+@view
+@nonreentrant("lock")
+def tvl_oracle() -> uint256:
+    """
+    @notice Returns a tvl oracle.
+    @dev The oracle is an exponential moving average, with a periodicity
+         determined by `self.ma_time`. Input to the TVL oracle is totalSupply * virtual_price
+    @return uint256 Oracle value of TVL.
+    """
+
+    last_prices_timestamp: uint256 = self.last_prices_timestamp
+    cached_tvl_oracle: uint256 = self.cached_tvl_oracle
+
+    if last_prices_timestamp < block.timestamp:
+
+        ma_time: uint256 = self._unpack(self.packed_rebalancing_params)[2]
+        alpha: uint256 = MATH.wad_exp(
+            -convert(
+                (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
+                int256,
+            )
+        )
+
+        total_supply: uint256 = self.totalSupply
+        virtual_price: uint256 = 10**18 * self.get_xcp(self.D, self.price_scale_packed) / total_supply
+        last_tvl: uint256 = total_supply * virtual_price
+
+        return (last_tvl * (10**18 - alpha) + cached_tvl_oracle * alpha) / 10**18
+
+    return cached_tvl_oracle
 
 
 @external
