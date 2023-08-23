@@ -145,11 +145,11 @@ factory: public(immutable(Factory))
 
 price_scale_packed: uint256  # <------------------------ Internal price scale.
 price_oracle_packed: uint256  # <------- Price target given by moving average.
-cached_tvl_oracle: uint256  # <----------- EMA of totalSupply * virtual_price.
+cached_xcp_oracle: uint256  # <----------- EMA of totalSupply * virtual_price.
 
 last_prices_packed: uint256
 last_prices_timestamp: public(uint256)
-last_tvl: public(uint256)
+last_xcp: public(uint256)
 
 initial_A_gamma: public(uint256)
 initial_A_gamma_time: public(uint256)
@@ -526,10 +526,16 @@ def add_liquidity(
 
     else:
 
+        # (re)instatiating an empty pool:
+
         self.D = D
         self.virtual_price = 10**18
         self.xcp_profit = 10**18
         self.xcp_profit_a = 10**18
+
+        # Initialise xcp oracle here:
+        self.cached_xcp_oracle = d_token  # <--- virtual_price * totalSupply
+
         self.mint(receiver, d_token)
 
     assert d_token >= min_mint_amount, "Slippage"
@@ -901,9 +907,6 @@ def tweak_price(
 
     if last_prices_timestamp < block.timestamp:
 
-        cached_tvl_oracle: uint256 = self.cached_tvl_oracle
-        last_cached_tvl: uint256 = self.last_tvl
-
         #   The moving average price oracle is calculated using the last_price
         #      of the trade at the previous block, and the price oracle logged
         #              before that trade. This can happen only once per block.
@@ -936,8 +939,11 @@ def tweak_price(
 
         # ------------------------------------------------- Update TVL oracle.
 
-        self.cached_tvl_oracle = unsafe_div(
-            last_cached_tvl * (10**18 - alpha) + cached_tvl_oracle * alpha,
+        cached_xcp_oracle: uint256 = self.cached_xcp_oracle
+        last_cached_tvl: uint256 = self.last_xcp
+
+        self.cached_xcp_oracle = unsafe_div(
+            last_cached_tvl * (10**18 - alpha) + cached_xcp_oracle * alpha,
             10**18
         )
 
@@ -991,9 +997,9 @@ def tweak_price(
         if self.future_A_gamma_time < block.timestamp:
             assert virtual_price > old_virtual_price, "Loss"
 
-        # -------------------------- Cache last_tvl --------------------------
+        # -------------------------- Cache last_xcp --------------------------
 
-        self.last_tvl = xcp  # geometric_mean(D * price_scale)
+        self.last_xcp = xcp  # geometric_mean(D * price_scale)
 
     self.xcp_profit = xcp_profit
 
@@ -1723,16 +1729,20 @@ def price_oracle(k: uint256) -> uint256:
 @external
 @view
 @nonreentrant("lock")
-def D_oracle() -> uint256:
+def xcp_oracle() -> uint256:
     """
-    @notice Returns a tvl oracle.
+    @notice Returns the oracle value for xcp.
     @dev The oracle is an exponential moving average, with a periodicity
-         determined by `self.ma_time`. Input to the TVL oracle is totalSupply * virtual_price
-    @return uint256 Oracle value of TVL.
+         determined by `self.ma_time`.
+         `TVL` is xcp, calculated as either:
+            1. virtual_price * total_supply, OR
+            2. self.get_xcp(...), OR
+            3. MATH.geometric_mean(xp)
+    @return uint256 Oracle value of xcp.
     """
 
     last_prices_timestamp: uint256 = self.last_prices_timestamp
-    cached_tvl_oracle: uint256 = self.cached_tvl_oracle
+    cached_xcp_oracle: uint256 = self.cached_xcp_oracle
 
     if last_prices_timestamp < block.timestamp:
 
@@ -1744,10 +1754,10 @@ def D_oracle() -> uint256:
             )
         )
 
-        last_tvl: uint256 = self.get_xcp(self.D, self.price_scale_packed)
-        return (last_tvl * (10**18 - alpha) + cached_tvl_oracle * alpha) / 10**18
+        last_xcp: uint256 = self.get_xcp(self.D, self.price_scale_packed)
+        return (last_xcp * (10**18 - alpha) + cached_xcp_oracle * alpha) / 10**18
 
-    return cached_tvl_oracle
+    return cached_xcp_oracle
 
 
 @external

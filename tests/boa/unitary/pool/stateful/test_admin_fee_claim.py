@@ -10,8 +10,6 @@ MAX_SAMPLES = 20
 STEP_COUNT = 100
 NO_CHANGE = 2**256 - 1
 
-# TODO: Test admin fee claims considering the various cases where it is disallowed.  # noqa: E501
-
 
 def approx(x1, x2, precision):
     return abs(log(x1 / x2)) <= precision
