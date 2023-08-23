@@ -963,10 +963,6 @@ def tweak_price(
         last_prices[k] = unsafe_div(last_prices[k] * price_scale[k], 10**18)
     self.last_prices_packed = self._pack_prices(last_prices)
 
-    # -------------------------- Calculate last_tvl --------------------------
-
-    self.last_tvl = unsafe_div(total_supply * old_virtual_price, 10**18)
-
     # ---------- Update profit numbers without price adjustment first --------
 
     xp: uint256[N_COINS] = empty(uint256[N_COINS])
@@ -994,6 +990,10 @@ def tweak_price(
         #                                        else the pool suffers a loss.
         if self.future_A_gamma_time < block.timestamp:
             assert virtual_price > old_virtual_price, "Loss"
+
+        # -------------------------- Cache last_tvl --------------------------
+
+        self.last_tvl = xcp  # geometric_mean(D * price_scale)
 
     self.xcp_profit = xcp_profit
 
@@ -1723,7 +1723,7 @@ def price_oracle(k: uint256) -> uint256:
 @external
 @view
 @nonreentrant("lock")
-def tvl_oracle() -> uint256:
+def D_oracle() -> uint256:
     """
     @notice Returns a tvl oracle.
     @dev The oracle is an exponential moving average, with a periodicity
@@ -1744,10 +1744,7 @@ def tvl_oracle() -> uint256:
             )
         )
 
-        total_supply: uint256 = self.totalSupply
-        virtual_price: uint256 = 10**18 * self.get_xcp(self.D, self.price_scale_packed) / total_supply
-        last_tvl: uint256 = total_supply * virtual_price
-
+        last_tvl: uint256 = self.get_xcp(self.D, self.price_scale_packed)
         return (last_tvl * (10**18 - alpha) + cached_tvl_oracle * alpha) / 10**18
 
     return cached_tvl_oracle
