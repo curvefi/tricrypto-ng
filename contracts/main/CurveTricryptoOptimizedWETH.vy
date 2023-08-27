@@ -534,7 +534,7 @@ def add_liquidity(
         self.xcp_profit_a = 10**18
 
         # Initialise xcp oracle here:
-        self.cached_xcp_oracle = d_token  # <--- virtual_price * totalSupply
+        self.cached_xcp_oracle = d_token  # <--- virtual_price * totalSupply / 10**18
 
         self.mint(receiver, d_token)
 
