@@ -26,6 +26,14 @@ def _get_tx_params():
     return {"max_fee": max_fee, "max_priority_fee": max_priority_fee}
 
 
+def deploy_blueprint(account, bytecode):
+    bytecode = b"\xfe\x71\x00" + bytecode
+    bytecode = b"\x61" + len(bytecode).to_bytes(2, "big") + b"\x3d\x81\x60\x0a\x3d\x39\xf3" + bytecode
+    account.transfer(data=bytecode, priority_fee="auto")
+    
+
+
+
 def deploy_blueprint(contract, account):
 
     initcode = contract.contract_type.deployment_bytecode.bytecode
