@@ -159,9 +159,7 @@ def _get_prices_vyper(swap, price_calc):
     for i in range(3):
         balances.append(swap.balances(i))
 
-    xp = swap.internal.xp(
-        balances, swap._storage.price_scale_packed.get(), swap.precisions()
-    )
+    xp = swap.internal.xp(balances, swap._storage.price_scale_packed.get())
 
     D = swap.D()
 

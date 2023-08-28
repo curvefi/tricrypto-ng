@@ -137,7 +137,7 @@ WETH20: public(immutable(address))
 N_COINS: constant(uint256) = 3
 PRECISION: constant(uint256) = 10**18  # <------- The precision to convert to.
 A_MULTIPLIER: constant(uint256) = 10000
-packed_precisions: immutable(uint256)
+PRECISIONS: immutable(uint256[N_COINS])
 
 MATH: public(immutable(Math))
 coins: public(immutable(address[N_COINS]))
@@ -255,8 +255,8 @@ def __init__(
     symbol = _symbol
     coins = _coins
 
-    packed_precisions = __packed_precisions  # <------- Precisions of coins
-    #                            are calculated as 10**(18 - coin.decimals()).
+    PRECISIONS = self._unpack(__packed_precisions)  # <-- Precisions of coins
+    #                           are calculated as 10**(18 - coin.decimals()).
 
     self.initial_A_gamma = packed_A_gamma  # <------------------- A and gamma.
     self.future_A_gamma = packed_A_gamma
@@ -464,7 +464,6 @@ def add_liquidity(
 
     # --------------------- Get prices, balances -----------------------------
 
-    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     packed_price_scale: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS-1] = self._unpack_prices(packed_price_scale)
 
@@ -476,12 +475,12 @@ def add_liquidity(
 
     xx = xp
 
-    xp[0] *= precisions[0]
-    xp_old[0] *= precisions[0]
+    xp[0] *= PRECISIONS[0]
+    xp_old[0] *= PRECISIONS[0]
     for i in range(1, N_COINS):
-        xp[i] = unsafe_div(xp[i] * price_scale[i-1] * precisions[i], PRECISION)
+        xp[i] = unsafe_div(xp[i] * price_scale[i-1] * PRECISIONS[i], PRECISION)
         xp_old[i] = unsafe_div(
-            xp_old[i] * unsafe_mul(price_scale[i-1], precisions[i]),
+            xp_old[i] * unsafe_mul(price_scale[i-1], PRECISIONS[i]),
             PRECISION
         )
 
@@ -774,7 +773,6 @@ def _exchange(
 
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
-    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     dy: uint256 = 0
 
     y: uint256 = xp[j]  # <----------------- if j > N_COINS, this will revert.
@@ -786,14 +784,14 @@ def _exchange(
         packed_price_scale
     )
 
-    xp[0] *= precisions[0]
+    xp[0] *= PRECISIONS[0]
     for k in range(1, N_COINS):
         xp[k] = unsafe_div(
-            xp[k] * price_scale[k - 1] * precisions[k],
+            xp[k] * price_scale[k - 1] * PRECISIONS[k],
             PRECISION
         )  # <-------- Safu to do unsafe_div here since PRECISION is not zero.
 
-    prec_i: uint256 = precisions[i]
+    prec_i: uint256 = PRECISIONS[i]
 
     # ----------- Update invariant if A, gamma are undergoing ramps ---------
 
@@ -813,7 +811,7 @@ def _exchange(
     # ----------------------- Calculate dy and fees --------------------------
 
     D: uint256 = self.D
-    prec_j: uint256 = precisions[j]
+    prec_j: uint256 = PRECISIONS[j]
     y_out: uint256[2] = MATH.get_y(A_gamma[0], A_gamma[1], xp, D, j)
     dy = xp[j] - y_out[0]
     xp[j] -= dy
@@ -1133,7 +1131,6 @@ def _claim_admin_fees():
 
     vprice: uint256 = self.virtual_price
     packed_price_scale: uint256 = self.price_scale_packed
-    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
     fee_receiver: address = factory.fee_receiver()
     balances: uint256[N_COINS] = self.balances
 
@@ -1214,14 +1211,13 @@ def _claim_admin_fees():
 def xp(
     balances: uint256[N_COINS],
     price_scale_packed: uint256,
-    precisions: uint256[N_COINS]
 ) -> uint256[N_COINS]:
 
     result: uint256[N_COINS] = balances
-    result[0] *= precisions[0]
+    result[0] *= PRECISIONS[0]
     packed_prices: uint256 = price_scale_packed
     for i in range(1, N_COINS):
-        p: uint256 = (packed_prices & PRICE_MASK) * precisions[i]
+        p: uint256 = (packed_prices & PRICE_MASK) * PRECISIONS[i]
         result[i] = result[i] * p / PRECISION
         packed_prices = packed_prices >> PRICE_SIZE
 
@@ -1327,13 +1323,12 @@ def _calc_withdraw_one_coin(
     assert i < N_COINS  # dev: coin out of range
 
     xx: uint256[N_COINS] = self.balances
-    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
-    xp: uint256[N_COINS] = precisions
+    xp: uint256[N_COINS] = PRECISIONS
     D0: uint256 = 0
 
     # -------------------------- Calculate D0 and xp -------------------------
 
-    price_scale_i: uint256 = PRECISION * precisions[0]
+    price_scale_i: uint256 = PRECISION * PRECISIONS[0]
     packed_prices: uint256 = self.price_scale_packed
     xp[0] *= xx[0]
     for k in range(1, N_COINS):
@@ -1801,14 +1796,7 @@ def fee() -> uint256:
          removed.
     @return uint256 fee bps.
     """
-    precisions: uint256[N_COINS] = self._unpack(packed_precisions)
-    return self._fee(
-        self.xp(
-            self.balances,
-            self.price_scale_packed,
-            precisions
-        )
-    )
+    return self._fee(self.xp(self.balances, self.price_scale_packed))
 
 
 @view
@@ -1932,7 +1920,7 @@ def precisions() -> uint256[N_COINS]:  # <-------------- For by view contract.
     @notice Returns the precisions of each coin in the pool.
     @return uint256[3] precisions of coins.
     """
-    return self._unpack(packed_precisions)
+    return PRECISIONS
 
 
 @external

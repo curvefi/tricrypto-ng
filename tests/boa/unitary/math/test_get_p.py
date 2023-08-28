@@ -55,7 +55,6 @@ def _get_dydx_vyper(swap, i, j, price_calc):
     xp = swap.internal.xp(
         swap._storage.balances.get(),
         swap._storage.price_scale_packed.get(),
-        swap.precisions(),
     )
 
     for k in range(3):

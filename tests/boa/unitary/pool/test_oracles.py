@@ -32,7 +32,6 @@ def get_D_oracle_input(swap, math_contract):
     xp = swap.internal.xp(
         swap._storage.balances.get(),
         swap._storage.price_scale_packed.get(),
-        swap.internal._unpack(swap._immutables.packed_precisions),
     )
     D = math_contract.newton_D(A, gamma, xp)
     xcp = math_contract.geometric_mean(xp)
