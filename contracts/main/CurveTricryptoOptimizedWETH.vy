@@ -317,13 +317,15 @@ def _transfer_in(
     """
     received_amounts: uint256 = 0
     coin_balance: uint256 = ERC20(coins[_coin_idx]).balanceOf(self)
-    recorded_balance: uint256 = self.balances[_coin_idx]
-
-    # Adjust balances before handling transfers
-    self.balances[_coin_idx] += dx
 
     # Handle transfers:
     if expect_optimistic_transfer:
+
+        # Get cached balance since last liquidity operation
+        recorded_balance: uint256 = self.balances[_coin_idx]
+
+        # Adjust balances before handling transfers
+        self.balances[_coin_idx] += dx
 
         # Only enabled in exchange_received: it expects the caller
         # of exchange_received to have sent tokens to the pool before
@@ -331,6 +333,9 @@ def _transfer_in(
         received_amounts = coin_balance - recorded_balance
 
     else:
+
+        # Adjust balances before handling transfers
+        self.balances[_coin_idx] += dx
 
         # EXTERNAL CALL
         assert ERC20(coins[_coin_idx]).transferFrom(
