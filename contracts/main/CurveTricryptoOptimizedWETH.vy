@@ -935,13 +935,11 @@ def tweak_price(
 
         self.price_oracle_packed = self._pack_prices(price_oracle)
 
-        # ------------------------------------------------- Update TVL oracle.
+        # ------------------------------------------------- Update xcp oracle.
 
         cached_xcp_oracle: uint256 = self.cached_xcp_oracle
-        last_cached_tvl: uint256 = self.last_xcp
-
         self.cached_xcp_oracle = unsafe_div(
-            last_cached_tvl * (10**18 - alpha) + cached_xcp_oracle * alpha,
+            self.last_xcp * (10**18 - alpha) + cached_xcp_oracle * alpha,
             10**18
         )
 
@@ -1749,8 +1747,7 @@ def xcp_oracle() -> uint256:
             )
         )
 
-        last_xcp: uint256 = self.get_xcp(self.D, self.price_scale_packed)
-        return (last_xcp * (10**18 - alpha) + cached_xcp_oracle * alpha) / 10**18
+        return (self.last_xcp * (10**18 - alpha) + cached_xcp_oracle * alpha) / 10**18
 
     return cached_xcp_oracle
 
