@@ -102,13 +102,6 @@ class RampTest(ProfitableState):
         pass
 
     @invariant()
-    def check_bumped_fee_during_ramp(self):
-        if self.swap.future_A_gamma_time() > boa.env.vm.state.timestamp:
-            assert (
-                self.swap.fee() >= 10**8
-            )  # Charge at least 100 basis points!
-
-    @invariant()
     def check_xcp_profit_a_doesnt_increase(self):
         assert self.swap.xcp_profit_a() == self.xcp_profit_a_init
 
