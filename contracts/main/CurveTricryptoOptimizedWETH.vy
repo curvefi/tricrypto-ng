@@ -1255,11 +1255,6 @@ def _fee(xp: uint256[N_COINS]) -> uint256:
     fee_params: uint256[3] = self._unpack(self.packed_fee_params)
     f: uint256 = MATH.reduction_coefficient(xp, fee_params[2])
 
-    # During parameter ramping, we raise fees and disable admin fee claiming
-    if self.future_A_gamma_time > block.timestamp:  # parameter ramping
-        fee_params[0] = 10**8  # set mid_fee to 100 basis points
-        fee_params[1] = 10**8  # set out_fee to 100 basis points
-
     return unsafe_div(
         fee_params[0] * f + fee_params[1] * (10**18 - f),
         10**18
