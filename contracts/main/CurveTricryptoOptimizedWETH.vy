@@ -315,22 +315,22 @@ def _transfer_in(
     @params expect_optimistic_transfer bool True if pool expects user to transfer.
             This is only enabled for exchange_received.
     """
-    received_amounts: uint256 = 0
     coin_balance: uint256 = ERC20(coins[_coin_idx]).balanceOf(self)
 
-    # Handle transfers:
-    if expect_optimistic_transfer:
+    if expect_optimistic_transfer:  # Only enabled in exchange_received:
+        # it expects the caller of exchange_received to have sent tokens to
+        # the pool before calling this method.
 
-        # Get cached balance since last liquidity operation
-        recorded_balance: uint256 = self.balances[_coin_idx]
+        # If someone donates extra tokens to the contract: do not acknowledge.
+        # We only want to know if there are dx amount of tokens. Anything extra,
+        # we ignore. This is why we need to check if received_amounts (which
+        # accounts for coin balances of the contract) is atleast dx.
+        # If we checked for received_amounts == dx, an extra transfer without a
+        # call to exchange_received will break the method.
+        assert coin_balance - self.balances[_coin_idx] >= dx  # dev: user didn't give us coins
 
-        # Adjust balances before handling transfers
+        # Adjust balances
         self.balances[_coin_idx] += dx
-
-        # Only enabled in exchange_received: it expects the caller
-        # of exchange_received to have sent tokens to the pool before
-        # calling this method.
-        received_amounts = coin_balance - recorded_balance
 
     else:
 
@@ -344,15 +344,8 @@ def _transfer_in(
             dx,
             default_return_value=True
         )
-        received_amounts = ERC20(coins[_coin_idx]).balanceOf(self) - coin_balance
 
-    # If someone donates extra tokens to the contract: do not acknowledge.
-    # We only want to know if there are dx amount of tokens. Anything extra,
-    # we ignore. This is why we need to check if received_amounts (which
-    # accounts for coin balances of the contract) is atleast dx.
-    # If we checked for received_amounts == dx, an extra transfer without a
-    # call to exchange_received will break the method.
-    assert received_amounts >= dx  # dev: user didn't give us coins
+        assert ERC20(coins[_coin_idx]).balanceOf(self) - coin_balance >= dx  # dev: user didn't give us coins
 
 
 @internal
