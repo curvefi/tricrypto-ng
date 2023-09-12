@@ -302,10 +302,10 @@ def __init__(
 @internal
 def _transfer_in(
     _coin_idx: uint256,
-    dx: uint256,
+    _dx: uint256,
     sender: address,
     expect_optimistic_transfer: bool,
-):
+) -> uint256:
     """
     @notice Transfers `_coin` from `sender` to `self` and calls `callback_sig`
             if it is not empty.
@@ -314,6 +314,7 @@ def _transfer_in(
     @params sender address to transfer `_coin` from.
     @params expect_optimistic_transfer bool True if pool expects user to transfer.
             This is only enabled for exchange_received.
+    @return The amount of tokens received.
     """
     coin_balance: uint256 = ERC20(coins[_coin_idx]).balanceOf(self)
 
@@ -327,25 +328,27 @@ def _transfer_in(
         # accounts for coin balances of the contract) is atleast dx.
         # If we checked for received_amounts == dx, an extra transfer without a
         # call to exchange_received will break the method.
-        assert coin_balance - self.balances[_coin_idx] >= dx  # dev: user didn't give us coins
+        dx: uint256 = coin_balance - self.balances[_coin_idx]
+        assert dx >= _dx  # dev: user didn't give us coins
 
         # Adjust balances
         self.balances[_coin_idx] += dx
 
-    else:
+        return dx
 
-        # Adjust balances before handling transfers
-        self.balances[_coin_idx] += dx
+    # ----------------------------------------------- ERC20 transferFrom flow.
 
-        # EXTERNAL CALL
-        assert ERC20(coins[_coin_idx]).transferFrom(
-            sender,
-            self,
-            dx,
-            default_return_value=True
-        )
+    # EXTERNAL CALL
+    assert ERC20(coins[_coin_idx]).transferFrom(
+        sender,
+        self,
+        _dx,
+        default_return_value=True
+    )
 
-        assert ERC20(coins[_coin_idx]).balanceOf(self) - coin_balance >= dx  # dev: user didn't give us coins
+    dx: uint256 = ERC20(coins[_coin_idx]).balanceOf(self) - coin_balance
+    self.balances[_coin_idx] += dx
+    return dx
 
 
 @internal
@@ -467,9 +470,19 @@ def add_liquidity(
 
     # -------------------------------------- Update balances and calculate xp.
     xp_old: uint256[N_COINS] = xp
+    amounts_received: uint256[N_COINS] = empty(uint256[N_COINS])
+
+    ########################## TRANSFER IN <-------
+
     for i in range(N_COINS):
-        bal: uint256 = xp[i] + amounts[i]
-        xp[i] = bal
+        if amounts[i] > 0:
+            amounts_received[i] = self._transfer_in(
+                i,
+                amounts[i],
+                msg.sender,
+                False,  # <--------------------- Disable optimistic transfers.
+            )
+            xp[i] = xp[i] + amounts_received[i]
 
     xx = xp
 
@@ -537,23 +550,10 @@ def add_liquidity(
 
     assert d_token >= min_mint_amount, "Slippage"
 
-    # ---------------- transferFrom token into the pool ----------------------
-
-    for i in range(N_COINS):
-
-        if amounts[i] > 0:
-
-            # _transfer_out updates self.balances here. Update to state occurs
-            # before external calls:
-            self._transfer_in(
-                i,
-                amounts[i],
-                msg.sender,
-                False,  # <--------------------- Disable optimistic transfers.
-            )
+    # ---------------------------------------------- Log and claim admin fees.
 
     log AddLiquidity(
-        receiver, amounts, d_token_fee, token_supply, packed_price_scale
+        receiver, amounts_received, d_token_fee, token_supply, packed_price_scale
     )
 
     self._claim_admin_fees()  # <--------- Auto-claim admin fees occasionally.
@@ -775,7 +775,18 @@ def _exchange(
 
     y: uint256 = xp[j]  # <----------------- if j > N_COINS, this will revert.
     x0: uint256 = xp[i]  # <--------------- if i > N_COINS, this will  revert.
-    xp[i] = x0 + dx
+
+    ########################## TRANSFER IN <-------
+
+    # _transfer_in updates self.balances here:
+    dx_received: uint256 = self._transfer_in(
+        i,
+        dx,
+        sender,
+        expect_optimistic_transfer  # <---- If True, pool expects dx tokens to
+    )  #                                                    be transferred in.
+
+    xp[i] = x0 + dx_received
 
     packed_price_scale: uint256 = self.price_scale_packed
     price_scale: uint256[N_COINS - 1] = self._unpack_prices(
@@ -835,18 +846,7 @@ def _exchange(
 
     packed_price_scale = self.tweak_price(A_gamma, xp, 0, y_out[1])
 
-    # ---------------------- Do Transfers in and out -------------------------
-
-    ########################## TRANSFER IN <-------
-
-    # _transfer_in updates self.balances here. Update to state occurs before
-    # external calls:
-    self._transfer_in(
-        i,
-        dx,
-        sender,
-        expect_optimistic_transfer  # <---- If True, pool expects dx tokens to
-    )  #                                                    be transferred in.
+    # --------------------------- Do Transfers out ---------------------------
 
     ########################## -------> TRANSFER OUT
 
@@ -854,7 +854,7 @@ def _exchange(
     # external calls:
     self._transfer_out(j, dy, receiver)
 
-    log TokenExchange(sender, i, dx, j, dy, fee, packed_price_scale)
+    log TokenExchange(sender, i, dx_received, j, dy, fee, packed_price_scale)
 
     return dy
 

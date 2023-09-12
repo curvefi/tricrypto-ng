@@ -229,11 +229,12 @@ def test_against_expt(dydx_optimised_math):
 def _imbalance_swap(swap, coins, imbalance_frac, user, dollar_amount, i, j):
 
     # make swap imbalanced:
-    mint_for_testing(coins[0], user, int(swap.balances(0) * imbalance_frac))
+    imbalance_amount = int(swap.balances(i) * imbalance_frac)
+    mint_for_testing(coins[i], user, imbalance_amount)
 
     try:
         with boa.env.prank(user):
-            swap.exchange(i, j, coins[0].balanceOf(user), 0)
+            swap.exchange(i, j, imbalance_amount, 0)
     except boa.BoaError as b_error:
         assert_string_contains(
             b_error.stack_trace.last_frame.pretty_vm_reason,
