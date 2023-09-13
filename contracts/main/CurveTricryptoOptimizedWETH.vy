@@ -163,17 +163,12 @@ xcp_profit_a: public(uint256)  # <--- Full profit at last claim of admin fees.
 virtual_price: public(uint256)  # <------ Cached (fast to read) virtual price.
 #                          The cached `virtual_price` is also used internally.
 
-# -------------- Params that affect how price_scale get adjusted -------------
-
+# Params that affect how price_scale get adjusted :
 packed_rebalancing_params: public(uint256)  # <---------- Contains rebalancing
 #               parameters allowed_extra_profit, adjustment_step, and ma_time.
 
-future_packed_rebalancing_params: uint256
-
-# ---------------- Fee params that determine dynamic fees --------------------
-
+# Fee params that determine dynamic fees:
 packed_fee_params: public(uint256)  # <---- Packs mid_fee, out_fee, fee_gamma.
-future_packed_fee_params: uint256
 
 ADMIN_FEE: public(constant(uint256)) = 5 * 10**9  # <----- 50% of earned fees.
 MIN_FEE: constant(uint256) = 5 * 10**5  # <-------------------------- 0.5 BPS.
@@ -2020,7 +2015,7 @@ def apply_new_parameters(
     else:
         new_ma_time = current_rebalancing_params[2]
 
-    self.future_packed_rebalancing_params = self._pack(
+    self.packed_rebalancing_params = self._pack(
         [new_allowed_extra_profit, new_adjustment_step, new_ma_time]
     )
 
