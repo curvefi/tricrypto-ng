@@ -157,7 +157,7 @@ def test_exchange_received_send_extra(
     assert amount == measured_i - 1  # <--- we sent 1 wei extra
     assert calculated == measured_j
 
-    assert d_balance_i == amount  # <--- we sent 1 wei extra
+    assert d_balance_i == amount + 1  # <--- we sent 1 wei extra
     assert -d_balance_j == measured_j
 
 
