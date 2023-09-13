@@ -407,6 +407,7 @@ def exchange_received(
             coins[i] is greater than or equal to `dx`.
     @dev Use-case is to reduce the number of redundant ERC20 token
          transfers in zaps. Primarily for dex-aggregators/arbitrageurs/searchers.
+         Note for users: please transfer + exchange_received in 1 tx.
     @param i Index value for the input coin
     @param j Index value for the output coin
     @param dx Amount of input coin being swapped in
