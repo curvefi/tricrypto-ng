@@ -95,15 +95,6 @@ event RemoveLiquidityOne:
     approx_fee: uint256
     packed_price_scale: uint256
 
-event CommitNewParameters:
-    deadline: indexed(uint256)
-    mid_fee: uint256
-    out_fee: uint256
-    fee_gamma: uint256
-    allowed_extra_profit: uint256
-    adjustment_step: uint256
-    ma_time: uint256
-
 event NewParameters:
     mid_fee: uint256
     out_fee: uint256
@@ -111,6 +102,7 @@ event NewParameters:
     allowed_extra_profit: uint256
     adjustment_step: uint256
     ma_time: uint256
+    xcp_ma_time: uint256
 
 event RampAgamma:
     initial_A: uint256
@@ -150,6 +142,7 @@ cached_xcp_oracle: uint256  # <----------- EMA of totalSupply * virtual_price.
 last_prices_packed: uint256
 last_prices_timestamp: public(uint256)
 last_xcp: public(uint256)
+xcp_ma_time: public(uint256)
 
 initial_A_gamma: public(uint256)
 initial_A_gamma_time: public(uint256)
@@ -189,10 +182,8 @@ NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 
 # ----------------------- Admin params ---------------------------------------
 
-admin_actions_deadline: public(uint256)
 last_admin_fee_claim_timestamp: uint256
 
-ADMIN_ACTIONS_DELAY: constant(uint256) = 3 * 86400
 MIN_RAMP_TIME: constant(uint256) = 86400
 MIN_ADMIN_FEE_CLAIM_INTERVAL: constant(uint256) = 86400
 
@@ -273,6 +264,7 @@ def __init__(
     self.last_prices_packed = packed_prices
     self.last_prices_timestamp = block.timestamp
     self.xcp_profit_a = 10**18
+    self.xcp_ma_time = 62324  # <--------- 12 hours default on contract start.
 
     #         Cache DOMAIN_SEPARATOR. If chain.id is not CACHED_CHAIN_ID, then
     #     DOMAIN_SEPARATOR will be re-calculated each time `permit` is called.
@@ -880,28 +872,21 @@ def tweak_price(
 
     # ---------------------------- Read storage ------------------------------
 
-    rebalancing_params: uint256[3] = self._unpack(
-        self.packed_rebalancing_params
-    )  # <---------- Contains: allowed_extra_profit, adjustment_step, ma_time.
-    price_oracle: uint256[N_COINS - 1] = self._unpack_prices(
-        self.price_oracle_packed
-    )
-    last_prices: uint256[N_COINS - 1] = self._unpack_prices(
-        self.last_prices_packed
-    )
+    price_oracle: uint256[N_COINS - 1] = self._unpack_prices(self.price_oracle_packed)
+    last_prices: uint256[N_COINS - 1] = self._unpack_prices(self.last_prices_packed)
     packed_price_scale: uint256 = self.price_scale_packed
-    price_scale: uint256[N_COINS - 1] = self._unpack_prices(
-        packed_price_scale
-    )
+    price_scale: uint256[N_COINS - 1] = self._unpack_prices(packed_price_scale)
+    rebalancing_params: uint256[3] = self._unpack(self.packed_rebalancing_params)
+    # Contains: allowed_extra_profit, adjustment_step, ma_time. -----^
 
     total_supply: uint256 = self.totalSupply
     old_xcp_profit: uint256 = self.xcp_profit
     old_virtual_price: uint256 = self.virtual_price
-    last_prices_timestamp: uint256 = self.last_prices_timestamp
 
     # ----------------------- Update Oracles if needed -----------------------
 
-    if last_prices_timestamp < block.timestamp:
+    last_timestamp: uint256 = self.last_prices_timestamp
+    if last_timestamp < block.timestamp:  # 0th index is for price_oracle.
 
         #   The moving average price oracle is calculated using the last_price
         #      of the trade at the previous block, and the price oracle logged
@@ -912,7 +897,7 @@ def tweak_price(
         alpha: uint256 = MATH.wad_exp(
             -convert(
                 unsafe_div(
-                    (block.timestamp - last_prices_timestamp) * 10**18,
+                    (block.timestamp - last_timestamp) * 10**18,
                     rebalancing_params[2]  # <----------------------- ma_time.
                 ),
                 int256,
@@ -936,14 +921,23 @@ def tweak_price(
         # ------------------------------------------------- Update xcp oracle.
 
         cached_xcp_oracle: uint256 = self.cached_xcp_oracle
+        alpha = MATH.wad_exp(
+            -convert(
+                unsafe_div(
+                    (block.timestamp - last_timestamp) * 10**18,
+                    self.xcp_ma_time  # <---------- xcp ma time has is longer.
+                ),
+                int256,
+            )
+        )
+
         self.cached_xcp_oracle = unsafe_div(
             self.last_xcp * (10**18 - alpha) + cached_xcp_oracle * alpha,
             10**18
         )
 
-        # --------------------------------------------------------------------
-
-        self.last_prices_timestamp = block.timestamp  # <---- Store timestamp.
+        # Pack and store timestamps:
+        self.last_prices_timestamp = block.timestamp
 
     #  `price_oracle` is used further on to calculate its vector distance from
     # price_scale. This distance is used to calculate the amount of adjustment
@@ -1671,7 +1665,7 @@ def xcp_oracle() -> uint256:
     """
     @notice Returns the oracle value for xcp.
     @dev The oracle is an exponential moving average, with a periodicity
-         determined by `self.ma_time`.
+         determined by `self.xcp_ma_time`.
          `TVL` is xcp, calculated as either:
             1. virtual_price * total_supply, OR
             2. self.get_xcp(...), OR
@@ -1684,10 +1678,9 @@ def xcp_oracle() -> uint256:
 
     if last_prices_timestamp < block.timestamp:
 
-        ma_time: uint256 = self._unpack(self.packed_rebalancing_params)[2]
         alpha: uint256 = MATH.wad_exp(
             -convert(
-                (block.timestamp - last_prices_timestamp) * 10**18 / ma_time,
+                (block.timestamp - last_prices_timestamp) * 10**18 / self.xcp_ma_time,
                 int256,
             )
         )
@@ -1961,13 +1954,15 @@ def stop_ramp_A_gamma():
 
 
 @external
-def commit_new_parameters(
+@nonreentrant('lock')
+def apply_new_parameters(
     _new_mid_fee: uint256,
     _new_out_fee: uint256,
     _new_fee_gamma: uint256,
     _new_allowed_extra_profit: uint256,
     _new_adjustment_step: uint256,
     _new_ma_time: uint256,
+    _new_xcp_ma_time: uint256,
 ):
     """
     @notice Commit new parameters.
@@ -1978,12 +1973,9 @@ def commit_new_parameters(
     @param _new_allowed_extra_profit The new allowed extra profit.
     @param _new_adjustment_step The new adjustment step.
     @param _new_ma_time The new ma time. ma_time is time_in_seconds/ln(2).
+    @param _new_xcp_ma_time The new ma time for xcp oracle.
     """
     assert msg.sender == factory.admin()  # dev: only owner
-    assert self.admin_actions_deadline == 0  # dev: active action
-
-    _deadline: uint256 = block.timestamp + ADMIN_ACTIONS_DELAY
-    self.admin_actions_deadline = _deadline
 
     # ----------------------------- Set fee params ---------------------------
 
@@ -2007,9 +1999,7 @@ def commit_new_parameters(
     else:
         new_fee_gamma = current_fee_params[2]
 
-    self.future_packed_fee_params = self._pack(
-        [new_mid_fee, new_out_fee, new_fee_gamma]
-    )
+    self.packed_fee_params = self._pack([new_mid_fee, new_out_fee, new_fee_gamma])
 
     # ----------------- Set liquidity rebalancing parameters -----------------
 
@@ -2034,56 +2024,17 @@ def commit_new_parameters(
         [new_allowed_extra_profit, new_adjustment_step, new_ma_time]
     )
 
+    # Set xcp oracle moving average window time:
+    new_xcp_ma_time: uint256 = _new_xcp_ma_time
+
     # ---------------------------------- LOG ---------------------------------
 
-    log CommitNewParameters(
-        _deadline,
+    log NewParameters(
         new_mid_fee,
         new_out_fee,
         new_fee_gamma,
         new_allowed_extra_profit,
         new_adjustment_step,
         new_ma_time,
+        new_xcp_ma_time,
     )
-
-
-@external
-@nonreentrant("lock")
-def apply_new_parameters():
-    """
-    @notice Apply committed parameters.
-    @dev Only callable after admin_actions_deadline.
-    """
-    assert block.timestamp >= self.admin_actions_deadline  # dev: insufficient time
-    assert self.admin_actions_deadline != 0  # dev: no active action
-
-    self.admin_actions_deadline = 0
-
-    packed_fee_params: uint256 = self.future_packed_fee_params
-    self.packed_fee_params = packed_fee_params
-
-    packed_rebalancing_params: uint256 = self.future_packed_rebalancing_params
-    self.packed_rebalancing_params = packed_rebalancing_params
-
-    rebalancing_params: uint256[3] = self._unpack(packed_rebalancing_params)
-    fee_params: uint256[3] = self._unpack(packed_fee_params)
-
-    log NewParameters(
-        fee_params[0],
-        fee_params[1],
-        fee_params[2],
-        rebalancing_params[0],
-        rebalancing_params[1],
-        rebalancing_params[2],
-    )
-
-
-@external
-def revert_new_parameters():
-    """
-    @notice Revert committed parameters
-    @dev Only accessible by factory admin. Setting admin_actions_deadline to 0
-         ensures a revert in apply_new_parameters.
-    """
-    assert msg.sender == factory.admin()  # dev: only owner
-    self.admin_actions_deadline = 0
