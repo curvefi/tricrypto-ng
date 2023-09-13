@@ -28,5 +28,13 @@ jobs:
       - name: Install Requirements
         run: pip install -r requirements_ape.txt
 
+      - name: Install node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Hardcat
+        run: npm install --save-dev hardhat
+
       - name: Run Deployment Tests
         run: ape test --network ethereum:mainnet-fork:hardhat test_deployment
