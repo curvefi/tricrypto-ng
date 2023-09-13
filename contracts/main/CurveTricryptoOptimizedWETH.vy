@@ -463,6 +463,7 @@ def add_liquidity(
 
     for i in range(N_COINS):
         if amounts[i] > 0:
+            # Updates self.balances here:
             amounts_received[i] = self._transfer_in(
                 i,
                 amounts[i],
@@ -1704,6 +1705,7 @@ def last_prices(k: uint256) -> uint256:
 
 @external
 @view
+@nonreentrant("lock")
 def price_scale(k: uint256) -> uint256:
     """
     @notice Returns the price scale of the coin at index `k` w.r.t the coin
@@ -2021,6 +2023,11 @@ def apply_new_parameters(
 
     # Set xcp oracle moving average window time:
     new_xcp_ma_time: uint256 = _new_xcp_ma_time
+    if new_xcp_ma_time < 872542:
+        assert new_xcp_ma_time > 86  # dev: xcp MA time should be longer than 60/ln(2)
+    else:
+        new_xcp_ma_time = self.xcp_ma_time
+    self.xcp_ma_time = new_xcp_ma_time
 
     # ---------------------------------- LOG ---------------------------------
 
@@ -2031,5 +2038,5 @@ def apply_new_parameters(
         new_allowed_extra_profit,
         new_adjustment_step,
         new_ma_time,
-        new_xcp_ma_time,
+        _new_xcp_ma_time,
     )

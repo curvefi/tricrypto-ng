@@ -46,7 +46,6 @@ def _crypto_swap_with_deposit(
 @pytest.fixture(scope="module")
 def params():
 
-    ma_time = 866  # 600 seconds / ln(2)
     return {
         "A": 135 * 3**3 * 10000,
         "gamma": int(7e-5 * 1e18),
@@ -55,7 +54,8 @@ def params():
         "allowed_extra_profit": 2 * 10**12,
         "fee_gamma": int(0.01 * 1e18),
         "adjustment_step": int(0.0015 * 1e18),
-        "ma_time": ma_time,
+        "ma_time": 866,  # # 600 seconds//math.log(2)
+        "xcp_ma_time": 62324,  # 12 hours//math.log(2)
         "initial_prices": INITIAL_PRICES[1:],
     }
 

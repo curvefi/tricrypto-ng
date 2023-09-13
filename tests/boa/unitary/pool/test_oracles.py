@@ -26,19 +26,6 @@ def norm(price_oracle, price_scale):
     return sqrt(norm)
 
 
-def get_D_oracle_input(swap, math_contract):
-
-    A, gamma = swap.internal._A_gamma()
-    xp = swap.internal.xp(
-        swap._storage.balances.get(),
-        swap._storage.price_scale_packed.get(),
-    )
-    D = math_contract.newton_D(A, gamma, xp)
-    xcp = math_contract.geometric_mean(xp)
-
-    return D, xcp
-
-
 def test_initial(swap_with_deposit):
     for i in range(2):
         assert swap_with_deposit.price_scale(i) == INITIAL_PRICES[i + 1]
@@ -140,10 +127,7 @@ def test_xcp_ma(
     amount = amount * 10**18 // INITIAL_PRICES[i]
     mint_for_testing(coins[i], user, amount)
 
-    rebal_params = swap_with_deposit.internal._unpack(
-        swap_with_deposit._storage.packed_rebalancing_params.get()
-    )
-    ma_time = rebal_params[2]
+    ma_time = swap_with_deposit.xcp_ma_time()
 
     # swap to populate
     with boa.env.prank(user):
