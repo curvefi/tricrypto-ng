@@ -1,0 +1,30 @@
+name: unit-tests-boa
+
+on: ["push", "pull_request"]
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  boa-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache Compiler Installations
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.vvm
+          key: compiler-cache
+
+      - name: Setup Python 3.10.4
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.10.4
+
+      - name: Install Requirements
+        run: pip install -r requirements_ape.txt
+
+      - name: Run Deployment Tests
+        run: ape test --network ethereum:mainnet-fork:hardhat test_deployment
