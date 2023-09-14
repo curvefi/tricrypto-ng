@@ -474,16 +474,16 @@ def add_liquidity(
 
     xp[0] *= PRECISIONS[0]
     xp_old[0] *= PRECISIONS[0]
-    for i in range(1, N_COINS):
-        xp[i] = unsafe_div(xp[i] * price_scale[i-1] * PRECISIONS[i], PRECISION)
-        xp_old[i] = unsafe_div(
-            xp_old[i] * unsafe_mul(price_scale[i-1], PRECISIONS[i]),
-            PRECISION
-        )
-
-    # recalc amountsp:
     for i in range(N_COINS):
-        if amounts[i] > 0:
+
+        if i >= 1:
+            xp[i] = unsafe_div(xp[i] * price_scale[i-1] * PRECISIONS[i], PRECISION)
+            xp_old[i] = unsafe_div(
+                xp_old[i] * unsafe_mul(price_scale[i-1], PRECISIONS[i]),
+                PRECISION
+            )
+
+        if amounts_received[i] > 0:
             amountsp[i] = xp[i] - xp_old[i]
 
     # -------------------- Calculate LP tokens to mint -----------------------
