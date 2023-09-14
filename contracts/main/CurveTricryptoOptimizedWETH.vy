@@ -444,7 +444,6 @@ def add_liquidity(
     A_gamma: uint256[2] = self._A_gamma()
     xp: uint256[N_COINS] = self.balances
     amountsp: uint256[N_COINS] = empty(uint256[N_COINS])
-    xx: uint256[N_COINS] = empty(uint256[N_COINS])
     d_token: uint256 = 0
     d_token_fee: uint256 = 0
     old_D: uint256 = 0
@@ -472,8 +471,6 @@ def add_liquidity(
                 False,  # <--------------------- Disable optimistic transfers.
             )
             xp[i] = xp[i] + amounts_received[i]
-
-    xx = xp
 
     xp[0] *= PRECISIONS[0]
     xp_old[0] *= PRECISIONS[0]
