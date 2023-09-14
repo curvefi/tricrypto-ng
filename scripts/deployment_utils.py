@@ -164,6 +164,13 @@ curve_dao_network_settings = {
         wbtc_address="",
         weth_address="",
     ),
+    "mainnet-fork": CurveNetworkSettings(
+        dao_ownership_contract="0x40907540d8a6C65c637785e8f8B742ae6b0b9968",
+        fee_receiver_address="0xeCb456EA5365865EbAb8a2661B0c503410e9B347",
+        usdc_address="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        wbtc_address="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+        weth_address="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    ),
 }
 
 

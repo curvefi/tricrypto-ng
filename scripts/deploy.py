@@ -27,6 +27,14 @@ DEPLOYED_CONTRACTS = {
         "views": "0x06452f9c013fc37169B57Eab8F50A7A48c9198A3",
         "amm_impl": "0xd7E72f3615aa65b92A4DBdC211E296a35512988B",
     },
+    "mainnet-fork": {
+        "factory": "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963",
+        "math": "0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE",
+        "views": "0x064253915b8449fdEFac2c4A74aA9fdF56691a31",
+        "amm_impl": "0x66442B0C5260B92cAa9c234ECf2408CBf6b19a6f",
+        "gauge_impl": "0x5fC124a161d888893529f67580ef94C2784e9233",
+        "factory_handler": "0x30a4249C42be05215b6063691949710592859697",
+    },
 }
 
 
@@ -181,21 +189,15 @@ def _get_encoded_constructor_args(tx, PARAMS):
     return args
 
 
-@click.group(short_help="Deploy the project")
-def cli():
-    pass
-
-
-@cli.command(cls=NetworkBoundCommand)
-@network_option()
-@account_option()
-def deploy_and_test_infra(network, account):
-
-    if account.alias == "fiddydeployer":
+def deploy_infra(network, account):
+    # account is str in case of forked tests
+    if "mainnet-fork" in network:
+        account = "0x40907540d8a6C65c637785e8f8B742ae6b0b9968"
+    elif account.alias == "fiddydeployer":
         account.set_autosign(True)
 
-    if "ethereum:mainnet-fork" in network:
-        account = accounts["0xbabe61887f1de2713c6f97e567623453d3c79f67"]
+    owner = None
+    fee_receiver = None
 
     for _network, data in deploy_utils.curve_dao_network_settings.items():
 
@@ -222,9 +224,24 @@ def deploy_and_test_infra(network, account):
     ]
 
     _account = account
-    if "ethereum:mainnet-fork" in network:  # bridge
-        _account = accounts["0x8EB8a3b98659Cce290402893d0123abb75E3ab28"]
+    if "mainnet-fork" in network:  # bridge
+        _account = "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"
 
+    print("Success!")
+
+    return pool, coins, fee_receiver, _account
+
+
+@click.group(short_help="Deploy the project")
+def cli():
+    pass
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+def deploy_and_test_infra(network, account):
+    pool, coins, fee_receiver, _account = deploy_infra(network, account)
     deploy_utils.test_deployment(pool, coins, fee_receiver, _account)
 
     print("Success!")
