@@ -53,6 +53,8 @@ Ethereum:
 5. Gauge Blueprint: [0x5fC124a161d888893529f67580ef94C2784e9233](https://etherscan.io/address/0x5fC124a161d888893529f67580ef94C2784e9233)
 6. TricryptoFactoryHandler: [0x30a4249C42be05215b6063691949710592859697](https://etherscan.io/address/0x30a4249C42be05215b6063691949710592859697)
 
+Updated AMM Blueprint (14-09-2023): [0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8](https://etherscan.io/address/0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8)
+
 Deployed Pool:
 
 1. [TricryptoUSDC 0x7f86bf177dd4f3494b841a37e810a34dd56c829b](https://etherscan.io/address/0x7f86bf177dd4f3494b841a37e810a34dd56c829b)
@@ -63,6 +65,8 @@ Arbitrum:
 2. AMM Blueprint: [0xd7E72f3615aa65b92A4DBdC211E296a35512988B](https://arbiscan.io/address/0xd7E72f3615aa65b92A4DBdC211E296a35512988B)
 3. Math: [0x604388Bb1159AFd21eB5191cE22b4DeCdEE2Ae22](https://arbiscan.io/address/0x604388Bb1159AFd21eB5191cE22b4DeCdEE2Ae22)
 4. Views: [0x06452f9c013fc37169B57Eab8F50A7A48c9198A3](https://arbiscan.io/address/0x06452f9c013fc37169B57Eab8F50A7A48c9198A3)
+
+Updated AMM Blueprint (14-09-2023): [0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8](https://arbiscan.io/address/0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC)
 
 Deployed Pool:
 

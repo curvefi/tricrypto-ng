@@ -35,6 +35,8 @@ class RampTest(ProfitableState):
         with boa.env.prank(self.tricrypto_factory.admin()):
             self.swap.ramp_A_gamma(new_A, new_gamma, block_time + 14 * 86400)
 
+        self.xcp_profit_a_init = self.swap.xcp_profit_a()
+
     @rule(deposit_amounts=deposit_amounts, user=user)
     def deposit(self, deposit_amounts, user):
         deposit_amounts[1:] = [deposit_amounts[0]] + [
@@ -58,9 +60,6 @@ class RampTest(ProfitableState):
         user,
         check_out_amount,
     ):
-        if check_out_amount:
-            with self.upkeep_on_claim():
-                self.swap.claim_admin_fees()
 
         if exchange_i > 0:
             exchange_amount_in = (
@@ -89,10 +88,6 @@ class RampTest(ProfitableState):
         self, token_amount, exchange_i, user, check_out_amount
     ):
         if check_out_amount:
-
-            with self.upkeep_on_claim():
-                self.swap.claim_admin_fees()
-
             super().remove_liquidity_one_coin(
                 token_amount, exchange_i, user, ALLOWED_DIFFERENCE
             )
@@ -105,6 +100,10 @@ class RampTest(ProfitableState):
     def virtual_price(self):
         # Invariant is not conserved here
         pass
+
+    @invariant()
+    def check_xcp_profit_a_doesnt_increase(self):
+        assert self.swap.xcp_profit_a() == self.xcp_profit_a_init
 
 
 def test_ramp(swap, views_contract, users, pool_coins, tricrypto_factory):

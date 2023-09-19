@@ -46,6 +46,8 @@ class RampTest(ProfitableState):
                 boa.env.vm.state.timestamp + 14 * 86400,
             )
 
+        self.xcp_profit_a_init = self.swap.xcp_profit_a()
+
     @rule(
         exchange_amount_in=exchange_amount_in,
         exchange_i=exchange_i,
@@ -74,6 +76,10 @@ class RampTest(ProfitableState):
         # Invariant is not conserved here
         # so we need to override super().up_only_profit()
         pass
+
+    @invariant()
+    def check_xcp_profit_a_doesnt_increase(self):
+        assert self.swap.xcp_profit_a() == self.xcp_profit_a_init
 
 
 def test_ramp(swap, views_contract, users, pool_coins, tricrypto_factory):

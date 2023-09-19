@@ -56,8 +56,11 @@ class StatefulGas(StatefulBase):
 
             amounts[exchange_i] = deposit_amount
 
-        new_balances = [x + y for x, y in zip(self.balances, amounts)]
         mint_for_testing(self.coins[exchange_i], user, deposit_amount)
+
+        with boa.env.prank(user):
+            for coin in self.coins:
+                coin.approve(self.swap, 2**256 - 1)
 
         try:
 
@@ -68,7 +71,9 @@ class StatefulGas(StatefulBase):
 
             tokens = self.token.balanceOf(user) - tokens
             self.total_supply += tokens
-            self.balances = new_balances
+
+            for i in range(3):
+                self.balances[i] += amounts[i]
 
         except Exception:
 
@@ -84,10 +89,6 @@ class StatefulGas(StatefulBase):
     def remove_liquidity_one_coin(
         self, token_fraction, exchange_i, user, update_D
     ):
-
-        if update_D:
-            with self.upkeep_on_claim():
-                self.swap.claim_admin_fees()
 
         token_amount = token_fraction * self.total_supply // 10**18
         d_token = self.token.balanceOf(user)

@@ -18,6 +18,9 @@ def test_get_dx(i, j, amount_in, yuge_swap):
     if i == j:
         return
 
+    if amount_in == 0:
+        return
+
     expected_out = yuge_swap.get_dy(i, j, amount_in)
     approx_in = yuge_swap.get_dx(i, j, expected_out)
 

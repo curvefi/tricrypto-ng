@@ -40,6 +40,7 @@ class StatefulBase(RuleBasedStateMachine):
         self.user_balances = {u: [0] * 3 for u in self.accounts}
         self.balances = self.initial_deposit[:]
         self.xcp_profit = 10**18
+        self.xcp_profit_a = 10**18
 
         self.total_supply = 0
         self.previous_pool_profit = 0
@@ -63,8 +64,6 @@ class StatefulBase(RuleBasedStateMachine):
         self.total_supply = self.token.balanceOf(user)
 
     def get_coin_balance(self, user, coin):
-        if coin.symbol() == "WETH":
-            return boa.env.get_balance(user)
         return coin.balanceOf(user)
 
     def convert_amounts(self, amounts):
@@ -163,7 +162,7 @@ class StatefulBase(RuleBasedStateMachine):
             with boa.env.prank(user):
                 self.coins[exchange_i].approve(self.swap, 2**256 - 1)
                 out = self.swap.exchange(
-                    exchange_i, exchange_j, exchange_amount_in, 0
+                    exchange_i, exchange_j, exchange_amount_in, calc_amount
                 )
         except Exception:
 
@@ -179,7 +178,6 @@ class StatefulBase(RuleBasedStateMachine):
                 and self.check_limits(_amounts)
             ):
                 raise
-
             return None
 
         # This is to check that we didn't end up in a borked state after
@@ -220,10 +218,7 @@ class StatefulBase(RuleBasedStateMachine):
     def balances(self):
 
         balances = [self.swap.balances(i) for i in range(3)]
-        eth_balance_amm = boa.env.get_balance(self.swap.address)
-
         balances_of = [c.balanceOf(self.swap) for c in self.coins]
-        balances_of[2] = eth_balance_amm  # eth is set at i==2
 
         for i in range(3):
             assert self.balances[i] == balances[i] == balances_of[i]
@@ -265,11 +260,43 @@ class StatefulBase(RuleBasedStateMachine):
     @contextlib.contextmanager
     def upkeep_on_claim(self):
 
-        admin_balance = self.swap.balanceOf(self.fee_receiver)
+        admin_balances_pre = [
+            c.balanceOf(self.fee_receiver) for c in self.coins
+        ]
+        pool_is_ramping = (
+            self.swap.future_A_gamma_time() > boa.env.vm.state.timestamp
+        )
+
         try:
+
             yield
+
         finally:
-            _claimed = self.swap.balanceOf(self.fee_receiver) - admin_balance
-            if _claimed > 0:
-                self.total_supply += _claimed
-                self.xcp_profit = self.swap.xcp_profit()
+
+            new_xcp_profit_a = self.swap.xcp_profit_a()
+            old_xcp_profit_a = self.xcp_profit_a
+
+            claimed = False
+            if new_xcp_profit_a > old_xcp_profit_a:
+                claimed = True
+                self.xcp_profit_a = new_xcp_profit_a
+
+            admin_balances_post = [
+                c.balanceOf(self.fee_receiver) for c in self.coins
+            ]
+
+            if claimed:
+
+                for i in range(3):
+                    claimed_amount = (
+                        admin_balances_post[i] - admin_balances_pre[i]
+                    )
+                    assert (
+                        claimed_amount > 0
+                    )  # check if non zero amounts of claim
+                    assert not pool_is_ramping  # cannot claim while ramping
+
+                    # update self.balances
+                    self.balances[i] -= claimed_amount
+
+        self.xcp_profit = self.swap.xcp_profit()

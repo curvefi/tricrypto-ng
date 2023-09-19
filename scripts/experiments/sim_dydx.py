@@ -72,7 +72,13 @@ def _get_dydx(swap, i, j):
     A = ANN / 10**4 / 3**3
     gamma = swap.gamma() / 10**18
 
-    xp = swap.internal.xp()
+    balances = []
+    for i in range(3):
+        balances.append(swap.balances(i))
+
+    xp = swap.internal.xp(
+        balances, swap._storage.price_scale_packed.get(), swap.precisions()
+    )
 
     for k in range(3):
         if k != i and k != j:

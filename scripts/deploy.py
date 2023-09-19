@@ -27,7 +27,7 @@ DEPLOYED_CONTRACTS = {
         "views": "0x06452f9c013fc37169B57Eab8F50A7A48c9198A3",
         "amm_impl": "0xd7E72f3615aa65b92A4DBdC211E296a35512988B",
     },
-    "mainnet-fork": {
+    "ethereum:mainnet-fork": {
         "factory": "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963",
         "math": "0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE",
         "views": "0x064253915b8449fdEFac2c4A74aA9fdF56691a31",
@@ -678,3 +678,48 @@ def deploy_gauge_and_set_up_vote(network, account, pool, factory):
             Contract(deploy_utils.GAUGE_CONTROLLER).gauge_types(gauge.address)
             == 5
         )
+
+
+# ------ Deploy and set up new AMM impl -------
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+def deploy_amm_impl(network, account):
+
+    deploy_utils.deploy_blueprint(project.CurveTricryptoOptimizedWETH, account)
+
+
+@cli.command(cls=NetworkBoundCommand)
+@network_option()
+@account_option()
+@click.option("--impl_address", required=True, type=str)
+def set_new_amm_impl_dao(network, account, impl_address):
+
+    assert "ethereum:mainnet" in network
+    is_sim = "mainnet-fork" in network
+
+    if is_sim:
+        account = accounts["0xbabe61887f1de2713c6f97e567623453d3c79f67"]
+
+    amm_impl = project.CurveTricryptoOptimizedWETH.at(impl_address)
+    factory = project.CurveTricryptoFactory.at(
+        DEPLOYED_CONTRACTS[network]["factory"]
+    )
+    ID = 0
+
+    logger.info("Setting new impl for ethereum tricrypto factory:")
+    vote_id_gauge = make_vote(
+        deploy_utils.CURVE_DAO_OWNERSHIP,
+        [
+            (factory.address, "set_pool_implementation", amm_impl.address, ID),
+        ],
+        "Replace Existing AMM impl with a non-ETH impl",
+        account,
+    )
+
+    if is_sim:
+
+        simulate(vote_id_gauge, deploy_utils.CURVE_DAO_OWNERSHIP["voting"])
+        assert factory.pool_implementations(ID) == amm_impl.address

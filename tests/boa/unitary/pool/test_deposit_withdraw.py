@@ -34,8 +34,8 @@ def test_1st_deposit_and_last_withdraw(swap, coins, user, fee_receiver):
     with boa.env.prank(user):
         swap.add_liquidity(quantities, 0)
 
-    # test if eth was deposited:
-    assert boa.env.get_balance(swap.address) == bal_before + quantities[2]
+    # test if eth wasnt deposited:
+    assert boa.env.get_balance(swap.address) == bal_before
 
     token_balance = swap.balanceOf(user)
     assert (
@@ -79,8 +79,8 @@ def test_first_deposit_full_withdraw_second_deposit(
     assert swap.xcp_profit() >= 10**18
     assert swap.virtual_price() >= 10**18
 
-    # test if eth was deposited:
-    assert boa.env.get_balance(swap.address) == quantities[2] + eth_bal_before
+    # test if eth was not deposited:
+    assert boa.env.get_balance(swap.address) == eth_bal_before
 
     for i in range(len(coins)):
         assert swap.balances(i) == quantities[i] + swap_balances_before[i]
@@ -113,56 +113,6 @@ def test_second_deposit_single_token(
     # Single sided deposit
     with boa.env.prank(user):
         swap_with_deposit.add_liquidity(quantities, 0)
-
-    # deposit single sided but pure eth:
-    if i == 2:
-        mint_for_testing(coins[2], user, amount, True)
-        with boa.env.prank(user):
-            swap_with_deposit.add_liquidity(
-                quantities, 0, True, value=quantities[2]
-            )
-
-
-def test_claim_admin_fees_post_emptying_and_depositing(
-    test_first_deposit_full_withdraw_second_deposit, user, coins
-):
-
-    swap = test_first_deposit_full_withdraw_second_deposit
-    admin_balance_before = swap.balanceOf(swap.fee_receiver())
-    assert admin_balance_before >= 0
-
-    # do another deposit to have some fees for the admin:
-    quantities = [10**5 * 10**36 // p for p in INITIAL_PRICES]
-    for coin, q in zip(coins, quantities):
-        mint_for_testing(coin, user, q)
-        with boa.env.prank(user):
-            coin.approve(swap, 2**256 - 1)
-
-    # Accumulate fees
-    with boa.env.prank(user):
-
-        # Add some liquidity:
-        swap.add_liquidity(quantities, 0)
-
-        assert swap.totalSupply() > 0
-
-        # Some swaps here and there:
-        swap.exchange(0, 1, coins[0].balanceOf(user), 0)
-        swap.exchange(1, 0, coins[1].balanceOf(user), 0)
-
-    assert swap.xcp_profit() > 0
-    assert swap.virtual_price() > 10**18
-
-    if swap.totalSupply() > 10**18:
-        assert swap.xcp_profit_a() > 10**18
-    else:
-        assert swap.xcp_profit_a() == 10**18
-
-    with boa.env.prank(user):
-        swap.claim_admin_fees()
-
-    admin_balance_after = swap.balanceOf(swap.fee_receiver())
-    assert admin_balance_after > admin_balance_before
 
 
 @given(
@@ -204,12 +154,19 @@ def test_second_deposit(
         calculated = swap_with_deposit.calc_token_amount(amounts, True)
         measured = swap_with_deposit.balanceOf(user)
         d_balances = [swap_with_deposit.balances(i) for i in range(3)]
+        claimed_fees = [0, 0, 0]
 
         with boa.env.prank(user):
             swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
+        logs = swap_with_deposit.get_logs()
+        for log in logs:
+            if log.event_type.name == "ClaimAdminFee":
+                claimed_fees = log.args[0]
+
         d_balances = [
-            swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
+            swap_with_deposit.balances(i) - d_balances[i] + claimed_fees[i]
+            for i in range(3)
         ]
         measured = swap_with_deposit.balanceOf(user) - measured
 
@@ -254,12 +211,19 @@ def test_second_deposit_one(
         )
         measured = swap_with_deposit.balanceOf(user)
         d_balances = [swap_with_deposit.balances(i) for i in range(3)]
+        claimed_fees = [0, 0, 0]
 
         with boa.env.prank(user):
             swap_with_deposit.add_liquidity(amounts, int(calculated * 0.999))
 
+        logs = swap_with_deposit.get_logs()
+        for log in logs:
+            if log.event_type.name == "ClaimAdminFee":
+                claimed_fees = log.args[0]
+
         d_balances = [
-            swap_with_deposit.balances(i) - d_balances[i] for i in range(3)
+            swap_with_deposit.balances(i) - d_balances[i] + claimed_fees[i]
+            for i in range(3)
         ]
         measured = swap_with_deposit.balanceOf(user) - measured
 
@@ -365,11 +329,17 @@ def test_immediate_withdraw_one(
 
         measured = coins[i].balanceOf(user)
         d_balances = [swap_with_deposit.balances(k) for k in range(3)]
+        claimed_fees = [0, 0, 0]
         try:
             with boa.env.prank(user):
                 swap_with_deposit.remove_liquidity_one_coin(
                     token_amount, i, int(0.999 * calculated)
                 )
+
+            logs = swap_with_deposit.get_logs()
+            for log in logs:
+                if log.event_type.name == "ClaimAdminFee":
+                    claimed_fees = log.args[0]
 
         except Exception:
 
@@ -394,50 +364,13 @@ def test_immediate_withdraw_one(
         assert approx(calculated, measured, 1e-3)
 
         for k in range(3):
+            claimed_tokens = claimed_fees[k]
             if k == i:
-                assert d_balances[k] == measured
+                assert d_balances[k] == measured + claimed_tokens
             else:
-                assert d_balances[k] == 0
+                assert d_balances[k] == claimed_tokens
 
         # This is to check that we didn't end up in a borked state after
         # a withdrawal succeeded
         views_contract.get_dy(0, 1, 10**16, swap_with_deposit)
         views_contract.get_dy(0, 2, 10**16, swap_with_deposit)
-
-
-def test_claim_fees_before_second_deposit(
-    swap_multiprecision, tricrypto_coins, user, deployer
-):
-    for coin in tricrypto_coins:
-        for acc in [deployer, user]:
-            with boa.env.prank(acc):
-                coin.approve(swap_multiprecision, 2**256 - 1)
-
-    # mint lp tokens for first depositor and remove all but 1 wei of lp tokens
-    deployer_mint = [11000 * 10**6, 51 * 10**6, 71 * 10**17]
-    for coin, q_d in zip(tricrypto_coins, deployer_mint):
-        mint_for_testing(coin, deployer, q_d)
-
-    with boa.env.prank(deployer):
-        lp_tokens_minted = swap_multiprecision.add_liquidity(
-            [2100 * 10**6, 1 * 10**7, 14 * 10**17], 0
-        )
-        swap_multiprecision.remove_liquidity(lp_tokens_minted - 1, [0, 0, 0])
-
-    # deployer sends funds to pool and claims admin fees
-    with boa.env.prank(deployer):
-        for coin in tricrypto_coins:
-            coin.transfer(swap_multiprecision, coin.balanceOf(deployer))
-        swap_multiprecision.claim_admin_fees()
-
-    # user deposits:
-    user_mint = [20000 * 10**6, 1 * 10**8, 14 * 10**18]
-    for coin, q_u in zip(tricrypto_coins, user_mint):
-        mint_for_testing(coin, user, q_u)
-
-    with boa.env.prank(user):
-        user_lp_token_minted = swap_multiprecision.add_liquidity(
-            [c.balanceOf(user) for c in tricrypto_coins], 0
-        )
-
-    assert user_lp_token_minted > 0

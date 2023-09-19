@@ -351,20 +351,6 @@ def test_deployment(pool, coins, fee_receiver, account):
         assert coin_contract.balanceOf(account) == coin_balance + dy_coin
         logger.info(f"Removed {dy_coin} of {coin_name}.")
 
-    logger.info("------------------------------ Claim admin fees")
-    logger.info("(should not claim since pool hasn't accrued enough profits)")
-
-    fees_claimed = pool.balanceOf(fee_receiver)
-    pool.claim_admin_fees(sender=account, gas_limit=400000, **_get_tx_params())
-    if pool.totalSupply() < 10**18:
-        assert pool.balanceOf(fee_receiver) == fees_claimed
-        logger.info("No fees claimed.")
-    else:
-        assert pool.balanceOf(fee_receiver) > fees_claimed
-        logger.info(
-            f"{pool.balanceOf(fee_receiver) - fees_claimed} LP tokens of admin fees claimed!"  # noqa: E501
-        )
-
     logger.info(
         "------------------------------ Remove liquidity proportionally"
     )
