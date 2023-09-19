@@ -27,7 +27,7 @@ DEPLOYED_CONTRACTS = {
         "views": "0x06452f9c013fc37169B57Eab8F50A7A48c9198A3",
         "amm_impl": "0xd7E72f3615aa65b92A4DBdC211E296a35512988B",
     },
-    "ethereum:mainnet-fork": {
+    "mainnet-fork": {
         "factory": "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963",
         "math": "0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE",
         "views": "0x064253915b8449fdEFac2c4A74aA9fdF56691a31",
