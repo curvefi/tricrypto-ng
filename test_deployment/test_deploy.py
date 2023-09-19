@@ -19,7 +19,7 @@ class TestDeploy:
         self, admin, deploy, admin_mint_tokens, approve_admin, tokens_to_add
     ):
         pool = deploy[0]
-        tx = pool.add_liquidity(tokens_to_add, 0, False, sender=admin)
+        tx = pool.add_liquidity(tokens_to_add, 0, sender=admin)
         d_tokens = tx.return_value
         assert pool.balanceOf(admin) == pool.totalSupply() == d_tokens
 
@@ -35,14 +35,14 @@ class TestDeploy:
         j,
     ):
         pool = deploy[0]
-        pool.add_liquidity(tokens_to_add, 0, False, sender=admin)
+        pool.add_liquidity(tokens_to_add, 0, sender=admin)
 
         if i == 0:
             amount = 100 * 10 * 6
         else:
             amount = 1 * 10**6
 
-        tx = pool.exchange_underlying(
+        tx = pool.exchange_received(
             i,
             j,
             amount,
@@ -59,7 +59,7 @@ class TestDeploy:
         self, admin, deploy, admin_mint_tokens, approve_admin, tokens_to_add, i
     ):
         pool = deploy[0]
-        pool.add_liquidity(tokens_to_add, 0, False, sender=admin)
+        pool.add_liquidity(tokens_to_add, 0, sender=admin)
 
         bal = pool.balanceOf(admin)
         coin_contract = deploy[1][i]
@@ -69,7 +69,6 @@ class TestDeploy:
             bal // 2,
             i,
             0,
-            False,
             sender=admin,
         )  # noqa: E501
 
