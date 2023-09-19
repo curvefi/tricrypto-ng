@@ -49,10 +49,7 @@ class TestDeploy:
             0,
             sender=admin,
         )
-        dy_eth = tx.events.filter(pool.TokenExchange)[
-            0
-        ].tokens_bought  # return_value is broken in ape somehow
-        assert dy_eth > 0
+        assert tx.return_value > 0
 
     @pytest.mark.parametrize("i", (0, 1, 2))
     def test_remove_liquidity_one(
@@ -72,6 +69,6 @@ class TestDeploy:
             sender=admin,
         )  # noqa: E501
 
-        dy_coin = tx.events.filter(pool.RemoveLiquidityOne)[0].coin_amount
+        dy_coin = tx.return_value
         assert dy_coin > 0
         assert coin_contract.balanceOf(admin) == coin_balance + dy_coin
