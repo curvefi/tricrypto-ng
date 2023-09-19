@@ -49,7 +49,7 @@ class TestDeploy:
             0,
             sender=admin,
         )
-        assert tx.return_value > 0
+        assert tx
 
     @pytest.mark.parametrize("i", (0, 1, 2))
     def test_remove_liquidity_one(
@@ -67,8 +67,8 @@ class TestDeploy:
             i,
             0,
             sender=admin,
-        )  # noqa: E501
+        )
 
-        dy_coin = tx.return_value
+        dy_coin = tx.events.filter(pool.RemoveLiquidityOne)[0].coin_amount
         assert dy_coin > 0
         assert coin_contract.balanceOf(admin) == coin_balance + dy_coin
