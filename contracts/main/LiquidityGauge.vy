@@ -5,7 +5,8 @@
 @author Curve.Fi
 @license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
 @notice Implementation contract for use with Curve Factory
-@dev Differs from v5.0.0 in that it uses create_from_blueprint to deploy Gauges
+@dev Differs from v6.0.0 in that it allows the gauge deployer to be manager.
+     self.manager can add rewards permissionlessly.
 """
 from vyper.interfaces import ERC20
 
@@ -61,6 +62,10 @@ event CommitOwnership:
 event ApplyOwnership:
     admin: address
 
+event SetGaugeManager:
+    _gauge_manager: address
+
+
 event Transfer:
     _from: indexed(address)
     _to: indexed(address)
@@ -86,7 +91,7 @@ TOKENLESS_PRODUCTION: constant(uint256) = 40
 WEEK: constant(uint256) = 604800
 
 # keccak256("isValidSignature(bytes32,bytes)")[:4] << 224
-VERSION: constant(String[8]) = "v6.0.0"  # <- updated from v5.0.0 (adds `create_from_blueprint` pattern)
+VERSION: constant(String[8]) = "v6.1.0"  # <- updated from v6.0.0 (makes rewards semi-permissionless)
 
 EIP712_TYPEHASH: constant(bytes32) = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
 EIP2612_TYPEHASH: constant(bytes32) = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)")
@@ -117,6 +122,7 @@ nonces: public(HashMap[address, uint256])
 
 # Gauge
 factory: public(address)
+manager: public(address)
 lp_token: public(address)
 
 is_killed: public(bool)
@@ -170,6 +176,7 @@ def __init__(_lp_token: address):
 
     self.lp_token = _lp_token
     self.factory = msg.sender
+    self.manager = msg.sender
 
     symbol: String[32] = ERC20Extended(_lp_token).symbol()
     name: String[64] = concat("Curve.fi ", symbol, " Gauge Deposit")
@@ -333,17 +340,7 @@ def _checkpoint_rewards(_user: address, _total_supply: uint256, _claim: bool, _r
             if total_claimable > 0:
                 total_claimed: uint256 = claim_data % 2**128
                 if _claim:
-                    response: Bytes[32] = raw_call(
-                        token,
-                        _abi_encode(
-                            receiver,
-                            total_claimable,
-                            method_id=method_id("transfer(address,uint256)")
-                        ),
-                        max_outsize=32,
-                    )
-                    if len(response) != 0:
-                        assert convert(response, bool)
+                    assert ERC20(token).transfer(receiver, total_claimable, default_return_value=True)
                     self.claim_data[_user][token] = total_claimed + total_claimable
                 elif new_claimable > 0:
                     self.claim_data[_user][token] = total_claimed + (total_claimable << 128)
@@ -665,37 +662,45 @@ def kick(addr: address):
 
 
 @external
+def set_gauge_manager(_gauge_manager: address):
+    """
+    @notice Change the gauge manager for a gauge
+    @dev The manager of this contract, or the ownership admin can outright modify gauge
+        managership. A gauge manager can also transfer managership to a new manager via this
+        method, but only for the gauge which they are the manager of.
+    @param _gauge_manager The account to set as the new manager of the gauge.
+    """
+    assert msg.sender in [self.manager, Factory(self.factory).admin()]  # dev: only manager or factory admin
+
+    self.manager = _gauge_manager
+    log SetGaugeManager(_gauge_manager)
+
+
+@external
 @nonreentrant("lock")
-def deposit_reward_token(_reward_token: address, _amount: uint256):
+def deposit_reward_token(_reward_token: address, _amount: uint256, _epoch: uint256 = WEEK):
     """
     @notice Deposit a reward token for distribution
     @param _reward_token The reward token being deposited
     @param _amount The amount of `_reward_token` being deposited
+    @param _epoch The duration the rewards are distributed across.
     """
     assert msg.sender == self.reward_data[_reward_token].distributor
 
     self._checkpoint_rewards(empty(address), self.totalSupply, False, empty(address))
 
-    response: Bytes[32] = raw_call(
-        _reward_token,
-        _abi_encode(
-            msg.sender, self, _amount, method_id=method_id("transferFrom(address,address,uint256)")
-        ),
-        max_outsize=32,
-    )
-    if len(response) != 0:
-        assert convert(response, bool)
+    assert ERC20(_reward_token).transferFrom(msg.sender, self, _amount, default_return_value=True)
 
     period_finish: uint256 = self.reward_data[_reward_token].period_finish
     if block.timestamp >= period_finish:
-        self.reward_data[_reward_token].rate = _amount / WEEK
+        self.reward_data[_reward_token].rate = _amount / _epoch
     else:
         remaining: uint256 = period_finish - block.timestamp
         leftover: uint256 = remaining * self.reward_data[_reward_token].rate
-        self.reward_data[_reward_token].rate = (_amount + leftover) / WEEK
+        self.reward_data[_reward_token].rate = (_amount + leftover) / _epoch
 
     self.reward_data[_reward_token].last_update = block.timestamp
-    self.reward_data[_reward_token].period_finish = block.timestamp + WEEK
+    self.reward_data[_reward_token].period_finish = block.timestamp + _epoch
 
 
 @external
@@ -705,7 +710,7 @@ def add_reward(_reward_token: address, _distributor: address):
     @param _reward_token The token to add as an additional reward
     @param _distributor Address permitted to fund this contract with the reward token
     """
-    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
+    assert msg.sender in [self.manager, Factory(self.factory).admin()]  # dev: only manager or factory admin
 
     reward_count: uint256 = self.reward_count
     assert reward_count < MAX_REWARDS
