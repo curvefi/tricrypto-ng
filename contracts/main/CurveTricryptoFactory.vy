@@ -1,5 +1,4 @@
-# @version 0.3.9
-
+# @version 0.3.10
 """
 @title CurveTricryptoFactory
 @author Curve.Fi

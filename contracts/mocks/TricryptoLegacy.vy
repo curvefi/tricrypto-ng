@@ -1,4 +1,4 @@
-# @version 0.2.12
+# @version ^0.2.12
 # (c) Curve.Fi, 2021
 # Pool for USDT/BTC/ETH or similar
 

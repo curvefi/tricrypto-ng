@@ -1,5 +1,5 @@
-# @version 0.3.9
-
+# @version 0.3.10
+#pragma optimize gas
 # (c) Curve.Fi, 2020-2023
 # AMM Math for 3-coin Curve Cryptoswap Pools
 #
