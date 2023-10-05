@@ -1,5 +1,5 @@
-# @version 0.3.9
-
+# @version 0.3.10
+#pragma optimize gas
 """
 @title CurveTricryptoOptimizedWETH
 @author Curve.Fi
