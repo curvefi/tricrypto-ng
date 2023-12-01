@@ -294,8 +294,8 @@ def _transfer_in(
     expect_optimistic_transfer: bool,
 ) -> uint256:
     """
-    @notice Transfers `_coin` from `sender` to `self` and calls `callback_sig`
-            if it is not empty.
+    @notice Transfers `_coin` from `sender` to `self` if `expect_optimistic_transfer` is False.
+            if it is True, then it only checks if `self` holds an amount of `_coin` at least `_dx` greater than the accounting balance.
     @params _coin_idx uint256 Index of the coin to transfer in.
     @params dx amount of `_coin` to transfer into the pool.
     @params sender address to transfer `_coin` from.
