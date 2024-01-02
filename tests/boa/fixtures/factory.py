@@ -29,7 +29,7 @@ def gauge_implementation(deployer, gauge_interface):
 
 @pytest.fixture(scope="module")
 def amm_interface():
-    return boa.load_partial("contracts/main/CurveTricryptoOptimizedWETH.vy")
+    return boa.load_partial("contracts/main/CurveTricryptoOptimized.vy")
 
 
 @pytest.fixture(scope="module")
