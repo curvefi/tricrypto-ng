@@ -17,7 +17,6 @@ def dydx_safemath():
 
     get_price_impl = """
 N_COINS: constant(uint256) = 3
-A_MULTIPLIER: constant(uint256) = 100
 
 @external
 @view
