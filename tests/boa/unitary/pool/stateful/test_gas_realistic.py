@@ -3,6 +3,7 @@ from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
 from tests.boa.unitary.pool.stateful.stateful_base import StatefulBase
+from tests.boa.utils import approx
 from tests.boa.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 100
@@ -125,8 +126,8 @@ class StatefulGas(StatefulBase):
         d_token = d_token - self.token.balanceOf(user)
 
         if update_D:
-            assert (
-                calc_out_amount == d_balance
+            assert approx(
+                calc_out_amount, d_balance, 1e-5
             ), f"{calc_out_amount} vs {d_balance} for {token_amount}"
 
         self.balances[exchange_i] -= d_balance

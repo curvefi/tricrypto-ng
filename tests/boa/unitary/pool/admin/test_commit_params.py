@@ -22,7 +22,7 @@ def test_commit_accept_mid_fee(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    mid_fee = swap.internal._unpack(swap._storage.packed_fee_params.get())[0]
+    mid_fee = swap.internal._unpack_3(swap._storage.packed_fee_params.get())[0]
     assert mid_fee == p["mid_fee"]
 
 
@@ -33,7 +33,7 @@ def test_commit_accept_out_fee(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    out_fee = swap.internal._unpack(swap._storage.packed_fee_params.get())[1]
+    out_fee = swap.internal._unpack_3(swap._storage.packed_fee_params.get())[1]
     assert out_fee == p["out_fee"]
 
 
@@ -44,7 +44,9 @@ def test_commit_accept_fee_gamma(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    fee_gamma = swap.internal._unpack(swap._storage.packed_fee_params.get())[2]
+    fee_gamma = swap.internal._unpack_3(swap._storage.packed_fee_params.get())[
+        2
+    ]
     assert fee_gamma == p["fee_gamma"]
 
 
@@ -58,7 +60,7 @@ def test_commit_accept_fee_params(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    fee_params = swap.internal._unpack(swap._storage.packed_fee_params.get())
+    fee_params = swap.internal._unpack_3(swap._storage.packed_fee_params.get())
     assert fee_params[0] == p["mid_fee"]
     assert fee_params[1] == p["out_fee"]
     assert fee_params[2] == p["fee_gamma"]
@@ -71,7 +73,7 @@ def test_commit_accept_allowed_extra_profit(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    allowed_extra_profit = swap.internal._unpack(
+    allowed_extra_profit = swap.internal._unpack_3(
         swap._storage.packed_rebalancing_params.get()
     )[0]
     assert allowed_extra_profit == p["allowed_extra_profit"]
@@ -84,7 +86,7 @@ def test_commit_accept_adjustment_step(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    adjustment_step = swap.internal._unpack(
+    adjustment_step = swap.internal._unpack_3(
         swap._storage.packed_rebalancing_params.get()
     )[1]
     assert adjustment_step == p["adjustment_step"]
@@ -97,7 +99,7 @@ def test_commit_accept_ma_time(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    ma_time = swap.internal._unpack(
+    ma_time = swap.internal._unpack_3(
         swap._storage.packed_rebalancing_params.get()
     )[2]
     assert ma_time == p["ma_time"]
@@ -123,7 +125,7 @@ def test_commit_accept_rebalancing_params(swap, factory_admin, params):
     with boa.env.prank(factory_admin):
         _apply_new_params(swap, p)
 
-    rebalancing_params = swap.internal._unpack(
+    rebalancing_params = swap.internal._unpack_3(
         swap._storage.packed_rebalancing_params.get()
     )
     assert rebalancing_params[0] == p["allowed_extra_profit"]

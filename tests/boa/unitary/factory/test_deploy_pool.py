@@ -23,7 +23,7 @@ def test_check_packed_params_on_deployment(swap, params, coins):
         assert unpacked_precisions[i] == 10 ** (18 - coins[i].decimals())
 
     # check packed fees
-    unpacked_fees = swap.internal._unpack(
+    unpacked_fees = swap.internal._unpack_3(
         swap._storage.packed_fee_params.get()
     )
     assert params["mid_fee"] == unpacked_fees[0]
@@ -31,7 +31,7 @@ def test_check_packed_params_on_deployment(swap, params, coins):
     assert params["fee_gamma"] == unpacked_fees[2]
 
     # check packed rebalancing params
-    unpacked_rebalancing_params = swap.internal._unpack(
+    unpacked_rebalancing_params = swap.internal._unpack_3(
         swap._storage.packed_rebalancing_params.get()
     )
     assert params["allowed_extra_profit"] == unpacked_rebalancing_params[0]

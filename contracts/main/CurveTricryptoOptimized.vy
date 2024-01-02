@@ -1726,14 +1726,14 @@ def xcp_oracle() -> uint256:
     @return uint256 Oracle value of xcp.
     """
 
-    last_prices_timestamp: uint256 = self._unpack_2(self.last_timestamp)[1]
+    last_xcp_timestamp: uint256 = self._unpack_2(self.last_timestamp)[1]
     cached_xcp_oracle: uint256 = self.cached_xcp_oracle
 
-    if last_prices_timestamp < block.timestamp:
+    if last_xcp_timestamp < block.timestamp:
 
         alpha: uint256 = MATH.wad_exp(
             -convert(
-                (block.timestamp - last_prices_timestamp) * 10**18 / self.xcp_ma_time,
+                (block.timestamp - last_xcp_timestamp) * 10**18 / self.xcp_ma_time,
                 int256,
             )
         )

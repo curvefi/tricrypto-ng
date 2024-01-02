@@ -5,15 +5,12 @@ from boa.test import strategy
 from hypothesis.stateful import invariant, rule, run_state_machine_as_test
 
 from tests.boa.unitary.pool.stateful.stateful_base import StatefulBase
+from tests.boa.utils import approx
 from tests.boa.utils import simulation_int_many as sim
 from tests.boa.utils.tokens import mint_for_testing
 
 MAX_SAMPLES = 20
 STEP_COUNT = 10
-
-
-def approx(x1, x2, precision):
-    return abs(log(x1 / x2)) <= precision
 
 
 def get_price_scale(swap):
@@ -47,10 +44,10 @@ class StatefulSimulation(StatefulBase):
 
         self.virtual_price = self.swap.get_virtual_price()
         A_gamma = [self.swap.A(), self.swap.gamma()]
-        fee_params = self.swap.internal._unpack(
+        fee_params = self.swap.internal._unpack_3(
             self.swap._storage.packed_fee_params.get()
         )
-        rebal_params = self.swap.internal._unpack(
+        rebal_params = self.swap.internal._unpack_3(
             self.swap._storage.packed_rebalancing_params.get()
         )
 
