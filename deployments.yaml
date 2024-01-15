@@ -63,6 +63,12 @@ kava:mainnet:
   factory: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
   math: '0x505d666E4DD174DcDD7FA090ed95554486d2Be44'
   views: '0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC'
+linea:mainnet:
+  amm_native_transfers_disabled: '0x76303e4fDcA0AbF28aB3ee42Ce086E6503431F1D'
+  amm_native_transfers_enabled: '0xC1b393EfEF38140662b91441C6710Aa704973228'
+  factory: '0xd125E7a0cEddF89c6473412d85835450897be6Dc'
+  math: '0x0C9D8c7e486e822C29488Ff51BFf0167B4650953'
+  views: '0x64379c265fc6595065d7d835aaaa731c0584db80'
 mantle:mainnet:
   amm_native_transfers_disabled: '0x7Ca46A636b02D4aBC66883D7FF164bDE506DC66a'
   amm_native_transfers_enabled: '0x046207cB759F527b6c10C2D61DBaca45513685CC'
