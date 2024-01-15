@@ -1,5 +1,3 @@
-from math import log
-
 from boa.test import strategy
 from hypothesis.stateful import rule, run_state_machine_as_test
 
@@ -9,10 +7,6 @@ from tests.boa.unitary.pool.stateful.test_stateful import ProfitableState
 MAX_SAMPLES = 20
 STEP_COUNT = 100
 NO_CHANGE = 2**256 - 1
-
-
-def approx(x1, x2, precision):
-    return abs(log(x1 / x2)) <= precision
 
 
 class StatefulAdmin(ProfitableState):
@@ -33,7 +27,7 @@ class StatefulAdmin(ProfitableState):
         super().setup(user_id=1)
 
         packed_fee_params = self.swap._storage.packed_fee_params.get()
-        unpacked_fee_params = self.swap.internal._unpack(packed_fee_params)
+        unpacked_fee_params = self.swap.internal._unpack_3(packed_fee_params)
         self.mid_fee = unpacked_fee_params[0]
         self.out_fee = unpacked_fee_params[1]
         self.admin_fee = 5 * 10**9

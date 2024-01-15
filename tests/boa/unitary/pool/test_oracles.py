@@ -1,17 +1,14 @@
-from math import exp, log, log2, sqrt
+from math import exp, log2, sqrt
 
 import boa
 from boa.test import strategy
 from hypothesis import given, settings
 
 from tests.boa.fixtures.pool import INITIAL_PRICES
+from tests.boa.utils import approx
 from tests.boa.utils.tokens import mint_for_testing
 
 SETTINGS = {"max_examples": 1000, "deadline": None}
-
-
-def approx(x1, x2, precision):
-    return abs(log(x1 / x2)) <= precision
 
 
 def norm(price_oracle, price_scale):
@@ -67,7 +64,7 @@ def test_ma(swap_with_deposit, coins, user, amount, i, j, t):
     amount = amount * 10**18 // prices1[i]
     mint_for_testing(coins[i], user, amount)
 
-    rebal_params = swap_with_deposit.internal._unpack(
+    rebal_params = swap_with_deposit.internal._unpack_3(
         swap_with_deposit._storage.packed_rebalancing_params.get()
     )
     ma_time = rebal_params[2]
@@ -232,7 +229,7 @@ def test_price_scale_change(swap_with_deposit, i, j, coins, user):
     # checks if price scale changed is as expected:
     if price_diff > 0:
 
-        rebal_params = swap_with_deposit.internal._unpack(
+        rebal_params = swap_with_deposit.internal._unpack_3(
             swap_with_deposit._storage.packed_rebalancing_params.get()
         )
 
