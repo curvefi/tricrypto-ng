@@ -1,24 +1,95 @@
-ethereum:mainnet:
-  amm: ""
-  factory: "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963"
-  factory_handler: "0x30a4249C42be05215b6063691949710592859697"
-  gauge: ""
-  math: "0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE"
-  views: "0x064253915b8449fdEFac2c4A74aA9fdF56691a31"
 arbitrum:mainnet:
-  amm: ""
-  factory: "0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8"
-  math: "0x604388Bb1159AFd21eB5191cE22b4DeCdEE2Ae22"
-  views: "0x06452f9c013fc37169B57Eab8F50A7A48c9198A3"
+  amm_native_transfers_disabled: '0x1f7C86AffE5bCF7a1D74a8c8E2ef9E03BF31c1BD'
+  amm_native_transfers_enabled: '0xd7E72f3615aa65b92A4DBdC211E296a35512988B'
+  factory: '0xbC0797015fcFc47d9C1856639CaE50D0e69FbEE8'
+  math: '0x604388Bb1159AFd21eB5191cE22b4DeCdEE2Ae22'
+  views: '0x06452f9c013fc37169B57Eab8F50A7A48c9198A3'
+aurora:mainnet:
+  amm_native_transfers_disabled: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  amm_native_transfers_enabled: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+  factory: '0xC1b393EfEF38140662b91441C6710Aa704973228'
+  math: '0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC'
+  views: '0xFAbC421e3368D158d802684A217a83c083c94CeB'
+avax:mainnet:
+  amm_native_transfers_disabled: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+  amm_native_transfers_enabled: '0xFAbC421e3368D158d802684A217a83c083c94CeB'
+  factory: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  math: '0x505d666E4DD174DcDD7FA090ed95554486d2Be44'
+  views: '0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC'
 base:mainnet:
-  amm: ""
-  factory: "0xA5961898870943c68037F6848d2D866Ed2016bcB"
-  math: "0x5373E1B9f2781099f6796DFe5D68DE59ac2F18E3"
-  views: "0x05d4E2Ed7216A204e5FB4e3F5187eCfaa5eF3Ef7"
+  amm_native_transfers_disabled: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+  amm_native_transfers_enabled: '0xa274c88e09fDF1798a7517096557e6c1bEa1f65A'
+  factory: '0xA5961898870943c68037F6848d2D866Ed2016bcB'
+  math: '0x5373E1B9f2781099f6796DFe5D68DE59ac2F18E3'
+  views: '0x05d4E2Ed7216A204e5FB4e3F5187eCfaa5eF3Ef7'
 bsc:mainnet:
-  factory: "0xc55837710bc500F1E3c7bb9dd1d51F7c5647E657"
-  math: "0x0cE651Df1418a1fBA98517483102E042533Ade05"
-  views: "0x645E12f3cf5504C8a08e01706e79d3D0f32EcE15"
+  amm_native_transfers_disabled: '0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf'
+  amm_native_transfers_enabled: '0xBff334F8D5912AC5c4f2c590A2396d1C5d990123'
+  factory: '0xc55837710bc500F1E3c7bb9dd1d51F7c5647E657'
+  math: '0x0cE651Df1418a1fBA98517483102E042533Ade05'
+  views: '0x645E12f3cf5504C8a08e01706e79d3D0f32EcE15'
+celo:mainnet:
+  amm_native_transfers_disabled: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+  amm_native_transfers_enabled: '0xFAbC421e3368D158d802684A217a83c083c94CeB'
+  factory: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  math: '0x505d666E4DD174DcDD7FA090ed95554486d2Be44'
+  views: '0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC'
+ethereum:mainnet:
+  amm_native_transfers_enabled: '0x66442B0C5260B92cAa9c234ECf2408CBf6b19a6f'
+  factory: '0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963'
+  math: '0xcBFf3004a20dBfE2731543AA38599A526e0fD6eE'
+  views: '0x064253915b8449fdEFac2c4A74aA9fdF56691a31'
+ethereum:sepolia:
+  amm_native_transfers_disabled: '0x3BbA971980A721C7A33cEF62cE01c0d744F26e95'
+  amm_native_transfers_enabled: '0xc9621394A73A071d8084CB9a15b04F182a7C9634'
+  factory: '0x4b00E8c997AeBACeEf6B8c6F89eE2bf99b2CA846'
+  math: '0x550574E33b81C45D3D69250b46Ae30c7bC40d330'
+  views: '0x59AfCD3e931018dc493AA1d833B11bb5A0744906'
+ftm:mainnet:
+  amm_native_transfers_disabled: '0xd125E7a0cEddF89c6473412d85835450897be6Dc'
+  amm_native_transfers_enabled: '0x76303e4fDcA0AbF28aB3ee42Ce086E6503431F1D'
+  factory: '0x9AF14D26075f142eb3F292D5065EB3faa646167b'
+  math: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  views: '0xC1b393EfEF38140662b91441C6710Aa704973228'
+gnosis:mainnet:
+  amm_native_transfers_disabled: '0x3f445D38E820c010a7A6E33c5F80cBEBE6930f61'
+  amm_native_transfers_enabled: '0xa54f3c1dfa5f7dbf2564829d14b3b74a65d26ae2'
+  factory: '0xb47988ad49dce8d909c6f9cf7b26caf04e1445c8'
+  math: '0xff02cbd91f57a778bab7218da562594a680b8b61'
+  views: '0xe548590f9fAe7a23EA6501b144B0D58b74Fc4B53'
+kava:mainnet:
+  amm_native_transfers_disabled: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+  amm_native_transfers_enabled: '0xFAbC421e3368D158d802684A217a83c083c94CeB'
+  factory: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  math: '0x505d666E4DD174DcDD7FA090ed95554486d2Be44'
+  views: '0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC'
 mantle:mainnet:
-  math: "0x66B5792ED50a2a7405Ea75C4B6B1913eF4E46661"
-  views: "0xcB4eB43E31C830e22baF764c64F11F32C280496c"
+  amm_native_transfers_disabled: '0x7Ca46A636b02D4aBC66883D7FF164bDE506DC66a'
+  amm_native_transfers_enabled: '0x046207cB759F527b6c10C2D61DBaca45513685CC'
+  factory: '0x0C9D8c7e486e822C29488Ff51BFf0167B4650953'
+  math: '0x635742dCC8313DCf8c904206037d962c042EAfBd'
+  views: '0x5702BDB1Ec244704E3cBBaAE11a0275aE5b07499'
+optimism:mainnet:
+  amm_native_transfers_disabled: '0x0458ea5F4CD00E873264Be2031Ceb8f9d9b3116c'
+  amm_native_transfers_enabled: '0x1FE2a06c8bd81AE65FD1C5036451890b37976369'
+  factory: '0xc6C09471Ee39C7E30a067952FcC89c8922f9Ab53'
+  math: '0x19bd1AB34d6ABB584b9C1D5519093bfAA7f6c7d2'
+  views: '0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf'
+polygon:mainnet:
+  amm_native_transfers_disabled: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  amm_native_transfers_enabled: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+  factory: '0xC1b393EfEF38140662b91441C6710Aa704973228'
+  math: '0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC'
+  views: '0xFAbC421e3368D158d802684A217a83c083c94CeB'
+pzkevm:mainnet:
+  amm_native_transfers_disabled: '0xC1b393EfEF38140662b91441C6710Aa704973228'
+  amm_native_transfers_enabled: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  factory: '0x76303e4fDcA0AbF28aB3ee42Ce086E6503431F1D'
+  math: '0xFAbC421e3368D158d802684A217a83c083c94CeB'
+  views: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+scroll:mainnet:
+  amm_native_transfers_disabled: '0x3d6cB2F6DcF47CDd9C13E4e3beAe9af041d8796a'
+  amm_native_transfers_enabled: '0x0c59d36b23f809f8b6C7cb4c8C590a0AC103baEf'
+  factory: '0xC1b393EfEF38140662b91441C6710Aa704973228'
+  math: '0x5a8C93EE12a8Df4455BA111647AdA41f29D5CfcC'
+  views: '0xFAbC421e3368D158d802684A217a83c083c94CeB'
