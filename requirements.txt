@@ -19,5 +19,5 @@ pdbpp
 hypothesis>=6.68.1
 
 # vyper and dev framework:
-git+https://github.com/vyperlang/titanoboa@87593bb5c4d02bb8eaf4cc93e0e940ebf9a37900
+git+https://github.com/vyperlang/titanoboa@b2b8c783d91f904e85713c340691eb887087abd1
 vyper>=0.3.10

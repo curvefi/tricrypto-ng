@@ -24,8 +24,8 @@ base:mainnet:
   views: '0x05d4E2Ed7216A204e5FB4e3F5187eCfaa5eF3Ef7'
 bsc:mainnet:
   amm_native_transfers_disabled: '0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf'
-  amm_native_transfers_enabled: '0xBff334F8D5912AC5c4f2c590A2396d1C5d990123'
-  factory: '0xc55837710bc500F1E3c7bb9dd1d51F7c5647E657'
+  amm_native_transfers_enabled: '0xc6C09471Ee39C7E30a067952FcC89c8922f9Ab53'
+  factory: '0x38f8D93406fA2d9924DcFcB67dB5B0521Fb20F7D'
   math: '0x0cE651Df1418a1fBA98517483102E042533Ade05'
   views: '0x645E12f3cf5504C8a08e01706e79d3D0f32EcE15'
 celo:mainnet:
