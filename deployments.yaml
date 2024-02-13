@@ -45,6 +45,12 @@ ethereum:sepolia:
   factory: '0x4b00E8c997AeBACeEf6B8c6F89eE2bf99b2CA846'
   math: '0x550574E33b81C45D3D69250b46Ae30c7bC40d330'
   views: '0x59AfCD3e931018dc493AA1d833B11bb5A0744906'
+fraxtal:mainnet:
+  amm_native_transfers_disabled: '0x1A83348F9cCFD3Fe1A8C0adBa580Ac4e267Fe495'
+  amm_native_transfers_enabled: '0xd3b17f862956464ae4403ccf829ce69199856e1e'
+  factory: '0xc9Fe0C63Af9A39402e8a5514f9c43Af0322b665F'
+  math: '0x0C9D8c7e486e822C29488Ff51BFf0167B4650953'
+  views: '0x64379C265Fc6595065D7d835AAaa731c0584dB80'
 ftm:mainnet:
   amm_native_transfers_disabled: '0xd125E7a0cEddF89c6473412d85835450897be6Dc'
   amm_native_transfers_enabled: '0x76303e4fDcA0AbF28aB3ee42Ce086E6503431F1D'

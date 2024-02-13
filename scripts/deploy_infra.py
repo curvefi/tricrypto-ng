@@ -215,9 +215,9 @@ def main():
 
     forkmode = False
     deploy_infra(
-        ":mainnet",
-        os.environ["RPC_"],
-        "",
+        "fraxtal:mainnet",
+        os.environ["RPC_FRAXTAL"],
+        "FIDDYDEPLOYER",
         fork=forkmode,
     )
 

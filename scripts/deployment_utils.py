@@ -113,6 +113,10 @@ curve_dao_network_settings = {
         thin_proxy_contract="",
         fee_receiver_address="0x4920088D9a5e5De9c098FCA4960d0DA5f4caa4c1",
     ),
+    "fraxtal:mainnet": CurveNetworkSettings(
+        thin_proxy_contract="0x8b3EFBEfa6eD222077455d6f0DCdA3bF4f3F57A6",
+        fee_receiver_address="0x8b3EFBEfa6eD222077455d6f0DCdA3bF4f3F57A6",
+    ),
 }
 
 CURVE_DAO_OWNERSHIP = {

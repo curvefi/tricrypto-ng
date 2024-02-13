@@ -1,6 +1,6 @@
 on:
   release:
-    types: [ created ]
+    types: [created]
 
 name: on-creating-new-tag
 
@@ -30,7 +30,7 @@ jobs:
           git config user.name "curvefi"
           git remote update
           git fetch
-          git checkout master
+          git checkout main
           git add deployments
           git commit -m "chore: add release file - $TITLE"
           git push
