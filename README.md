@@ -82,8 +82,8 @@ The second gen adds several new features including:
 
 ### To run tests:
 
-```
-> python -m pytest
+```bash
+python -m pytest
 ```
 
 ### To contribute
