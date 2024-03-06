@@ -28,8 +28,10 @@ In case of any issues that result in a borked AMM state, users can safely withdr
 The different implementations of Curve's CryptoSwap invariant AMM are noted in the following:
 
 0. The genesis cryptoswap invariant amm contracts:
-a. [tricrypto2 (genesis)](https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/tricrypto/CurveCryptoSwap.vy)
-b. [twocrypto (genesis)](https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/two/CurveCryptoSwap2ETH.vy)
+
+    a. [tricrypto2 (genesis)](https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/tricrypto/CurveCryptoSwap.vy)
+
+    b. [twocrypto (genesis)](https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/two/CurveCryptoSwap2ETH.vy)
 1. [TricryptoNGWETH (1st gen)](https://github.com/curvefi/tricrypto-ng/blob/main/contracts/main/CurveTricryptoOptimizedWETH.vy)
 2. [TwocryptoNG (second gen)](https://github.com/curvefi/twocrypto-ng/blob/main/contracts/main/CurveTwocryptoOptimized.vy)
 3. [TricryptoNG (second gen)](https://github.com/curvefi/tricrypto-ng/blob/main/contracts/main/CurveTricryptoOptimized.vy)
@@ -69,8 +71,10 @@ The second gen adds several new features including:
 2. [fees are collected in individual tokens and not lp tokens.](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimized.vy#L1216)
 3. [Claiming individual tokens means LP token supply does not go up](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimized.vy#L1173)
 4. stricter conditions to claiming fees
-a. [claim sparingly](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimized.vy#L1116)
-b. [do not claim in vprice goes below 1e18](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimized.vy#L1182)
+
+    a. [claim sparingly](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimized.vy#L1116)
+
+    b. [do not claim in vprice goes below 1e18](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimized.vy#L1182)
 5. [exchange_received](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimized.vy#L409): swap tokens donated to the pool.The advantage of the new implementation is that, if tokens in the pool are rebasing, there is no `self.balances[i] = coins[i].balanceOf(self)` in the `self._claim_admin_fees()` method [like the old contract does](https://github.com/curvefi/tricrypto-ng/blob/33707fc8b84e08786acf184fcfdb744eb4657a99/contracts/main/CurveTricryptoOptimizedWETH.vy#L1197)
 
 # For developers
