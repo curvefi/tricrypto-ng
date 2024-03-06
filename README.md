@@ -27,13 +27,8 @@ In case of any issues that result in a borked AMM state, users can safely withdr
 
 The different implementations of Curve's CryptoSwap invariant AMM are noted in the following:
 
-0. The genesis cryptoswap invariant amm contracts:
-
-    a. [tricrypto2 (genesis)](https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/tricrypto/CurveCryptoSwap.vy)
-
-    b. [twocrypto (genesis)](https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/two/CurveCryptoSwap2ETH.vy)
+0. [Tricrypto2 (genesis)](https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/tricrypto/CurveCryptoSwap.vy)
 1. [TricryptoNGWETH (1st gen)](https://github.com/curvefi/tricrypto-ng/blob/main/contracts/main/CurveTricryptoOptimizedWETH.vy)
-2. [TwocryptoNG (second gen)](https://github.com/curvefi/twocrypto-ng/blob/main/contracts/main/CurveTwocryptoOptimized.vy)
 3. [TricryptoNG (second gen)](https://github.com/curvefi/tricrypto-ng/blob/main/contracts/main/CurveTricryptoOptimized.vy)
 
 ### From genesis to NG 1st gen
