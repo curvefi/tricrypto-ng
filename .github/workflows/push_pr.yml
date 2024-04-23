@@ -1,8 +1,8 @@
 on:
   release:
-    types: [created]
+    types: [ created ]
 
-name: on-creating-new-tag
+name: push-changes-on-release
 
 jobs:
   send-pull-requests:
@@ -20,8 +20,8 @@ jobs:
 
       - name: Create release file
         run: |
-          TITLE='${{ github.event.release.name }}'
-          NOTES='${{ github.event.release.body }}'
+          TITLE="${{ github.event.release.name }}"
+          NOTES="${{ github.event.release.body }}"
           DATE=$(date '+%d-%m-%Y')
           mkdir -p deployments
           echo $NOTES >> "deployments/release-$TITLE-$DATE.txt"
@@ -35,7 +35,7 @@ jobs:
           git commit -m "chore: add release file - $TITLE"
           git push
 
-      - name: Checkout to other repo
+      - name: Checkout to curve-js
         uses: actions/checkout@v3
         with:
           repository: curvefi/curve-js
@@ -45,7 +45,7 @@ jobs:
         run: |
           TAG=${{ env.RELEASE_VERSION }}
           ORG="curvefi"
-          CURRENT_REPOSITORY="$ORG/tricrypto-ng"
+          CURRENT_REPOSITORY="${{ github.repository }}"
           REPOSITORY="$ORG/curve-js"
           FOLDER="bin/$REPOSITORY"
           BRANCH_NAME="deployment-$CURRENT_REPOSITORY-$TAG"
@@ -68,7 +68,45 @@ jobs:
           # create a pull-requests containing the updates.
           gh auth login --with-token < token.txt
           gh pr create \
-            --body "Link to release: https://github.com/$CURRENT_REPOSITORY/releases/tag/$TAG" \
+            --body "${{ github.event.release.body }}" \
             --title "Deployment from $CURRENT_REPOSITORY - $TAG" \
             --head "$BRANCH_NAME" \
             --base "master"
+
+      - name: Checkout to curve-api
+        uses: actions/checkout@v3
+        with:
+          repository: curvefi/curve-api
+          token: ${{ secrets.ACCESS_TOKEN }}
+
+      - name: Send pull-request to curve-api
+        run: |
+          TAG=${{ env.RELEASE_VERSION }}
+          ORG="curvefi"
+          CURRENT_REPOSITORY="${{ github.repository }}"
+          REPOSITORY="$ORG/curve-api"
+          FOLDER="bin/$REPOSITORY"
+          BRANCH_NAME="deployment-$CURRENT_REPOSITORY-$TAG"
+
+          # Setup the committers identity.
+          git config user.email "Curvefi@users.noreply.github.com"
+          git config user.name "Curvefi"
+
+          # Create a new feature branch for the changes.
+          git checkout -b $BRANCH_NAME
+
+          # Store the PAT in a file that can be accessed by the GitHub CLI.
+          echo "${{ secrets.ACCESS_TOKEN }}" > token.txt
+
+          # Create an empty commit for PR
+          git commit --allow-empty -m "deployment from $CURRENT_REPOSITORY - $TAG"
+          git push -u origin $BRANCH_NAME
+
+          # Authorize GitHub CLI for the current repository and
+          # create a pull-requests containing the updates.
+          gh auth login --with-token < token.txt
+          gh pr create \
+            --body "${{ github.event.release.body }}" \
+            --title "Deployment from $CURRENT_REPOSITORY - $TAG" \
+            --head "$BRANCH_NAME" \
+            --base "main"
