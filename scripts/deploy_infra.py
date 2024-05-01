@@ -213,10 +213,10 @@ def deploy_infra(network, url, account, fork=False):
 
 def main():
 
-    forkmode = False
+    forkmode = True
     deploy_infra(
-        "fraxtal:mainnet",
-        os.environ["RPC_FRAXTAL"],
+        "",
+        "",
         "FIDDYDEPLOYER",
         fork=forkmode,
     )
