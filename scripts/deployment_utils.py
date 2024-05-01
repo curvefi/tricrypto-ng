@@ -117,6 +117,10 @@ curve_dao_network_settings = {
         thin_proxy_contract="0x8b3EFBEfa6eD222077455d6f0DCdA3bF4f3F57A6",
         fee_receiver_address="0x8b3EFBEfa6eD222077455d6f0DCdA3bF4f3F57A6",
     ),
+    "xlayer:mainnet": CurveNetworkSettings(
+        dao_ownership_contract="0xf3A431008396df8A8b2DF492C913706BDB0874ef",
+        fee_receiver_address="0xf3A431008396df8A8b2DF492C913706BDB0874ef",
+    ),
 }
 
 CURVE_DAO_OWNERSHIP = {
