@@ -4,6 +4,7 @@ import os
 import sys
 
 import boa
+import boa_zksync
 import deployment_utils as deploy_utils
 import yaml
 from boa.network import NetworkEnv
@@ -58,7 +59,29 @@ def check_and_deploy(
     logger.log(f"Deploying {contract_designation} contract ...")
 
     if blueprint:
-        c = contract_obj.deploy_as_blueprint()
+        if not "zksync" in network:
+            c = contract_obj.deploy_as_blueprint()
+        else:
+            # we need special deployment code for zksync
+            packed_precisions = 340282366920938463463374607431768211457
+            packed_gamma_A = 136112946768375385385349842972852284582400000
+            packed_fee_params = 8847341539944400050877843276543133320576000000
+            packed_rebalancing_params = (
+                6125082604576892342340742933771827806226
+            )
+            c = contract_obj.deploy_as_blueprint(
+                "Blueprint",  # _name
+                "_",  # _symbol
+                ["0x0000000000000000000000000000000000000000"] * 3,  # _coins
+                "0x0000000000000000000000000000000000000000",  # _math
+                "0x0000000000000000000000000000000000000000",  # _weth
+                b"\1" * 32,  # _salt
+                packed_precisions,
+                packed_gamma_A,
+                packed_fee_params,
+                packed_rebalancing_params,
+                1,  # initial_price
+            )
     else:
         c = contract_obj.deploy(*ctor_args)
 
@@ -77,15 +100,29 @@ def check_and_deploy(
 def deploy_infra(network, url, account, fork=False):
 
     logger.log(f"Deploying on {network} ...")
+    contract_folder = "main"
 
-    if fork:
-        boa.env.fork(url)
-        logger.log("Forkmode ...")
-        boa.env.eoa = deploy_utils.FIDDYDEPLOYER  # set eoa address here
+    if network == "zksync:mainnet":
+        contract_folder = "zksync"
+        if not fork:
+            boa_zksync.set_zksync_env(url)
+            logger.log("Prodmode on zksync Era ...")
+        else:
+            boa_zksync.set_zksync_fork(url)
+            logger.log("Forkmode on zksync Era ...")
+
+        boa.env.set_eoa(Account.from_key(os.environ[account]))
+
     else:
-        logger.log("Prodmode ...")
-        boa.set_env(NetworkEnv(url))
-        boa.env.add_account(Account.from_key(os.environ[account]))
+
+        if fork:
+            boa.env.fork(url)
+            logger.log("Forkmode ...")
+            boa.env.eoa = deploy_utils.FIDDYDEPLOYER  # set eoa address here
+        else:
+            logger.log("Prodmode ...")
+            boa.set_env(NetworkEnv(url))
+            boa.env.add_account(Account.from_key(os.environ[account]))
 
     # we want to deploy both implementations. ETH transfers implementation
     # goes to idx 0, and the no native token transfer version goes to idx 1.
@@ -100,17 +137,17 @@ def deploy_infra(network, url, account, fork=False):
     # --------------------- Initialise contract objects ---------------------
 
     math_contract_obj = boa.load_partial(
-        "./contracts/main/CurveCryptoMathOptimized3.vy"
+        f"./contracts/{contract_folder}/CurveCryptoMathOptimized3.vy"
     )
     views_contract_obj = boa.load_partial(
-        "./contracts/main/CurveCryptoViews3Optimized.vy"
+        f"./contracts/{contract_folder}/CurveCryptoViews3Optimized.vy"
     )
 
     amm_contract_native_transfers_enabled_obj = boa.load_partial(
-        "./contracts/main/CurveTricryptoOptimizedWETH.vy"
+        f"./contracts/{contract_folder}/CurveTricryptoOptimizedWETH.vy"
     )
     amm_contract_native_transfers_disabled_obj = boa.load_partial(
-        "./contracts/main/CurveTricryptoOptimized.vy"
+        f"./contracts/{contract_folder}/CurveTricryptoOptimized.vy"
     )
 
     if network == "ethereum:mainnet":
@@ -120,7 +157,7 @@ def deploy_infra(network, url, account, fork=False):
         logger.log("Using Mainnet tricrypto factory contract.")
     else:
         factory_contract_obj = boa.load_partial(
-            "./contracts/main/CurveL2TricryptoFactory.vy"
+            f"./contracts/{contract_folder}/CurveL2TricryptoFactory.vy"
         )
         logger.log(
             "Using L2/sidechain (non-Ethereum mainnet) tricrypto factory contract."
@@ -213,11 +250,14 @@ def deploy_infra(network, url, account, fork=False):
 
 def main():
 
-    forkmode = True
+    forkmode = False
+    deployer = "FIDDYDEPLOYER"
+    network = "zksync:mainnet"
+    rpc = "https://mainnet.era.zksync.io"
     deploy_infra(
-        "",
-        "",
-        "FIDDYDEPLOYER",
+        network=network,
+        url=rpc,
+        account=deployer,
         fork=forkmode,
     )
 
