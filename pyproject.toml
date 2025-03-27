@@ -1,0 +1,59 @@
+[project]
+name            = "tricrypto-ng"
+version         = "0.1.0"
+description     = "Curve Finance TriCrypto Factory - Optimized version of Curve Tricrypto pools"
+readme          = "README.md"
+requires-python = ">=3.10.4"
+authors = [
+    {name = "Curve Finance Team"}
+]
+license = {text = "All rights reserved"}
+
+# Core dependencies
+dependencies = [
+    "vyper==0.3.10",
+    "web3",
+    "titanoboa",
+]
+
+[tool.uv]
+# Development dependencies
+dev-dependencies = [
+    # linting
+    "black",
+    "flake8",
+    "isort",
+    "mamushi",
+    "pip-tools",
+    "pre-commit",
+    # testing
+    "eip712",
+    "eth_account==v0.12.1",
+    "eth_typing==v4.3.1",
+    "ipython",
+    "hypothesis>=6.68.1",
+    "pytest",
+    "pytest-xdist",
+    "pytest-forked",
+    "pytest-repeat",
+    "pdbpp",
+    # analysis tools from requirements_analysis.txt
+    "seaborn",
+    "pandas",
+    "dask[complete]",
+]
+
+[tool.uv.sources]
+titanoboa = { git = "https://github.com/vyperlang/titanoboa", rev = "c9aa6c6f31661880157de2f518f5014eab597862" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 100

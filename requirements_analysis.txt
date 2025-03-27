@@ -1,3 +1,0 @@
-seaborn
-pandas
-dask[complete]
