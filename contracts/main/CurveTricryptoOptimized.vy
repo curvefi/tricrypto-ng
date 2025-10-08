@@ -278,6 +278,7 @@ def __init__(
         )
     )
 
+    self.admin_fee = 5 * 10**9 # 50%
     log Transfer(empty(address), self, 0)  # <------- Fire empty transfer from
     #                                       0x0 to self for indexers to catch.
 

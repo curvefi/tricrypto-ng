@@ -44,10 +44,7 @@ def _generate_fee_activity(swap, coins, depositor, trader):
             swap.exchange(1, 0, max(amounts[1] // 1000, 10**14), 0)
 
 
-def test_admin_fee_default(swap, admin_fee_default, factory_admin):
-    with boa.env.prank(factory_admin):
-        swap.set_admin_fee(admin_fee_default)
-
+def test_admin_fee_default(swap, admin_fee_default):
     assert swap.admin_fee() == admin_fee_default
 
 
