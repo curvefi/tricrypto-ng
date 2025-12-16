@@ -125,6 +125,10 @@ event ClaimAdminFee:
 event SetAdminFee:
     admin_fee: uint256
 
+event UpdatePoolFeeReceiver:
+    old_receiver: address
+    new_receiver: address
+
 # ----------------------- Storage/State Variables ----------------------------
 
 N_COINS: constant(uint256) = 3
@@ -177,6 +181,7 @@ NOISE_FEE: constant(uint256) = 10**5  # <---------------------------- 0.1 BPS.
 # ----------------------- Admin params ---------------------------------------
 
 admin_fee: public(uint256)
+pool_fee_receiver: public(address)
 last_admin_fee_claim_timestamp: uint256
 admin_lp_virtual_balance: uint256
 
@@ -1140,7 +1145,9 @@ def _claim_admin_fees():
     D: uint256 = self.D
     vprice: uint256 = self.virtual_price
     packed_price_scale: uint256 = self.price_scale_packed
-    fee_receiver: address = factory.fee_receiver()
+    fee_receiver: address = self.pool_fee_receiver
+    if fee_receiver == empty(address):
+        fee_receiver = factory.fee_receiver()
     balances: uint256[N_COINS] = self.balances
 
     #  Admin fees are calculated as follows.
@@ -1577,6 +1584,9 @@ def fee_receiver() -> address:
     @notice Returns the address of the admin fee receiver.
     @return address Fee receiver.
     """
+    _pool_fee_receiver: address = self.pool_fee_receiver
+    if _pool_fee_receiver != empty(address):
+        return _pool_fee_receiver
     return factory.fee_receiver()
 
 
@@ -2097,3 +2107,18 @@ def set_admin_fee(_admin_fee: uint256):
     self.admin_fee = _admin_fee
 
     log SetAdminFee(_admin_fee)
+
+
+@external
+def set_fee_receiver(_fee_receiver: address):
+    """
+    @notice Set the pool-specific fee receiver that overrides factory fee receiver.
+    @dev Only accessible by factory admin. Set to empty(address) to use factory default.
+    @param _fee_receiver The new fee receiver address.
+    """
+    assert msg.sender == factory.admin()  # dev: only owner
+
+    old_receiver: address = self.pool_fee_receiver
+    self.pool_fee_receiver = _fee_receiver
+
+    log UpdatePoolFeeReceiver(old_receiver, _fee_receiver)
