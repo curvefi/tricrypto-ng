@@ -1,12 +1,14 @@
 # pragma version 0.3.10
 # pragma optimize gas
-# pragma evm-version shanghai
 """
-@title LiquidityGaugeV6
-@author Curve.Fi
-@license Copyright (c) Curve.Fi, 2020-2023 - all rights reserved
-@notice Implementation contract for use with Curve Factory
-@dev Differs from v5.0.0 in that it uses create_from_blueprint to deploy Gauges
+@title CurveLiquidityGauge
+@author Curve Finance
+@license Copyright (c) Curve.Fi, 2020-2026 - all rights reserved
+@notice Implementation contract for use with Curve pool factories
+@dev Same as LiquidityGauge v6.2.0 of curve_gauge_factory, except that it is deployed
+    by a pool factory: the constructor takes only the LP token, the manager is
+    `tx.origin` of the deployment and the admin is `factory.admin()`
+@custom:version 6.2.0
 """
 from vyper.interfaces import ERC20
 
@@ -17,25 +19,32 @@ interface CRV20:
     def future_epoch_time_write() -> uint256: nonpayable
     def rate() -> uint256: view
 
+
 interface Controller:
     def checkpoint_gauge(addr: address): nonpayable
     def gauge_relative_weight(addr: address, time: uint256) -> uint256: view
 
+
 interface ERC20Extended:
     def symbol() -> String[32]: view
 
+
 interface ERC1271:
-    def isValidSignature(_hash: bytes32, _signature: Bytes[65]) -> bytes32: view
+    def isValidSignature(_hash: bytes32, _signature: Bytes[65]) -> bytes4: view
+
 
 interface Factory:
     def admin() -> address: view
 
+
 interface Minter:
     def minted(user: address, gauge: address) -> uint256: view
+
 
 interface VotingEscrow:
     def user_point_epoch(addr: address) -> uint256: view
     def user_point_history__ts(addr: address, epoch: uint256) -> uint256: view
+
 
 interface VotingEscrowBoost:
     def adjusted_balance_of(_account: address) -> uint256: view
@@ -45,9 +54,11 @@ event Deposit:
     provider: indexed(address)
     value: uint256
 
+
 event Withdraw:
     provider: indexed(address)
     value: uint256
+
 
 event UpdateLiquidityLimit:
     user: indexed(address)
@@ -56,14 +67,24 @@ event UpdateLiquidityLimit:
     working_balance: uint256
     working_supply: uint256
 
-event CommitOwnership:
-    admin: address
 
-event ApplyOwnership:
-    admin: address
+event AddReward:
+    reward: indexed(address)
+    index: uint256
+
+
+event SetDistributor:
+    reward: indexed(address)
+    distributor: address
+
+
+event SetKilled:
+    is_killed: bool
+
 
 event SetGaugeManager:
     _gauge_manager: address
+
 
 event SetRewardInvalidated:
     reward: indexed(address)
@@ -74,6 +95,7 @@ event Transfer:
     _from: indexed(address)
     _to: indexed(address)
     _value: uint256
+
 
 event Approval:
     _owner: indexed(address)
@@ -95,19 +117,32 @@ TOKENLESS_PRODUCTION: constant(uint256) = 40
 WEEK: constant(uint256) = 604800
 
 # Updated from v6.1.0:
+# - ERC1271 permit support is enabled
+# - reward precision carry accounting is added via `reward_remaining`
+# - `recover_remaining()` is added for post-distribution reward dust recovery
+# - `withdraw()` supports a custom `_receiver`
+# - EIP-712 domain typehash is aligned with the salted domain separator
+# - `decimals()` now returns `uint8` and `version()` is `@pure`
 # - reward deposits are capped at 2**96
+# Updated from v6.1.1:
 # - `claim_rewards()` takes optional `_tokens` to claim only selected reward tokens
 # - `set_reward_invalidated()` excludes a reward token from claims without `_tokens`
 VERSION: constant(String[8]) = "v6.2.0"
 
-EIP712_TYPEHASH: constant(bytes32) = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
-EIP2612_TYPEHASH: constant(bytes32) = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)")
+EIP712_TYPEHASH: constant(bytes32) = keccak256(
+    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+)
+EIP2612_TYPEHASH: constant(bytes32) = keccak256(
+    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+)
+ERC1271_MAGIC_VAL: constant(
+    bytes32
+) = 0x1626ba7e00000000000000000000000000000000000000000000000000000000
 
-VERSION_HASH: constant(bytes32) = keccak256(VERSION)
-NAME_HASH: immutable(bytes32)
-CACHED_CHAIN_ID: immutable(uint256)
 salt: public(immutable(bytes32))
-CACHED_DOMAIN_SEPARATOR: immutable(bytes32)
+# @notice Get the EIP-712 domain separator used for permit signatures
+# @return bytes32 Domain separator hash
+DOMAIN_SEPARATOR: public(immutable(bytes32))
 
 CRV: constant(address) = 0xD533a949740bb3306d119CC777fa900bA034cd52
 GAUGE_CONTROLLER: constant(address) = 0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB
@@ -128,9 +163,9 @@ symbol: public(String[40])
 nonces: public(HashMap[address, uint256])
 
 # Gauge
-factory: public(address)
+factory: public(Factory)
 manager: public(address)
-lp_token: public(address)
+lp_token: public(immutable(ERC20))
 
 is_killed: public(bool)
 
@@ -141,6 +176,7 @@ inflation_params: uint256
 reward_count: public(uint256)
 reward_data: public(HashMap[address, Reward])
 invalidated_reward: public(HashMap[address, bool])  # skipped when claiming without `_tokens`
+reward_remaining: public(HashMap[address, uint256])  # fixes bad precision
 
 # claimant -> default reward receiver
 rewards_receiver: public(HashMap[address, address])
@@ -148,7 +184,7 @@ rewards_receiver: public(HashMap[address, address])
 # reward token -> claiming address -> integral
 reward_integral_for: public(HashMap[address, HashMap[address, uint256]])
 
-# user -> [uint128 claimable amount][uint128 claimed amount]
+# user -> token -> [uint128 claimable amount][uint128 claimed amount]
 claim_data: HashMap[address, HashMap[address, uint256]]
 
 working_balances: public(HashMap[address, uint256])
@@ -171,7 +207,9 @@ reward_tokens: public(address[MAX_REWARDS])
 
 period_timestamp: public(uint256[100000000000000000000000000000])
 # 1e18 * ∫(rate(t) / totalSupply(t) dt) from 0 till checkpoint
-integrate_inv_supply: public(uint256[100000000000000000000000000000])  # bump epoch when rate() changes
+integrate_inv_supply: public(
+    uint256[100000000000000000000000000000]
+)  # bump epoch when rate() changes
 
 
 @external
@@ -180,9 +218,10 @@ def __init__(_lp_token: address):
     @notice Contract constructor
     @param _lp_token Liquidity Pool contract address
     """
-    self.lp_token = _lp_token
-    self.factory = msg.sender
+    lp_token = ERC20(_lp_token)
+    self.factory = Factory(msg.sender)
     self.manager = tx.origin
+    log SetGaugeManager(tx.origin)
 
     symbol: String[32] = ERC20Extended(_lp_token).symbol()
     name: String[64] = concat("Curve.fi ", symbol, " Gauge Deposit")
@@ -191,19 +230,14 @@ def __init__(_lp_token: address):
     self.symbol = concat(symbol, "-gauge")
 
     self.period_timestamp[0] = block.timestamp
-    self.inflation_params = (
-        (CRV20(CRV).future_epoch_time_write() << 216)
-        + CRV20(CRV).rate()
-    )
+    self.inflation_params = ((CRV20(CRV).future_epoch_time_write() << 216) + CRV20(CRV).rate())
 
-    NAME_HASH = keccak256(name)
     salt = block.prevhash
-    CACHED_CHAIN_ID = chain.id
-    CACHED_DOMAIN_SEPARATOR = keccak256(
+    DOMAIN_SEPARATOR = keccak256(
         _abi_encode(
             EIP712_TYPEHASH,
-            NAME_HASH,
-            VERSION_HASH,
+            keccak256(name),
+            keccak256(VERSION),
             chain.id,
             self,
             salt,
@@ -211,30 +245,10 @@ def __init__(_lp_token: address):
     )
 
 
-# Internal Functions
-
-@view
-@internal
-def _domain_separator() -> bytes32:
-    if chain.id != CACHED_CHAIN_ID:
-        return keccak256(
-            _abi_encode(
-                EIP712_TYPEHASH,
-                NAME_HASH,
-                VERSION_HASH,
-                chain.id,
-                self,
-                salt,
-            )
-        )
-    return CACHED_DOMAIN_SEPARATOR
-
-
 @internal
 def _checkpoint(addr: address):
     """
-    @notice Checkpoint for a user
-    @dev Updates the CRV emissions a user is entitled to receive
+    @notice Checkpoint a user calculating their CRV entitlement
     @param addr User address
     """
     _period: int128 = self.period
@@ -245,17 +259,19 @@ def _checkpoint(addr: address):
     prev_future_epoch: uint256 = inflation_params >> 216
     gauge_is_killed: bool = self.is_killed
 
-    rate: uint256 = inflation_params % 2 ** 216
+    rate: uint256 = inflation_params % 2**216
     new_rate: uint256 = rate
+
+    # New mining epoch started, time to update inflation parameters
+    if block.timestamp >= prev_future_epoch:
+        future_epoch_time_write: uint256 = CRV20(CRV).future_epoch_time_write()
+        new_rate = CRV20(CRV).rate()
+        self.inflation_params = (future_epoch_time_write << 216) + new_rate
+
     if gauge_is_killed:
         rate = 0
         new_rate = 0
 
-    if prev_future_epoch >= _period_time:
-        future_epoch_time_write: uint256 = CRV20(CRV).future_epoch_time_write()
-        if not gauge_is_killed:
-            new_rate = CRV20(CRV).rate()
-        self.inflation_params = (future_epoch_time_write << 216) + new_rate
 
     # Update integral of 1/supply
     if block.timestamp > _period_time:
@@ -274,10 +290,14 @@ def _checkpoint(addr: address):
                     # of the first epoch until it ends, and then the rate of
                     # the last epoch.
                     # If more than one epoch is crossed - the gauge gets less,
-                    # but that'd meen it wasn't called for more than 1 year
-                    _integrate_inv_supply += rate * w * (prev_future_epoch - prev_week_time) / _working_supply
+                    # but that'd mean it wasn't called for more than 1 year
+                    _integrate_inv_supply += (
+                        rate * w * (prev_future_epoch - prev_week_time) / _working_supply
+                    )
                     rate = new_rate
-                    _integrate_inv_supply += rate * w * (week_time - prev_future_epoch) / _working_supply
+                    _integrate_inv_supply += (
+                        rate * w * (week_time - prev_future_epoch) / _working_supply
+                    )
                 else:
                     _integrate_inv_supply += rate * w * dt / _working_supply
                 # On precisions of the calculation
@@ -287,11 +307,11 @@ def _checkpoint(addr: address):
                 # The largest loss is at dt = 1
                 # Loss is 1e-9 - acceptable
 
+
             if week_time == block.timestamp:
                 break
             prev_week_time = week_time
             week_time = min(week_time + WEEK, block.timestamp)
-
     _period += 1
     self.period = _period
     self.period_timestamp[_period] = block.timestamp
@@ -299,7 +319,9 @@ def _checkpoint(addr: address):
 
     # Update user-specific integrals
     _working_balance: uint256 = self.working_balances[addr]
-    self.integrate_fraction[addr] += _working_balance * (_integrate_inv_supply - self.integrate_inv_supply_of[addr]) / 10 ** 18
+    self.integrate_fraction[addr] += (
+        _working_balance * (_integrate_inv_supply - self.integrate_inv_supply_of[addr]) / 10**18
+    )
     self.integrate_inv_supply_of[addr] = _integrate_inv_supply
     self.integrate_checkpoint_of[addr] = block.timestamp
 
@@ -328,7 +350,6 @@ def _checkpoint_rewards(
             if receiver == empty(address):
                 # if no default receiver is set, direct claims to the user
                 receiver = _user
-
     reward_count: uint256 = self.reward_count
     for i in range(MAX_REWARDS):
         if i == reward_count:
@@ -336,13 +357,23 @@ def _checkpoint_rewards(
         token: address = self.reward_tokens[i]
 
         integral: uint256 = self.reward_data[token].integral
-        last_update: uint256 = min(block.timestamp, self.reward_data[token].period_finish)
+        period_finish: uint256 = self.reward_data[token].period_finish
+        last_update: uint256 = min(block.timestamp, period_finish)
         duration: uint256 = last_update - self.reward_data[token].last_update
 
         if duration != 0 and _total_supply != 0:
             self.reward_data[token].last_update = last_update
-            integral += duration * self.reward_data[token].rate * 10**18 / _total_supply
+
+            rate: uint256 = self.reward_data[token].rate
+            excess: uint256 = (
+                self.reward_remaining[token] - (period_finish - last_update + duration) * rate
+            )
+            integral_change: uint256 = (duration * rate + excess) * 10**18 / _total_supply
+            integral += integral_change
             self.reward_data[token].integral = integral
+            # There is still calculation error in user's claimable amount,
+            # but it has 18-decimal precision through LP(_total_supply) – safe
+            self.reward_remaining[token] -= integral_change * _total_supply / 10**18
 
         if _user != empty(address):
             integral_for: uint256 = self.reward_integral_for[token][_user]
@@ -359,7 +390,9 @@ def _checkpoint_rewards(
                 if _claim and (
                     token in _tokens or (len(_tokens) == 0 and not self.invalidated_reward[token])
                 ):
-                    assert ERC20(token).transfer(receiver, total_claimable, default_return_value=True)
+                    assert ERC20(token).transfer(
+                        receiver, total_claimable, default_return_value=True
+                    )
                     self.claim_data[_user][token] = total_claimed + total_claimable
                 elif new_claimable > 0:
                     self.claim_data[_user][token] = total_claimed + (total_claimable << 128)
@@ -368,9 +401,7 @@ def _checkpoint_rewards(
 @internal
 def _update_liquidity_limit(addr: address, l: uint256, L: uint256):
     """
-    @notice Calculate limits which depend on the amount of CRV token per-user.
-            Effectively it calculates working balances to apply amplification
-            of CRV production by CRV
+    @notice Calculate working balances to apply amplification of CRV production.
     @param addr User address
     @param l User's amount of liquidity (LP tokens)
     @param L Total amount of liquidity (LP tokens)
@@ -422,13 +453,14 @@ def _transfer(_from: address, _to: address, _value: uint256):
 
 
 @external
-@nonreentrant('lock')
+@nonreentrant("lock")
 def deposit(_value: uint256, _addr: address = msg.sender, _claim_rewards: bool = False):
     """
     @notice Deposit `_value` LP tokens
     @dev Depositting also claims pending reward tokens
     @param _value Number of tokens to deposit
     @param _addr Address to deposit for
+    @param _claim_rewards Whether to claim already accrued rewards
     """
     assert _addr != empty(address)  # dev: cannot deposit for zero address
     self._checkpoint(_addr)
@@ -446,19 +478,21 @@ def deposit(_value: uint256, _addr: address = msg.sender, _claim_rewards: bool =
 
         self._update_liquidity_limit(_addr, new_balance, total_supply)
 
-        ERC20(self.lp_token).transferFrom(msg.sender, self, _value)
+        lp_token.transferFrom(msg.sender, self, _value)
 
         log Deposit(_addr, _value)
         log Transfer(empty(address), _addr, _value)
 
 
 @external
-@nonreentrant('lock')
-def withdraw(_value: uint256, _claim_rewards: bool = False):
+@nonreentrant("lock")
+def withdraw(_value: uint256, _claim_rewards: bool = False, _receiver: address = msg.sender):
     """
     @notice Withdraw `_value` LP tokens
     @dev Withdrawing also claims pending reward tokens
     @param _value Number of tokens to withdraw
+    @param _claim_rewards Whether to claim rewards
+    @param _receiver Receiver of withdrawn LP tokens
     """
     self._checkpoint(msg.sender)
 
@@ -475,14 +509,14 @@ def withdraw(_value: uint256, _claim_rewards: bool = False):
 
         self._update_liquidity_limit(msg.sender, new_balance, total_supply)
 
-        ERC20(self.lp_token).transfer(msg.sender, _value)
+        lp_token.transfer(_receiver, _value)
 
-    log Withdraw(msg.sender, _value)
-    log Transfer(msg.sender, empty(address), _value)
+        log Withdraw(msg.sender, _value)
+        log Transfer(msg.sender, empty(address), _value)
 
 
 @external
-@nonreentrant('lock')
+@nonreentrant("lock")
 def claim_rewards(
     _addr: address = msg.sender,
     _receiver: address = empty(address),
@@ -504,14 +538,15 @@ def claim_rewards(
 
 
 @external
-@nonreentrant('lock')
-def transferFrom(_from: address, _to :address, _value: uint256) -> bool:
+@nonreentrant("lock")
+def transferFrom(_from: address, _to: address, _value: uint256) -> bool:
     """
-     @notice Transfer tokens from one address to another.
-     @dev Transferring claims pending reward tokens for the sender and receiver
-     @param _from address The address which you want to send tokens from
-     @param _to address The address which you want to transfer to
-     @param _value uint256 the amount of tokens to be transferred
+    @notice Transfer tokens from one address to another.
+    @dev Transferring claims pending reward tokens for the sender and receiver
+    @param _from address The address which you want to send tokens from
+    @param _to address The address which you want to transfer to
+    @param _value uint256 the amount of tokens to be transferred
+    @return True if transfer passed
     """
     _allowance: uint256 = self.allowance[_from][msg.sender]
     if _allowance != max_value(uint256):
@@ -523,13 +558,14 @@ def transferFrom(_from: address, _to :address, _value: uint256) -> bool:
 
 
 @external
-@nonreentrant('lock')
+@nonreentrant("lock")
 def transfer(_to: address, _value: uint256) -> bool:
     """
     @notice Transfer token for a specified address
     @dev Transferring claims pending reward tokens for the sender and receiver
     @param _to The address to transfer to.
     @param _value The amount to be transferred.
+    @return True if transfer passed
     """
     self._transfer(msg.sender, _to, _value)
 
@@ -537,7 +573,7 @@ def transfer(_to: address, _value: uint256) -> bool:
 
 
 @external
-def approve(_spender : address, _value : uint256) -> bool:
+def approve(_spender: address, _value: uint256) -> bool:
     """
     @notice Approve the passed address to transfer the specified amount of
             tokens on behalf of msg.sender
@@ -564,7 +600,7 @@ def permit(
     _deadline: uint256,
     _v: uint8,
     _r: bytes32,
-    _s: bytes32
+    _s: bytes32,
 ) -> bool:
     """
     @notice Approves spender by owner's signature to expend owner's tokens.
@@ -588,15 +624,17 @@ def permit(
     digest: bytes32 = keccak256(
         concat(
             b"\x19\x01",
-            self._domain_separator(),
-            keccak256(
-                _abi_encode(
-                    EIP2612_TYPEHASH, _owner, _spender, _value, nonce, _deadline
-                )
-            ),
+            DOMAIN_SEPARATOR,
+            keccak256(_abi_encode(EIP2612_TYPEHASH, _owner, _spender, _value, nonce, _deadline)),
         )
     )
-    assert ecrecover(digest, _v, _r, _s) == _owner  # dev: invalid signature
+    if _owner.is_contract:
+        sig: Bytes[65] = concat(_abi_encode(_r, _s), slice(convert(_v, bytes32), 31, 1))
+        assert (
+            convert(ERC1271(_owner).isValidSignature(digest, sig), bytes32) == ERC1271_MAGIC_VAL
+        )  # dev: invalid signature
+    else:
+        assert ecrecover(digest, _v, _r, _s) == _owner  # dev: invalid signature
 
     self.allowance[_owner][_spender] = _value
     self.nonces[_owner] = unsafe_add(nonce, 1)
@@ -677,8 +715,10 @@ def kick(addr: address):
     )
     _balance: uint256 = self.balanceOf[addr]
 
-    assert ERC20(VOTING_ESCROW).balanceOf(addr) == 0 or t_ve > t_last # dev: kick not allowed
-    assert self.working_balances[addr] > _balance * TOKENLESS_PRODUCTION / 100  # dev: kick not needed
+    assert ERC20(VOTING_ESCROW).balanceOf(addr) == 0 or t_ve > t_last  # dev: kick not allowed
+    assert (
+        self.working_balances[addr] > _balance * TOKENLESS_PRODUCTION / 100
+    )  # dev: kick not needed
 
     self._checkpoint(addr)
     self._update_liquidity_limit(addr, self.balanceOf[addr], self.totalSupply)
@@ -696,7 +736,7 @@ def set_gauge_manager(_gauge_manager: address):
         method, but only for the gauge which they are the manager of.
     @param _gauge_manager The account to set as the new manager of the gauge.
     """
-    assert msg.sender in [self.manager, Factory(self.factory).admin()]  # dev: only manager or factory admin
+    assert msg.sender in [self.manager, self.factory.admin()]  # dev: only manager or factory admin
 
     self.manager = _gauge_manager
     log SetGaugeManager(_gauge_manager)
@@ -709,34 +749,47 @@ def deposit_reward_token(_reward_token: address, _amount: uint256, _epoch: uint2
     @notice Deposit a reward token for distribution
     @param _reward_token The reward token being deposited
     @param _amount The amount of `_reward_token` being deposited
-    @param _epoch The duration the rewards are distributed across.
+    @param _epoch The duration the rewards are distributed across. Between 3 days and a year, week by default
     """
     assert msg.sender == self.reward_data[_reward_token].distributor
+    assert 3 * WEEK / 7 <= _epoch and _epoch <= WEEK * 4 * 12, "Epoch duration"
 
     self._checkpoint_rewards(empty(address), self.totalSupply, False, empty(address))
 
     # transferFrom reward token and use transferred amount henceforth:
     amount_received: uint256 = ERC20(_reward_token).balanceOf(self)
-    assert ERC20(_reward_token).transferFrom(
-        msg.sender,
-        self,
-        _amount,
-        default_return_value=True
-    )
+    assert ERC20(_reward_token).transferFrom(msg.sender, self, _amount, default_return_value=True)
     amount_received = ERC20(_reward_token).balanceOf(self) - amount_received
 
-    period_finish: uint256 = self.reward_data[_reward_token].period_finish
-    assert amount_received > _epoch  # dev: rate will tend to zero!
-
-    total_amount: uint256 = amount_received
-    if block.timestamp < period_finish:
-        remaining: uint256 = period_finish - block.timestamp
-        total_amount += remaining * self.reward_data[_reward_token].rate
+    total_amount: uint256 = self.reward_remaining[_reward_token] + amount_received
     assert total_amount <= 2 ** (64 + 32), "Reward overflow"
     self.reward_data[_reward_token].rate = total_amount / _epoch
+    self.reward_remaining[_reward_token] = total_amount
 
     self.reward_data[_reward_token].last_update = block.timestamp
     self.reward_data[_reward_token].period_finish = block.timestamp + _epoch
+
+
+@external
+@nonreentrant("lock")
+def recover_remaining(_reward_token: address):
+    """
+    @notice Recover reward token remaining after calculation errors. Helpful for small decimal tokens.
+    Remaining tokens will be claimable in favor of distributor. Callable by anyone after reward distribution finished.
+    @param _reward_token The reward token being recovered
+    """
+    self._checkpoint_rewards(empty(address), self.totalSupply, False, empty(address))
+
+    period_finish: uint256 = self.reward_data[_reward_token].period_finish
+    assert period_finish < block.timestamp
+    assert self.reward_data[_reward_token].last_update >= period_finish
+
+    assert ERC20(_reward_token).transfer(
+        self.reward_data[_reward_token].distributor,
+        self.reward_remaining[_reward_token],
+        default_return_value=True,
+    )
+    self.reward_remaining[_reward_token] = 0
 
 
 @external
@@ -746,8 +799,11 @@ def add_reward(_reward_token: address, _distributor: address):
     @param _reward_token The token to add as an additional reward
     @param _distributor Address permitted to fund this contract with the reward token
     """
-    assert msg.sender in [self.manager, Factory(self.factory).admin()]  # dev: only manager or factory admin
+    assert msg.sender in [self.manager, self.factory.admin()]  # dev: only manager or factory admin
     assert _distributor != empty(address)  # dev: distributor cannot be zero address
+    assert _reward_token not in [
+        empty(address), self, lp_token.address
+    ]
 
     reward_count: uint256 = self.reward_count
     assert reward_count < MAX_REWARDS
@@ -756,6 +812,8 @@ def add_reward(_reward_token: address, _distributor: address):
     self.reward_data[_reward_token].distributor = _distributor
     self.reward_tokens[reward_count] = _reward_token
     self.reward_count = reward_count + 1
+    log AddReward(_reward_token, reward_count)
+    log SetDistributor(_reward_token, _distributor)
 
 
 @external
@@ -767,11 +825,12 @@ def set_reward_distributor(_reward_token: address, _distributor: address):
     """
     current_distributor: address = self.reward_data[_reward_token].distributor
 
-    assert msg.sender in [current_distributor, Factory(self.factory).admin(), self.manager]
+    assert msg.sender in [current_distributor, self.factory.admin(), self.manager]
     assert current_distributor != empty(address)
     assert _distributor != empty(address)
 
     self.reward_data[_reward_token].distributor = _distributor
+    log SetDistributor(_reward_token, _distributor)
 
 
 @external
@@ -784,7 +843,7 @@ def set_reward_invalidated(_reward_token: address, _invalidated: bool):
     @param _reward_token The reward token to (un)invalidate
     @param _invalidated True to skip the token by default, False to restore it
     """
-    assert msg.sender in [self.manager, Factory(self.factory).admin()]  # dev: only manager or factory admin
+    assert msg.sender in [self.manager, self.factory.admin()]  # dev: only manager or factory admin
     assert self.reward_data[_reward_token].distributor != empty(address)  # dev: not a reward
 
     self.invalidated_reward[_reward_token] = _invalidated
@@ -795,12 +854,14 @@ def set_reward_invalidated(_reward_token: address, _invalidated: bool):
 def set_killed(_is_killed: bool):
     """
     @notice Set the killed status for this contract
-    @dev When killed, the gauge always yields a rate of 0 and so cannot mint CRV
+    @dev When killed, the gauge always yields a rate of 0 and so cannot mint CRV.
+        Not meant to be unkilled.
     @param _is_killed Killed status to set
     """
-    assert msg.sender == Factory(self.factory).admin()  # dev: only owner
+    assert msg.sender == self.factory.admin()  # dev: only owner
 
     self.is_killed = _is_killed
+    log SetKilled(_is_killed)
 
 
 # View Methods
@@ -845,6 +906,7 @@ def claimable_tokens(addr: address) -> uint256:
     """
     @notice Get the number of claimable tokens per user
     @dev This function should be manually changed to "view" in the ABI
+    @param addr User to check for
     @return uint256 number of claimable tokens per user
     """
     self._checkpoint(addr)
@@ -856,6 +918,7 @@ def claimable_tokens(addr: address) -> uint256:
 def integrate_checkpoint() -> uint256:
     """
     @notice Get the timestamp of the last checkpoint
+    @return uint256 Timestamp of the last checkpoint
     """
     return self.period_timestamp[self.period]
 
@@ -865,6 +928,7 @@ def integrate_checkpoint() -> uint256:
 def future_epoch_time() -> uint256:
     """
     @notice Get the locally stored CRV future epoch start time
+    @return uint256 Future epoch start time
     """
     return self.inflation_params >> 216
 
@@ -874,34 +938,27 @@ def future_epoch_time() -> uint256:
 def inflation_rate() -> uint256:
     """
     @notice Get the locally stored CRV inflation rate
+    @return uint256 Inflation rate
     """
-    return self.inflation_params % 2 ** 216
+    return self.inflation_params % 2**216
 
 
 @view
 @external
-def decimals() -> uint256:
+def decimals() -> uint8:
     """
     @notice Get the number of decimals for this token
     @dev Implemented as a view method to reduce gas costs
-    @return uint256 decimal places
+    @return uint8 decimal places
     """
     return 18
 
 
-@view
+@pure
 @external
 def version() -> String[8]:
     """
     @notice Get the version of this gauge contract
+    @return Version in x.x.x format
     """
     return VERSION
-
-
-@view
-@external
-def DOMAIN_SEPARATOR() -> bytes32:
-    """
-    @notice EIP712 domain separator.
-    """
-    return self._domain_separator()
